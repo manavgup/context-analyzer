@@ -1,0 +1,380 @@
+[
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:14:43.149308+00:00",
+    "event": "post_tool_use",
+    "tool_name": "Bash",
+    "input_payload_chars": 271,
+    "output_payload_chars": 442,
+    "tool_use_id": "toolu_01GLj87bdYCAxL5Kv2QJDARJ"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:14:51.568998+00:00",
+    "event": "subagent_stop",
+    "agent_id": "aa85ecd70d4a91478",
+    "agent_type": "",
+    "agent_transcript_path": "/Users/mg/.claude/projects/-Users-mg-Downloads-claude-src/81dc8a2f-2bc6-4241-81bb-9dea09f45a68/subagents/agent-aa85ecd70d4a91478.jsonl"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:16:11.279410+00:00",
+    "event": "user_prompt",
+    "prompt_length_chars": 54
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:16:19.426655+00:00",
+    "event": "post_tool_use",
+    "tool_name": "Bash",
+    "input_payload_chars": 161,
+    "output_payload_chars": 331,
+    "tool_use_id": "toolu_01EBeeeswq44LLSw6zu7Urem"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:16:24.480417+00:00",
+    "event": "post_tool_use",
+    "tool_name": "Bash",
+    "input_payload_chars": 357,
+    "output_payload_chars": 221,
+    "tool_use_id": "toolu_016WNY8x3pa9hpMBrAuoMBCW"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:16:33.391950+00:00",
+    "event": "subagent_stop",
+    "agent_id": "add9edd57b70610dc",
+    "agent_type": "",
+    "agent_transcript_path": "/Users/mg/.claude/projects/-Users-mg-Downloads-claude-src/81dc8a2f-2bc6-4241-81bb-9dea09f45a68/subagents/agent-add9edd57b70610dc.jsonl"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:16:53.768327+00:00",
+    "event": "user_prompt",
+    "prompt_length_chars": 242
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:17:00.845896+00:00",
+    "event": "subagent_stop",
+    "agent_id": "af0fac86d9e04c88e",
+    "agent_type": "",
+    "agent_transcript_path": "/Users/mg/.claude/projects/-Users-mg-Downloads-claude-src/81dc8a2f-2bc6-4241-81bb-9dea09f45a68/subagents/agent-af0fac86d9e04c88e.jsonl"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:48:56.965040+00:00",
+    "event": "user_prompt",
+    "prompt_length_chars": 439
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:49:02.705984+00:00",
+    "event": "subagent_stop",
+    "agent_id": "ab59d25ba4aa6c42b",
+    "agent_type": "",
+    "agent_transcript_path": "/Users/mg/.claude/projects/-Users-mg-Downloads-claude-src/81dc8a2f-2bc6-4241-81bb-9dea09f45a68/subagents/agent-ab59d25ba4aa6c42b.jsonl"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:49:56.464436+00:00",
+    "event": "user_prompt",
+    "prompt_length_chars": 37
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:50:06.772759+00:00",
+    "event": "subagent_stop",
+    "agent_id": "a513070b2ca646aa0",
+    "agent_type": "",
+    "agent_transcript_path": "/Users/mg/.claude/projects/-Users-mg-Downloads-claude-src/81dc8a2f-2bc6-4241-81bb-9dea09f45a68/subagents/agent-a513070b2ca646aa0.jsonl"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:51:10.579035+00:00",
+    "event": "user_prompt",
+    "prompt_length_chars": 10
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:51:20.500729+00:00",
+    "event": "subagent_stop",
+    "agent_id": "ace48651109bba072",
+    "agent_type": "",
+    "agent_transcript_path": "/Users/mg/.claude/projects/-Users-mg-Downloads-claude-src/81dc8a2f-2bc6-4241-81bb-9dea09f45a68/subagents/agent-ace48651109bba072.jsonl"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:53:21.944986+00:00",
+    "event": "user_prompt",
+    "prompt_length_chars": 2018
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:53:29.908898+00:00",
+    "event": "subagent_stop",
+    "agent_id": "ace27ca63639e4f08",
+    "agent_type": "",
+    "agent_transcript_path": "/Users/mg/.claude/projects/-Users-mg-Downloads-claude-src/81dc8a2f-2bc6-4241-81bb-9dea09f45a68/subagents/agent-ace27ca63639e4f08.jsonl"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:54:16.296057+00:00",
+    "event": "user_prompt",
+    "prompt_length_chars": 10
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:54:41.698462+00:00",
+    "event": "user_prompt",
+    "prompt_length_chars": 31
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:55:03.297217+00:00",
+    "event": "subagent_stop",
+    "agent_id": "aa5f03323ff53ffe7",
+    "agent_type": "",
+    "agent_transcript_path": "/Users/mg/.claude/projects/-Users-mg-Downloads-claude-src/81dc8a2f-2bc6-4241-81bb-9dea09f45a68/subagents/agent-aa5f03323ff53ffe7.jsonl"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:55:53.774255+00:00",
+    "event": "user_prompt",
+    "prompt_length_chars": 10
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:56:25.109215+00:00",
+    "event": "subagent_stop",
+    "agent_id": "a944a47dbbe8b11ff",
+    "agent_type": "",
+    "agent_transcript_path": "/Users/mg/.claude/projects/-Users-mg-Downloads-claude-src/81dc8a2f-2bc6-4241-81bb-9dea09f45a68/subagents/agent-a944a47dbbe8b11ff.jsonl"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:56:31.595727+00:00",
+    "event": "user_prompt",
+    "prompt_length_chars": 315
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:56:41.082766+00:00",
+    "event": "subagent_stop",
+    "agent_id": "af52f2b57e8aba4fc",
+    "agent_type": "",
+    "agent_transcript_path": "/Users/mg/.claude/projects/-Users-mg-Downloads-claude-src/81dc8a2f-2bc6-4241-81bb-9dea09f45a68/subagents/agent-af52f2b57e8aba4fc.jsonl"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:59:31.924176+00:00",
+    "event": "user_prompt",
+    "prompt_length_chars": 8611
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:59:54.408760+00:00",
+    "event": "post_tool_use",
+    "tool_name": "Bash",
+    "input_payload_chars": 162,
+    "output_payload_chars": 184,
+    "tool_use_id": "toolu_01KMGRBUpCjBE8CHr3qj8zWj"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T22:59:55.000010+00:00",
+    "event": "post_tool_use_failure",
+    "tool_name": "Bash",
+    "input_payload_chars": 171,
+    "error_length": 140,
+    "tool_use_id": "toolu_01L5DttWM65udVcASzs9VhGr"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:00:08.199434+00:00",
+    "event": "subagent_stop",
+    "agent_id": "a0beb5ed831f199bb",
+    "agent_type": "",
+    "agent_transcript_path": "/Users/mg/.claude/projects/-Users-mg-Downloads-claude-src/81dc8a2f-2bc6-4241-81bb-9dea09f45a68/subagents/agent-a0beb5ed831f199bb.jsonl"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:04:04.931044+00:00",
+    "event": "user_prompt",
+    "prompt_length_chars": 109
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:04:13.205520+00:00",
+    "event": "subagent_stop",
+    "agent_id": "aada8e0cd58c3cb75",
+    "agent_type": "",
+    "agent_transcript_path": "/Users/mg/.claude/projects/-Users-mg-Downloads-claude-src/81dc8a2f-2bc6-4241-81bb-9dea09f45a68/subagents/agent-aada8e0cd58c3cb75.jsonl"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:08:20.968282+00:00",
+    "event": "user_prompt",
+    "prompt_length_chars": 85
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:08:39.847889+00:00",
+    "event": "subagent_stop",
+    "agent_id": "ad4cbfd562c4a09dc",
+    "agent_type": "",
+    "agent_transcript_path": "/Users/mg/.claude/projects/-Users-mg-Downloads-claude-src/81dc8a2f-2bc6-4241-81bb-9dea09f45a68/subagents/agent-ad4cbfd562c4a09dc.jsonl"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:09:10.185336+00:00",
+    "event": "user_prompt",
+    "prompt_length_chars": 232
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:09:18.322150+00:00",
+    "event": "subagent_stop",
+    "agent_id": "a8242103bb102b823",
+    "agent_type": "",
+    "agent_transcript_path": "/Users/mg/.claude/projects/-Users-mg-Downloads-claude-src/81dc8a2f-2bc6-4241-81bb-9dea09f45a68/subagents/agent-a8242103bb102b823.jsonl"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:11:37.624043+00:00",
+    "event": "user_prompt",
+    "prompt_length_chars": 228
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:11:44.857033+00:00",
+    "event": "post_tool_use",
+    "tool_name": "TaskCreate",
+    "input_payload_chars": 169,
+    "output_payload_chars": 65,
+    "tool_use_id": "toolu_01C6ERkhkCDU98ct3YvQHiji"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:11:48.570552+00:00",
+    "event": "post_tool_use",
+    "tool_name": "TaskUpdate",
+    "input_payload_chars": 41,
+    "output_payload_chars": 154,
+    "tool_use_id": "toolu_0161xJBzxXkXygUcXNTLi6MH"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:11:54.327770+00:00",
+    "event": "post_tool_use",
+    "tool_name": "Bash",
+    "input_payload_chars": 158,
+    "output_payload_chars": 424,
+    "tool_use_id": "toolu_01KZi6naoRWywwcVpx3pZHAm"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:11:59.949797+00:00",
+    "event": "post_tool_use",
+    "tool_name": "Bash",
+    "input_payload_chars": 107,
+    "output_payload_chars": 94,
+    "tool_use_id": "toolu_01ATL5JtFMHpnicye47dEmyh"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:12:10.963824+00:00",
+    "event": "post_tool_use",
+    "tool_name": "Bash",
+    "input_payload_chars": 1840,
+    "output_payload_chars": 3447,
+    "tool_use_id": "toolu_01J4KcxdAyVHqq3t1bVWEuyJ"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:12:18.754711+00:00",
+    "event": "post_tool_use",
+    "tool_name": "Bash",
+    "input_payload_chars": 534,
+    "output_payload_chars": 122,
+    "tool_use_id": "toolu_01AePuVvnVo528DxGXV7e9ZG"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:12:26.548564+00:00",
+    "event": "post_tool_use",
+    "tool_name": "Bash",
+    "input_payload_chars": 820,
+    "output_payload_chars": 453,
+    "tool_use_id": "toolu_01ACGYYjQSbcuqCwy96XyeUC"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:14:15.848927+00:00",
+    "event": "post_tool_use",
+    "tool_name": "Write",
+    "input_payload_chars": 23830,
+    "output_payload_chars": 23892,
+    "tool_use_id": "toolu_01G328M2gUA1J2GhjDTnVEts"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:14:19.930113+00:00",
+    "event": "post_tool_use",
+    "tool_name": "Bash",
+    "input_payload_chars": 118,
+    "output_payload_chars": 95,
+    "tool_use_id": "toolu_01Rgc2XQZdrr6SbRG9nmbn3D"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:14:23.586961+00:00",
+    "event": "post_tool_use",
+    "tool_name": "TaskUpdate",
+    "input_payload_chars": 39,
+    "output_payload_chars": 156,
+    "tool_use_id": "toolu_01SgwzKwJtHsg2qUU4Xt7hng"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:14:24.224706+00:00",
+    "event": "post_tool_use",
+    "tool_name": "TaskUpdate",
+    "input_payload_chars": 38,
+    "output_payload_chars": 151,
+    "tool_use_id": "toolu_01JKxeBJvhiopX2VTaM87xgW"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:14:24.224682+00:00",
+    "event": "post_tool_use",
+    "tool_name": "TaskUpdate",
+    "input_payload_chars": 38,
+    "output_payload_chars": 151,
+    "tool_use_id": "toolu_01C1ivCoGS4wzfiPku8vz8oE"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:14:38.817782+00:00",
+    "event": "subagent_stop",
+    "agent_id": "ac2f6c8a3f71302e9",
+    "agent_type": "",
+    "agent_transcript_path": "/Users/mg/.claude/projects/-Users-mg-Downloads-claude-src/81dc8a2f-2bc6-4241-81bb-9dea09f45a68/subagents/agent-ac2f6c8a3f71302e9.jsonl"
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:28:30.802626+00:00",
+    "event": "user_prompt",
+    "prompt_length_chars": 283
+  },
+  {
+    "session_id": "81dc8a2f-2bc6-4241-81bb-9dea09f45a68",
+    "timestamp": "2026-05-30T23:29:04.750231+00:00",
+    "event": "post_tool_use",
+    "tool_name": "Bash",
+    "input_payload_chars": 2692,
+    "output_payload_chars": 3412,
+    "tool_use_id": "toolu_018EgM7a8xf6m5K3RLTF5b1u"
+  }
+]
