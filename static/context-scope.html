@@ -592,7 +592,11 @@ function renderAll(){recompute();document.getElementById("scrub").max=maxTurn;
   if(view==="tape")drawTape();else drawLanes();
   drawInsp();
   document.getElementById("tl").textContent=turn;document.getElementById("scrub").value=turn;}
-function setTurn(t){turn=Math.max(0,Math.min(maxTurn,t));renderAll();}
+function setTurn(t){turn=Math.max(0,Math.min(maxTurn,t));
+  // Auto-select the working-set block for this turn
+  var autoBlock=trace.find(b=>b.id==="w"+turn)||trace.find(b=>present(b,turn)&&!b.cached);
+  if(autoBlock)sel=autoBlock;
+  renderAll();}
 function switchView(v){view=v;
   document.getElementById("tabTape").classList.toggle("act",v==="tape");
   document.getElementById("tabLanes").classList.toggle("act",v==="lanes");
