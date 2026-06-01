@@ -389,6 +389,7 @@ body {
 }
 
 .tape-bar.active { background: var(--active); }
+.tape-bar.warm { background: var(--sc-amber); }
 .tape-bar.stale { background: var(--stale-light); }
 .tape-bar.pinned { background: var(--system); }
 

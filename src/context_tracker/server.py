@@ -339,7 +339,7 @@ def mcp_get_staleness_analysis(session_id: str = "", top_n: int = 10) -> str:
     messages, _ = parse_raw_transcript(transcript_path)
     hook_events = _cached_read_events(session_id)
     config = StalenessConfig()
-    turns, snapshots, content_store, epochs, _ = reconstruct_session(messages, hook_events, config)
+    turns, snapshots, content_store, epochs, _, block_registry = reconstruct_session(messages, hook_events, config)
 
     if not snapshots:
         return json.dumps({"error": "No turns found"})
@@ -370,7 +370,7 @@ def mcp_get_session_health(session_id: str = "") -> str:
 
     messages, _ = parse_raw_transcript(transcript_path)
     hook_events = _cached_read_events(session_id)
-    turns, snapshots, content_store, epochs, _ = reconstruct_session(messages, hook_events)
+    turns, snapshots, content_store, epochs, _, block_registry = reconstruct_session(messages, hook_events)
 
     if not snapshots:
         return json.dumps({"error": "No turns found"})
@@ -418,7 +418,7 @@ def mcp_get_block_lifespans(session_id: str = "", top_n: int = 20) -> str:
 
     messages, _ = parse_raw_transcript(transcript_path)
     hook_events = _cached_read_events(session_id)
-    turns, snapshots, content_store, epochs, _ = reconstruct_session(messages, hook_events)
+    turns, snapshots, content_store, epochs, _, block_registry = reconstruct_session(messages, hook_events)
 
     if not snapshots:
         return json.dumps({"error": "No turns found"})

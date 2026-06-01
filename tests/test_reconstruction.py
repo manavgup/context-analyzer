@@ -140,7 +140,7 @@ def test_reconstruct_session_basic():
         _make_assistant_msg(3, "Found the bug, fixing now", ts="2026-06-01T10:00:10Z",
                            input_tokens=32000, output_tokens=300),
     ]
-    turns, snapshots, content_store, epochs, warnings = reconstruct_session(messages, hook_events=[])
+    turns, snapshots, content_store, epochs, warnings, block_registry = reconstruct_session(messages, hook_events=[])
     assert len(turns) == 1
     assert len(snapshots) == 1
     assert len(epochs) == 1  # Epoch 0

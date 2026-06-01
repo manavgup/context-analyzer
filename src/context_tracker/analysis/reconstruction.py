@@ -202,6 +202,7 @@ def reconstruct_session(
     ContentStore,
     list[ContextEpoch],
     list[DataQualityWarning],
+    dict[str, ContextBlock],
 ]:
     """Reconstruct context window state from transcript messages and hook events.
 
@@ -211,6 +212,7 @@ def reconstruct_session(
         content_store: block content indexed by block_id
         epochs: context epochs (compaction boundaries)
         warnings: data quality warnings
+        block_registry: block_id -> ContextBlock mapping for all blocks
     """
     if config is None:
         config = StalenessConfig()
@@ -395,7 +397,7 @@ def reconstruct_session(
         snapshots.append(snapshot)
         previous_block_ids = current_set
 
-    return turns, snapshots, content_store, epochs, warnings
+    return turns, snapshots, content_store, epochs, warnings, all_blocks
 
 
 def _find_turn_for_message(
