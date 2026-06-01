@@ -235,10 +235,9 @@
       </div>
       <div class="budget">
         <span>budget</span>
-        <button data-b="16000">16k</button>
-        <button data-b="32000" class="act">32k</button>
-        <button data-b="64000">64k</button>
         <button data-b="200000">200k</button>
+        <button data-b="500000">500k</button>
+        <button data-b="1000000" class="act">1M</button>
       </div>
     </div>
   </div>
@@ -368,7 +367,7 @@ const SAMPLE=[
 
 /* ---------- state ---------- */
 let trace=JSON.parse(JSON.stringify(SAMPLE));
-let maxTurn=0,turn=0,budget=32000,view="tape",sel=null,playing=null;
+let maxTurn=0,turn=0,budget=1000000,view="tape",sel=null,playing=null;
 let highlight=[],dimOthers=false,villain=null;
 const FLAG_TURN=7;
 
@@ -628,27 +627,43 @@ document.getElementById("applyBtn").onclick=()=>{try{const d=JSON.parse(document
   trace=d;sel=null;turn=0;endTour();modal.classList.remove("show");renderAll();}
   catch(err){document.getElementById("modalErr").textContent="✗ "+err.message;}};
 document.getElementById("resetBtn").onclick=()=>{trace=JSON.parse(JSON.stringify(SAMPLE));sel=null;turn=0;
-  budget=32000;document.querySelectorAll(".budget button").forEach(x=>x.classList.toggle("act",+x.dataset.b===32000));endTour();};
+  budget=1000000;document.querySelectorAll(".budget button").forEach(x=>x.classList.toggle("act",+x.dataset.b===1000000));endTour();};
 modal.addEventListener("click",e=>{if(e.target===modal)modal.classList.remove("show");});
 
 /* boot */
 renderTour();renderAll();setTurn(0);
 
-// Auto-load blocks.json if available
-(function(){
+// Auto-load blocks.json + churn.json if available
+(async function(){
   const params = new URLSearchParams(location.search);
-  const traceUrl = params.get('trace') || './blocks.json';
-  fetch(traceUrl).then(r => {
-    if (!r.ok) throw new Error(r.status);
-    return r.json();
-  }).then(data => {
-    if (Array.isArray(data) && data.length > 0) {
-      trace = data;
-      maxTurn = Math.max(...trace.map(b => b.exit != null ? b.exit : b.enter));
-      turn = 0;
-      render();
+  try {
+    const traceUrl = params.get('trace') || './blocks.json';
+    const resp = await fetch(traceUrl);
+    if (resp.ok) {
+      const data = await resp.json();
+      if (Array.isArray(data) && data.length > 0) {
+        trace = data;
+        sel = null; turn = 0;
+        recompute();
+        // Set budget to 1M for opus sessions
+        budget = 1000000;
+        document.querySelectorAll(".budget button").forEach(x => x.classList.toggle("act", +x.dataset.b === 1000000));
+        endTour();
+        renderAll(); setTurn(0);
+      }
     }
-  }).catch(() => { /* blocks.json not found, use built-in SAMPLE */ });
+  } catch(e) { console.warn('blocks.json not loaded:', e); }
+  try {
+    const churnUrl = params.get('churn') || './churn.json';
+    const resp = await fetch(churnUrl);
+    if (resp.ok) {
+      const data = await resp.json();
+      if (Array.isArray(data) && data.length > 0) {
+        CHURN = data;
+        drawChurn();
+      }
+    }
+  } catch(e) { console.warn('churn.json not loaded:', e); }
 })();
 </script>
 </body>
