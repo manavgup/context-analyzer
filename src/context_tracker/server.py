@@ -322,6 +322,9 @@ def mcp_should_clear(session_id: str = "") -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Context Tracker MCP Server")
+    subparsers = parser.add_subparsers(dest="command")
+
+    # Default: MCP server
     parser.add_argument(
         "--transport",
         choices=["stdio", "sse", "http"],
@@ -330,12 +333,24 @@ def main() -> None:
     )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=9200)
+
+    # Dashboard subcommand
+    dash_parser = subparsers.add_parser("dashboard", help="Launch web dashboard")
+    dash_parser.add_argument("--host", default="127.0.0.1", dest="dash_host")
+    dash_parser.add_argument("--port", type=int, default=9201, dest="dash_port")
+
     args = parser.parse_args()
 
-    if args.transport == "stdio":
-        mcp.run()
+    if args.command == "dashboard":
+        from context_tracker.dashboard import create_app
+        import uvicorn
+        app = create_app()
+        uvicorn.run(app, host=args.dash_host, port=args.dash_port)
     else:
-        mcp.run(transport=args.transport, host=args.host, port=args.port)
+        if args.transport == "stdio":
+            mcp.run()
+        else:
+            mcp.run(transport=args.transport, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":
