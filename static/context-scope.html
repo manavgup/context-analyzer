@@ -371,12 +371,29 @@ let maxTurn=0,turn=0,budget=1000000,view="tape",sel=null,playing=null;
 let highlight=[],dimOthers=false,villain=null;
 const FLAG_TURN=7;
 
-function recompute(){maxTurn=Math.max(...trace.map(b=>b.enter));}
+/* Pre-computed caches — rebuilt once in recompute(), O(1) lookups after */
+let _blocksAtCache={}, _totalAtCache={}, _typeSumCache={}, _maxTotalCache=0;
+
+function recompute(){
+  maxTurn=Math.max(0,...trace.map(b=>b.enter));
+  // Pre-compute blocksAt, totalAt, typeSumAt for every turn
+  _blocksAtCache={}; _totalAtCache={}; _typeSumCache={}; _maxTotalCache=0;
+  for(let t=0;t<=maxTurn;t++){
+    const blks=trace.filter(b=>b.enter<=t&&(b.exit==null||b.exit>t))
+      .sort((a,b)=>(a.enter-b.enter)||(TYPES.indexOf(a.type)-TYPES.indexOf(b.type)));
+    _blocksAtCache[t]=blks;
+    const tot=blks.reduce((s,b)=>s+b.tokens,0);
+    _totalAtCache[t]=tot;
+    if(tot>_maxTotalCache)_maxTotalCache=tot;
+    const ts={};TYPES.forEach(x=>ts[x]=0);blks.forEach(b=>ts[b.type]+=b.tokens);
+    _typeSumCache[t]=ts;
+  }
+}
 function present(b,t){return b.enter<=t&&(b.exit==null||b.exit>t);}
-function blocksAt(t){return trace.filter(b=>present(b,t)).sort((a,b)=>(a.enter-b.enter)||(TYPES.indexOf(a.type)-TYPES.indexOf(b.type)));}
-function totalAt(t){return blocksAt(t).reduce((s,b)=>s+b.tokens,0);}
-function maxTotal(){let m=0;for(let t=0;t<=maxTurn;t++)m=Math.max(m,totalAt(t));return m;}
-function typeSumAt(t){const o={};TYPES.forEach(x=>o[x]=0);blocksAt(t).forEach(b=>o[b.type]+=b.tokens);return o;}
+function blocksAt(t){return _blocksAtCache[t]||[];}
+function totalAt(t){return _totalAtCache[t]||0;}
+function maxTotal(){return _maxTotalCache;}
+function typeSumAt(t){return _typeSumCache[t]||{};}
 function tokensRightOf(id,t){const o=blocksAt(t);const i=o.findIndex(b=>b.id===id);if(i<0)return null;return o.slice(i+1).reduce((s,b)=>s+b.tokens,0);}
 function driftRisk(t){const o=blocksAt(t);let mx=0;o.forEach(b=>{if(b.enter<=1&&(b.type==="system"||b.type==="user"||b.type==="skill")){const r=o.slice(o.indexOf(b)+1).reduce((s,x)=>s+x.tokens,0);mx=Math.max(mx,r);}});return mx;}
 const fmt=n=>n>=1000?(n/1000).toFixed(n>=10000?0:1)+"k":""+n;
