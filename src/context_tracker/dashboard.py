@@ -316,9 +316,13 @@ def create_app(
 
     @app.get("/")
     def serve_dashboard():
-        index = static_dir / "context-scope.html"
-        if index.exists():
-            return FileResponse(str(index))
+        # Prefer v3 dashboard, fall back to v2
+        v3 = static_dir / "dashboard-v3.html"
+        if v3.exists():
+            return FileResponse(str(v3))
+        v2 = static_dir / "context-scope.html"
+        if v2.exists():
+            return FileResponse(str(v2))
         return HTMLResponse("<h1>Context Analyzer</h1><p>Run ccscope build first.</p>")
 
     @app.get("/blocks.json")

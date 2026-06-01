@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Context Analyzer v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
+<style>
+:root {
+  --bg: #f8f9fb;
+  --card: #ffffff;
+  --border: #e5e7eb;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.06);
+  --text: #1a1d23;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --system: #a78bfa;
+  --system-bg: rgba(167,139,250,0.1);
+  --working: #34d399;
+  --working-bg: rgba(52,211,153,0.1);
+  --stale: #fca5a5;
+  --churn: #d9a441;
+  --churn-bg: rgba(217,164,65,0.12);
+  --danger: #ef4444;
+  --accent: #6366f1;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 24px 24px 80px;
+}
+
+/* ===== HEADER ===== */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.health-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--working);
+  box-shadow: 0 0 8px rgba(52,211,153,0.5);
+  animation: pulse 2.4s ease-in-out infinite;
+}
+.health-dot.yellow { background: var(--churn); box-shadow: 0 0 8px rgba(217,164,65,0.5); }
+.health-dot.red { background: var(--danger); box-shadow: 0 0 8px rgba(239,68,68,0.5); }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+.header h1 {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.header-right {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ===== SCORECARDS ===== */
+.scorecards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.scorecard {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+}
+
+.scorecard-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.scorecard-value {
+  font-family: var(--mono);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.1;
+}
+
+.scorecard-sub {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+/* ===== CHART PANELS ===== */
+.chart-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 20px 16px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow);
+}
+
+.chart-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.chart-panel-header h2 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+}
+
+.chart-panel-header .hint {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.chart-wrap {
+  position: relative;
+  height: 280px;
+}
+
+.chart-wrap canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ===== CHURN STATS ===== */
+.churn-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.churn-stat {
+  text-align: center;
+}
+
+.churn-stat-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.churn-stat-value {
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ===== SCRUBBER ===== */
+.scrubber {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 20px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.scrubber-btn {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.scrubber-btn:hover {
+  background: var(--card);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.scrubber-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.scrubber-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: #e5e7eb;
+  outline: none;
+  cursor: pointer;
+}
+
+.scrubber-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  cursor: pointer;
+}
+
+.scrubber-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  cursor: pointer;
+}
+
+.scrubber-label {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  min-width: 120px;
+  text-align: center;
+}
+
+.speed-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 36px;
+}
+
+/* ===== BOTTOM TWO-COL ===== */
+.bottom-row {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 20px;
+}
+
+.turn-details, .block-inspector {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.panel-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Turn details rows */
+.turn-blocks-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.turn-block-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 18px;
+  border-bottom: 1px solid #f3f4f6;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.turn-block-row:hover {
+  background: #f9fafb;
+}
+
+.turn-block-row.selected {
+  background: rgba(99,102,241,0.06);
+  border-left: 3px solid var(--accent);
+  padding-left: 15px;
+}
+
+.block-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.badge-system { background: var(--system-bg); color: #7c3aed; }
+.badge-skill { background: rgba(236,72,153,0.1); color: #db2777; }
+.badge-tool_result { background: rgba(249,115,22,0.1); color: #ea580c; }
+.badge-tool_call { background: rgba(99,102,241,0.1); color: #6366f1; }
+.badge-user { background: rgba(59,130,246,0.1); color: #2563eb; }
+.badge-assistant { background: var(--working-bg); color: #059669; }
+.badge-default { background: #f3f4f6; color: #6b7280; }
+
+.block-label-text {
+  flex: 1;
+  font-size: 12.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.block-tokens {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Block inspector */
+.inspector-body {
+  padding: 16px 18px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.inspector-empty {
+  padding: 40px 18px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.inspector-field {
+  margin-bottom: 12px;
+}
+
+.inspector-field-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+  font-weight: 600;
+}
+
+.inspector-field-value {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.inspector-content {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Loading */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  font-family: var(--mono);
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 10px;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Responsive */
+@media (max-width: 900px) {
+  .scorecards { grid-template-columns: repeat(2, 1fr); }
+  .bottom-row { grid-template-columns: 1fr; }
+  .churn-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 600px) {
+  .scorecards { grid-template-columns: 1fr; }
+  .scrubber { flex-wrap: wrap; }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Loading state -->
+  <div id="loading" class="loading">
+    <div class="loading-spinner"></div>
+    Loading session data...
+  </div>
+
+  <!-- Main content (hidden until loaded) -->
+  <div id="main-content" style="display:none">
+
+    <!-- Section 1: Header + Scorecards -->
+    <div class="header">
+      <div class="header-left">
+        <div class="health-dot" id="health-dot"></div>
+        <h1>Context Analyzer</h1>
+      </div>
+      <div class="header-right" id="header-model"></div>
+    </div>
+
+    <div class="scorecards">
+      <div class="scorecard">
+        <div class="scorecard-label">Peak Resident</div>
+        <div class="scorecard-value" id="sc-peak">--</div>
+        <div class="scorecard-sub" id="sc-peak-sub">--</div>
+      </div>
+      <div class="scorecard">
+        <div class="scorecard-label">Cache-Read Churn</div>
+        <div class="scorecard-value" id="sc-churn">--</div>
+        <div class="scorecard-sub" id="sc-churn-sub">--</div>
+      </div>
+      <div class="scorecard">
+        <div class="scorecard-label">API Calls</div>
+        <div class="scorecard-value" id="sc-calls">--</div>
+        <div class="scorecard-sub" id="sc-calls-sub">--</div>
+      </div>
+      <div class="scorecard">
+        <div class="scorecard-label">Session Cost</div>
+        <div class="scorecard-value" id="sc-cost">--</div>
+        <div class="scorecard-sub" id="sc-cost-sub">--</div>
+      </div>
+    </div>
+
+    <!-- Section 2: Context Growth Chart -->
+    <div class="chart-panel">
+      <div class="chart-panel-header">
+        <h2>Context Growth</h2>
+        <span class="hint" id="growth-hint">Stacked area: system prefix + working set</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="growth-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Section 3: Cache-Read Churn Chart -->
+    <div class="chart-panel">
+      <div class="chart-panel-header">
+        <h2>Cache-Read Churn</h2>
+        <span class="hint" id="churn-hint">Per-call re-read cost</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="churn-chart"></canvas>
+      </div>
+      <div class="churn-stats">
+        <div class="churn-stat">
+          <div class="churn-stat-label">Total Cache Read</div>
+          <div class="churn-stat-value" id="cs-total-read">--</div>
+        </div>
+        <div class="churn-stat">
+          <div class="churn-stat-label">Total New Input</div>
+          <div class="churn-stat-value" id="cs-total-input">--</div>
+        </div>
+        <div class="churn-stat">
+          <div class="churn-stat-label">Read/Input Ratio</div>
+          <div class="churn-stat-value" id="cs-ratio">--</div>
+        </div>
+        <div class="churn-stat">
+          <div class="churn-stat-label">Total Output</div>
+          <div class="churn-stat-value" id="cs-total-output">--</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 4: Scrubber -->
+    <div class="scrubber">
+      <button class="scrubber-btn" id="btn-play" title="Play/Pause (Space)">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><polygon id="play-icon" points="3,1 12,7 3,13"/></svg>
+      </button>
+      <button class="scrubber-btn" id="btn-prev" title="Previous (Left arrow)">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><polygon points="8,1 3,6 8,11"/></svg>
+      </button>
+      <button class="scrubber-btn" id="btn-next" title="Next (Right arrow)">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><polygon points="4,1 9,6 4,11"/></svg>
+      </button>
+      <input type="range" class="scrubber-slider" id="scrubber-range" min="0" max="0" value="0">
+      <div class="scrubber-label" id="scrubber-label">Turn 0 / 0</div>
+      <button class="scrubber-btn speed-btn" id="btn-speed" title="Speed">1x</button>
+    </div>
+
+    <!-- Section 5: Turn Details + Block Inspector -->
+    <div class="bottom-row">
+      <div class="turn-details">
+        <div class="panel-title" id="turn-details-title">Turn Details</div>
+        <div class="turn-blocks-list" id="turn-blocks-list">
+          <div class="inspector-empty">Select a turn to see block details</div>
+        </div>
+      </div>
+      <div class="block-inspector">
+        <div class="panel-title">Block Inspector</div>
+        <div id="inspector-body">
+          <div class="inspector-empty">Click a block to inspect</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ===== CONSTANTS =====
+  const BUDGET = 1_000_000;
+  const PRICING = {
+    input: 15 / 1e6,
+    output: 75 / 1e6,
+    cache_read: 1.875 / 1e6,
+    cache_create: 18.75 / 1e6,
+  };
+  const SPEEDS = [1, 2, 4];
+
+  // ===== STATE =====
+  let blocks = [];
+  let churn = [];
+  let pinnedTokens = 0;
+  let currentTurn = 0;
+  let maxTurn = 0;
+  let playing = false;
+  let speedIdx = 0;
+  let playTimer = null;
+  let growthChart = null;
+  let churnChart = null;
+  let selectedBlockIdx = -1;
+
+  // Derived data (computed once)
+  let labels = [];
+  let systemData = [];
+  let workingData = [];
+  let residentData = [];
+  let cacheReadData = [];
+  let cumulativeRead = [];
+  let blocksByTurn = {};
+
+  // ===== UTILITIES =====
+  function fmt(n) {
+    if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K';
+    return n.toString();
+  }
+
+  function fmtExact(n) {
+    return n.toLocaleString('en-US');
+  }
+
+  function fmtCost(dollars) {
+    if (dollars >= 100) return '$' + dollars.toFixed(0);
+    if (dollars >= 1) return '$' + dollars.toFixed(2);
+    return '$' + dollars.toFixed(3);
+  }
+
+  function getBadgeClass(type) {
+    const map = {
+      system: 'badge-system',
+      skill: 'badge-skill',
+      tool_result: 'badge-tool_result',
+      tool_call: 'badge-tool_call',
+      user: 'badge-user',
+      assistant: 'badge-assistant',
+    };
+    return map[type] || 'badge-default';
+  }
+
+  function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  // ===== DATA LOADING =====
+  async function loadData() {
+    const [blocksResp, churnResp] = await Promise.all([
+      fetch('./blocks.json'),
+      fetch('./churn.json'),
+    ]);
+
+    if (!blocksResp.ok || !churnResp.ok) {
+      document.getElementById('loading').innerHTML =
+        '<span style="color:var(--danger)">Failed to load data. Run <code>ccscope build</code> first.</span>';
+      return false;
+    }
+
+    blocks = await blocksResp.json();
+    churn = await churnResp.json();
+    return true;
+  }
+
+  // ===== DERIVED COMPUTATION =====
+  function computeDerived() {
+    // Pinned prefix tokens
+    const pinned = blocks.filter(b => b.cached === true);
+    pinnedTokens = pinned.reduce((s, b) => s + b.tokens, 0);
+
+    // Index working-set blocks by enter turn
+    blocksByTurn = {};
+    for (const b of blocks) {
+      if (b.exit !== null && b.exit !== undefined) {
+        const t = b.enter;
+        if (!blocksByTurn[t]) blocksByTurn[t] = [];
+        blocksByTurn[t].push(b);
+      }
+    }
+    // Also store pinned blocks at turn -1 for reference
+    blocksByTurn[-1] = pinned;
+
+    maxTurn = churn.length - 1;
+    labels = churn.map(c => c.turn);
+
+    // Per-turn data
+    let cumRead = 0;
+    for (let i = 0; i < churn.length; i++) {
+      const c = churn[i];
+      const resident = c.cache_read + c.cache_creation + c.input;
+      residentData.push(resident);
+
+      // System prefix is constant; working set is the rest
+      const sys = Math.min(pinnedTokens, resident);
+      const ws = Math.max(0, resident - pinnedTokens);
+      systemData.push(sys);
+      workingData.push(ws);
+
+      cacheReadData.push(c.cache_read);
+      cumRead += c.cache_read;
+      cumulativeRead.push(cumRead);
+    }
+  }
+
+  // ===== SCORECARDS =====
+  function renderScorecards() {
+    const peakResident = Math.max(...residentData);
+    const pctBudget = ((peakResident / BUDGET) * 100).toFixed(0);
+    document.getElementById('sc-peak').textContent = fmt(peakResident);
+    document.getElementById('sc-peak-sub').textContent = pctBudget + '% of 1M';
+
+    const totalRead = cumulativeRead[cumulativeRead.length - 1] || 0;
+    const totalInput = churn.reduce((s, c) => s + c.input, 0);
+    const ratio = totalInput > 0 ? Math.round(totalRead / totalInput) : 0;
+    document.getElementById('sc-churn').textContent = fmt(totalRead);
+    document.getElementById('sc-churn-sub').textContent = fmtExact(ratio) + 'x ratio';
+
+    document.getElementById('sc-calls').textContent = churn.length.toString();
+    // Compute session duration hint from call count
+    document.getElementById('sc-calls-sub').textContent = churn.length + ' API calls';
+
+    // Cost
+    const costInput = totalInput * PRICING.input;
+    const costOutput = churn.reduce((s, c) => s + c.output, 0) * PRICING.output;
+    const costCacheRead = totalRead * PRICING.cache_read;
+    const costCacheCreate = churn.reduce((s, c) => s + c.cache_creation, 0) * PRICING.cache_create;
+    const totalCost = costInput + costOutput + costCacheRead + costCacheCreate;
+
+    document.getElementById('sc-cost').textContent = fmtCost(totalCost);
+    // Find dominant
+    const components = [
+      { name: 'cache_read', cost: costCacheRead },
+      { name: 'output', cost: costOutput },
+      { name: 'cache_create', cost: costCacheCreate },
+      { name: 'input', cost: costInput },
+    ];
+    components.sort((a, b) => b.cost - a.cost);
+    const dominant = components[0];
+    const pctDominant = ((dominant.cost / totalCost) * 100).toFixed(0);
+    document.getElementById('sc-cost-sub').textContent =
+      pctDominant + '% ' + dominant.name.replace('_', ' ');
+
+    // Health dot
+    const dot = document.getElementById('health-dot');
+    if (peakResident / BUDGET > 0.8) {
+      dot.className = 'health-dot red';
+    } else if (peakResident / BUDGET > 0.5) {
+      dot.className = 'health-dot yellow';
+    } else {
+      dot.className = 'health-dot';
+    }
+  }
+
+  // ===== CHURN STATS =====
+  function renderChurnStats() {
+    const totalRead = cumulativeRead[cumulativeRead.length - 1] || 0;
+    const totalInput = churn.reduce((s, c) => s + c.input, 0);
+    const totalOutput = churn.reduce((s, c) => s + c.output, 0);
+    const ratio = totalInput > 0 ? Math.round(totalRead / totalInput) : 0;
+
+    document.getElementById('cs-total-read').textContent = fmt(totalRead);
+    document.getElementById('cs-total-input').textContent = fmt(totalInput);
+    document.getElementById('cs-ratio').textContent = fmtExact(ratio) + 'x';
+    document.getElementById('cs-total-output').textContent = fmt(totalOutput);
+  }
+
+  // ===== CHARTS =====
+  function buildGrowthChart() {
+    const ctx = document.getElementById('growth-chart').getContext('2d');
+    growthChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'System + Skills',
+            data: systemData,
+            fill: true,
+            backgroundColor: 'rgba(167, 139, 250, 0.35)',
+            borderColor: 'rgba(167, 139, 250, 0.7)',
+            borderWidth: 1.5,
+            pointRadius: 0,
+            pointHitRadius: 6,
+            tension: 0.1,
+            order: 2,
+          },
+          {
+            label: 'Working Set',
+            data: workingData,
+            fill: true,
+            backgroundColor: 'rgba(52, 211, 153, 0.3)',
+            borderColor: 'rgba(52, 211, 153, 0.7)',
+            borderWidth: 1.5,
+            pointRadius: 0,
+            pointHitRadius: 6,
+            tension: 0.1,
+            order: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false,
+        },
+        scales: {
+          x: {
+            title: { display: true, text: 'API Call', font: { family: 'Inter', size: 11 }, color: '#9ca3af' },
+            ticks: {
+              font: { family: 'JetBrains Mono', size: 10 },
+              color: '#9ca3af',
+              maxTicksLimit: 20,
+            },
+            grid: { color: 'rgba(0,0,0,0.04)' },
+          },
+          y: {
+            stacked: true,
+            title: { display: true, text: 'Tokens', font: { family: 'Inter', size: 11 }, color: '#9ca3af' },
+            ticks: {
+              font: { family: 'JetBrains Mono', size: 10 },
+              color: '#9ca3af',
+              callback: v => fmt(v),
+            },
+            grid: { color: 'rgba(0,0,0,0.04)' },
+            suggestedMax: Math.max(BUDGET * 0.1, Math.max(...residentData) * 1.1),
+          },
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+            align: 'end',
+            labels: {
+              usePointStyle: true,
+              pointStyle: 'circle',
+              font: { family: 'Inter', size: 11 },
+              color: '#6b7280',
+              padding: 14,
+            },
+          },
+          tooltip: {
+            backgroundColor: '#1a1d23',
+            titleFont: { family: 'JetBrains Mono', size: 11 },
+            bodyFont: { family: 'JetBrains Mono', size: 11 },
+            callbacks: {
+              title: items => 'Turn ' + items[0].label,
+              label: item => item.dataset.label + ': ' + fmtExact(item.raw) + ' tok',
+              afterBody: items => {
+                const idx = items[0].dataIndex;
+                return 'Total: ' + fmtExact(residentData[idx]) + ' tok\n' +
+                       (residentData[idx] / BUDGET * 100).toFixed(1) + '% of budget';
+              },
+            },
+          },
+          annotation: {
+            annotations: {
+              budgetLine: {
+                type: 'line',
+                yMin: BUDGET,
+                yMax: BUDGET,
+                borderColor: 'rgba(239, 68, 68, 0.5)',
+                borderWidth: 1.5,
+                borderDash: [6, 4],
+                label: {
+                  display: true,
+                  content: '1M Budget',
+                  position: 'end',
+                  font: { family: 'JetBrains Mono', size: 10 },
+                  color: '#ef4444',
+                  backgroundColor: 'rgba(239,68,68,0.08)',
+                  padding: 3,
+                },
+              },
+              turnMarker: {
+                type: 'line',
+                xMin: 0,
+                xMax: 0,
+                borderColor: 'rgba(99, 102, 241, 0.6)',
+                borderWidth: 1.5,
+                borderDash: [4, 3],
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  function buildChurnChart() {
+    const ctx = document.getElementById('churn-chart').getContext('2d');
+    churnChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            type: 'bar',
+            label: 'Cache Read / Call',
+            data: cacheReadData,
+            backgroundColor: 'rgba(217, 164, 65, 0.55)',
+            borderColor: 'rgba(217, 164, 65, 0.8)',
+            borderWidth: 1,
+            yAxisID: 'y',
+            order: 2,
+            barPercentage: 0.9,
+            categoryPercentage: 0.95,
+          },
+          {
+            type: 'line',
+            label: 'Cumulative',
+            data: cumulativeRead,
+            borderColor: 'rgba(234, 179, 8, 0.8)',
+            backgroundColor: 'rgba(234, 179, 8, 0.05)',
+            borderWidth: 2,
+            pointRadius: 0,
+            pointHitRadius: 6,
+            tension: 0.1,
+            fill: false,
+            yAxisID: 'y1',
+            order: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false,
+        },
+        scales: {
+          x: {
+            ticks: {
+              font: { family: 'JetBrains Mono', size: 10 },
+              color: '#9ca3af',
+              maxTicksLimit: 20,
+            },
+            grid: { color: 'rgba(0,0,0,0.04)' },
+          },
+          y: {
+            position: 'left',
+            title: { display: true, text: 'Cache Read (per call)', font: { family: 'Inter', size: 11 }, color: '#9ca3af' },
+            ticks: {
+              font: { family: 'JetBrains Mono', size: 10 },
+              color: '#9ca3af',
+              callback: v => fmt(v),
+            },
+            grid: { color: 'rgba(0,0,0,0.04)' },
+          },
+          y1: {
+            position: 'right',
+            title: { display: true, text: 'Cumulative', font: { family: 'Inter', size: 11 }, color: '#9ca3af' },
+            ticks: {
+              font: { family: 'JetBrains Mono', size: 10 },
+              color: '#9ca3af',
+              callback: v => fmt(v),
+            },
+            grid: { drawOnChartArea: false },
+          },
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+            align: 'end',
+            labels: {
+              usePointStyle: true,
+              pointStyle: 'circle',
+              font: { family: 'Inter', size: 11 },
+              color: '#6b7280',
+              padding: 14,
+            },
+          },
+          tooltip: {
+            backgroundColor: '#1a1d23',
+            titleFont: { family: 'JetBrains Mono', size: 11 },
+            bodyFont: { family: 'JetBrains Mono', size: 11 },
+            callbacks: {
+              title: items => 'Turn ' + items[0].label,
+              label: item => {
+                if (item.datasetIndex === 0) return 'Cache read: ' + fmtExact(item.raw) + ' tok';
+                return 'Cumulative: ' + fmt(item.raw);
+              },
+            },
+          },
+          annotation: {
+            annotations: {
+              turnMarker: {
+                type: 'line',
+                xMin: 0,
+                xMax: 0,
+                borderColor: 'rgba(99, 102, 241, 0.6)',
+                borderWidth: 1.5,
+                borderDash: [4, 3],
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // ===== TURN MARKER UPDATE (FAST PATH) =====
+  function updateTurnMarker() {
+    // Growth chart
+    growthChart.options.plugins.annotation.annotations.turnMarker.xMin = currentTurn;
+    growthChart.options.plugins.annotation.annotations.turnMarker.xMax = currentTurn;
+    growthChart.update('none');
+
+    // Churn chart
+    churnChart.options.plugins.annotation.annotations.turnMarker.xMin = currentTurn;
+    churnChart.options.plugins.annotation.annotations.turnMarker.xMax = currentTurn;
+    churnChart.update('none');
+  }
+
+  // ===== TURN DETAILS =====
+  function renderTurnDetails() {
+    const c = churn[currentTurn];
+    const titleEl = document.getElementById('turn-details-title');
+    const listEl = document.getElementById('turn-blocks-list');
+
+    if (!c) {
+      titleEl.textContent = 'Turn Details';
+      listEl.innerHTML = '<div class="inspector-empty">No data for this turn</div>';
+      return;
+    }
+
+    const resident = residentData[currentTurn];
+    titleEl.textContent = 'Turn ' + c.turn + ' \u2014 ' + fmtExact(resident) + ' tok resident';
+
+    // Get blocks: pinned blocks + working set block for this turn
+    const rows = [];
+
+    // Always show pinned prefix blocks
+    const pinned = blocks.filter(b => b.cached === true);
+    for (const b of pinned) {
+      rows.push(b);
+    }
+
+    // Working set block for this turn
+    const wsBlock = blocks.find(b => b.enter === c.turn && b.exit !== null && b.exit !== undefined);
+    if (wsBlock) {
+      // Parse the content field to extract individual tool blocks
+      const content = wsBlock.content || '';
+      const lines = content.split('\n').filter(l => l.trim());
+
+      // First line is the summary, rest are individual tool calls
+      const toolLines = lines.slice(1);
+      if (toolLines.length > 0) {
+        for (const line of toolLines) {
+          // Parse: "tool_result: Bash -> git (194 tok)" or "user: user prompt (28 tok)"
+          const match = line.match(/^(\w+):\s+(.+?)\s*\(([0-9,]+)\s*tok\)\s*$/);
+          if (match) {
+            const type = match[1];
+            const label = match[2];
+            const tokens = parseInt(match[3].replace(/,/g, ''), 10);
+            rows.push({
+              id: wsBlock.id + '_' + rows.length,
+              type: type,
+              label: label,
+              tokens: tokens,
+              enter: c.turn,
+              exit: c.turn + 1,
+              cached: false,
+              ref: true,
+              content: line,
+              _synthetic: true,
+            });
+          } else if (line.trim()) {
+            // Unparseable line, show as-is
+            rows.push({
+              id: wsBlock.id + '_' + rows.length,
+              type: 'default',
+              label: line.trim(),
+              tokens: 0,
+              enter: c.turn,
+              exit: c.turn + 1,
+              cached: false,
+              ref: true,
+              content: line,
+              _synthetic: true,
+            });
+          }
+        }
+      } else {
+        // No parsed tool lines; show the whole block
+        rows.push(wsBlock);
+      }
+    }
+
+    if (rows.length === 0) {
+      listEl.innerHTML = '<div class="inspector-empty">No blocks at this turn</div>';
+      return;
+    }
+
+    let html = '';
+    for (let i = 0; i < rows.length; i++) {
+      const b = rows[i];
+      const badgeCls = getBadgeClass(b.type);
+      const sel = i === selectedBlockIdx ? ' selected' : '';
+      html += '<div class="turn-block-row' + sel + '" data-idx="' + i + '">' +
+        '<span class="block-badge ' + badgeCls + '">' + escapeHtml(b.type) + '</span>' +
+        '<span class="block-label-text">' + escapeHtml(b.label) + '</span>' +
+        '<span class="block-tokens">' + (b.tokens > 0 ? fmtExact(b.tokens) + ' tok' : '') + '</span>' +
+        '</div>';
+    }
+
+    listEl.innerHTML = html;
+
+    // Store rows reference for click handler
+    listEl._rows = rows;
+
+    // Click handler
+    listEl.querySelectorAll('.turn-block-row').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = parseInt(el.dataset.idx, 10);
+        selectedBlockIdx = idx;
+        // Update selection styling
+        listEl.querySelectorAll('.turn-block-row').forEach(r => r.classList.remove('selected'));
+        el.classList.add('selected');
+        renderInspector(rows[idx]);
+      });
+    });
+  }
+
+  // ===== BLOCK INSPECTOR =====
+  function renderInspector(block) {
+    const el = document.getElementById('inspector-body');
+    if (!block) {
+      el.innerHTML = '<div class="inspector-empty">Click a block to inspect</div>';
+      return;
+    }
+
+    const distance = block.exit !== null && block.exit !== undefined
+      ? Math.max(0, maxTurn - block.enter)
+      : 'pinned';
+
+    let html = '<div class="inspector-body">';
+
+    html += '<div class="inspector-field">' +
+      '<div class="inspector-field-label">Block ID</div>' +
+      '<div class="inspector-field-value">' + escapeHtml(block.id) + '</div></div>';
+
+    html += '<div class="inspector-field">' +
+      '<div class="inspector-field-label">Type</div>' +
+      '<div class="inspector-field-value"><span class="block-badge ' + getBadgeClass(block.type) + '">' + escapeHtml(block.type) + '</span></div></div>';
+
+    html += '<div class="inspector-field">' +
+      '<div class="inspector-field-label">Tokens</div>' +
+      '<div class="inspector-field-value">' + fmtExact(block.tokens) + '</div></div>';
+
+    html += '<div class="inspector-field">' +
+      '<div class="inspector-field-label">Entry Turn</div>' +
+      '<div class="inspector-field-value">' + block.enter + '</div></div>';
+
+    if (block.exit !== null && block.exit !== undefined) {
+      html += '<div class="inspector-field">' +
+        '<div class="inspector-field-label">Exit Turn</div>' +
+        '<div class="inspector-field-value">' + block.exit + '</div></div>';
+    }
+
+    html += '<div class="inspector-field">' +
+      '<div class="inspector-field-label">Cached</div>' +
+      '<div class="inspector-field-value">' + (block.cached ? 'Yes (pinned prefix)' : 'No') + '</div></div>';
+
+    html += '<div class="inspector-field">' +
+      '<div class="inspector-field-label">Distance from Edge</div>' +
+      '<div class="inspector-field-value">' + distance + ' turns</div></div>';
+
+    // Content
+    const content = block.content || '';
+    if (content.length > 0) {
+      const display = content.length > 2000 ? content.slice(0, 2000) + '\n... (truncated)' : content;
+      html += '<div class="inspector-field">' +
+        '<div class="inspector-field-label">Content</div>' +
+        '<div class="inspector-content">' + escapeHtml(display) + '</div></div>';
+    }
+
+    html += '</div>';
+    el.innerHTML = html;
+  }
+
+  // ===== SCRUBBER =====
+  function updateScrubberLabel() {
+    document.getElementById('scrubber-label').textContent =
+      'Turn ' + currentTurn + ' / ' + maxTurn;
+  }
+
+  function goToTurn(t) {
+    currentTurn = Math.max(0, Math.min(maxTurn, t));
+    document.getElementById('scrubber-range').value = currentTurn;
+    updateScrubberLabel();
+    updateTurnMarker();
+    selectedBlockIdx = -1;
+    renderTurnDetails();
+    renderInspector(null);
+  }
+
+  function togglePlay() {
+    playing = !playing;
+    const btn = document.getElementById('btn-play');
+    if (playing) {
+      btn.classList.add('active');
+      // Swap to pause icon
+      btn.querySelector('svg').innerHTML = '<rect x="2" y="1" width="3.5" height="12" rx="0.5"/><rect x="8.5" y="1" width="3.5" height="12" rx="0.5"/>';
+      startPlayback();
+    } else {
+      btn.classList.remove('active');
+      btn.querySelector('svg').innerHTML = '<polygon points="3,1 12,7 3,13"/>';
+      stopPlayback();
+    }
+  }
+
+  function startPlayback() {
+    stopPlayback();
+    const interval = Math.max(16, Math.round(100 / SPEEDS[speedIdx]));
+    playTimer = setInterval(() => {
+      if (currentTurn >= maxTurn) {
+        togglePlay();
+        return;
+      }
+      goToTurn(currentTurn + 1);
+    }, interval);
+  }
+
+  function stopPlayback() {
+    if (playTimer) {
+      clearInterval(playTimer);
+      playTimer = null;
+    }
+  }
+
+  function cycleSpeed() {
+    speedIdx = (speedIdx + 1) % SPEEDS.length;
+    document.getElementById('btn-speed').textContent = SPEEDS[speedIdx] + 'x';
+    if (playing) {
+      startPlayback(); // restart with new speed
+    }
+  }
+
+  // ===== WIRE EVERYTHING =====
+  function wireControls() {
+    const range = document.getElementById('scrubber-range');
+    range.min = 0;
+    range.max = maxTurn;
+    range.value = 0;
+
+    range.addEventListener('input', () => {
+      goToTurn(parseInt(range.value, 10));
+    });
+
+    document.getElementById('btn-play').addEventListener('click', togglePlay);
+    document.getElementById('btn-prev').addEventListener('click', () => {
+      if (playing) togglePlay();
+      goToTurn(currentTurn - 1);
+    });
+    document.getElementById('btn-next').addEventListener('click', () => {
+      if (playing) togglePlay();
+      goToTurn(currentTurn + 1);
+    });
+    document.getElementById('btn-speed').addEventListener('click', cycleSpeed);
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', e => {
+      // Don't handle if focus is in an input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      switch (e.code) {
+        case 'Space':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          if (playing) togglePlay();
+          goToTurn(currentTurn - 1);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          if (playing) togglePlay();
+          goToTurn(currentTurn + 1);
+          break;
+        case 'Escape':
+          if (playing) togglePlay();
+          break;
+      }
+    });
+  }
+
+  // ===== INIT =====
+  async function init() {
+    const ok = await loadData();
+    if (!ok) return;
+
+    computeDerived();
+
+    // Hide loading, show content
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('main-content').style.display = 'block';
+
+    renderScorecards();
+    renderChurnStats();
+    buildGrowthChart();
+    buildChurnChart();
+    wireControls();
+
+    // Initial turn details
+    updateScrubberLabel();
+    renderTurnDetails();
+
+    // Update hints
+    document.getElementById('growth-hint').textContent =
+      'Prefix ' + fmt(pinnedTokens) + ' tok \u00b7 ' + churn.length + ' calls';
+    document.getElementById('churn-hint').textContent =
+      'Total re-read: ' + fmt(cumulativeRead[cumulativeRead.length - 1] || 0);
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
