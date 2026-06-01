@@ -334,7 +334,6 @@ def mcp_get_staleness_analysis(session_id: str = "", top_n: int = 10) -> str:
 
     from context_tracker.transcript_parser import parse_raw_transcript
     from context_tracker.analysis.reconstruction import reconstruct_session
-    from context_tracker.analysis.staleness import detect_superseded, compute_staleness, label_staleness
     from context_tracker.analysis.config import StalenessConfig
 
     messages, _ = parse_raw_transcript(transcript_path)
@@ -344,13 +343,6 @@ def mcp_get_staleness_analysis(session_id: str = "", top_n: int = 10) -> str:
 
     if not snapshots:
         return json.dumps({"error": "No turns found"})
-
-    # Collect all blocks from reconstruction
-    all_blocks = {}
-    for snap in snapshots:
-        for bid in snap.blocks_entered_ids:
-            # Find the block in the reconstruction
-            pass
 
     return json.dumps({
         "session_id": session_id,

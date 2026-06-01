@@ -2,8 +2,6 @@
 
 from context_tracker.analysis.health import (
     HealthSignals,
-    SessionRecommendation,
-    AttentionLossSignal,
     compute_urgency,
     compute_turn_cost,
     classify_recommendation,

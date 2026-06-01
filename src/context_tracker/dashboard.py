@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -12,7 +11,6 @@ from fastapi.staticfiles import StaticFiles
 from context_tracker.storage import DEFAULT_TRACE_DIR, list_sessions, read_events
 from context_tracker.transcript_parser import parse_raw_transcript
 from context_tracker.analysis.reconstruction import reconstruct_session
-from context_tracker.analysis.config import load_config
 
 DEFAULT_TRANSCRIPT_DIR = Path.home() / ".claude" / "projects"
 DEFAULT_STATIC_DIR = Path(__file__).parent.parent.parent / "static"
