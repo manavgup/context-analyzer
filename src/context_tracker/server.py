@@ -328,28 +328,28 @@ def mcp_get_staleness_analysis(session_id: str = "", top_n: int = 10) -> str:
             return json.dumps({"error": "No sessions found"})
         session_id = sessions[0]
 
-    transcript_path = _find_transcript(session_id)
-    if not transcript_path:
+    try:
+        from context_tracker.ccscope.reconcile import reconcile
+        blocks, churn, subagents = reconcile(session_id)
+    except FileNotFoundError:
         return json.dumps({"error": "Transcript not found for session"})
 
-    from context_tracker.transcript_parser import parse_raw_transcript
-    from context_tracker.analysis.reconstruction import reconstruct_session
-    from context_tracker.analysis.config import StalenessConfig
-
-    messages, _ = parse_raw_transcript(transcript_path)
-    hook_events = _cached_read_events(session_id)
-    config = StalenessConfig()
-    turns, snapshots, content_store, epochs, _, block_registry = reconstruct_session(messages, hook_events, config)
-
-    if not snapshots:
-        return json.dumps({"error": "No turns found"})
+    # Stale blocks: not referenced (ref: false) and not pinned (cached)
+    stale = [b for b in blocks if not b.get("ref", True) and not b.get("cached")]
+    stale_tokens = sum(b["tokens"] for b in stale)
+    total_tokens = sum(b["tokens"] for b in blocks)
 
     return json.dumps({
         "session_id": session_id,
-        "turn_count": len(snapshots),
-        "total_blocks": len(snapshots[-1].block_ids) if snapshots else 0,
-        "status": "staleness_analysis_available",
-        "note": "Full per-block scoring will be wired as analysis matures",
+        "total_blocks": len(blocks),
+        "stale_blocks": len(stale),
+        "stale_tokens": stale_tokens,
+        "total_tokens": total_tokens,
+        "dead_weight_ratio": round(stale_tokens / max(total_tokens, 1), 3),
+        "top_stale": [
+            {"id": b["id"], "label": b["label"], "tokens": b["tokens"]}
+            for b in sorted(stale, key=lambda x: -x["tokens"])[:top_n]
+        ],
     }, indent=2)
 
 
@@ -361,29 +361,52 @@ def mcp_get_session_health(session_id: str = "") -> str:
             return json.dumps({"error": "No sessions found"})
         session_id = sessions[0]
 
-    transcript_path = _find_transcript(session_id)
-    if not transcript_path:
+    try:
+        from context_tracker.ccscope.reconcile import reconcile
+        blocks, churn, subagents = reconcile(session_id)
+    except FileNotFoundError:
         return json.dumps({"error": "Transcript not found for session"})
 
-    from context_tracker.transcript_parser import parse_raw_transcript
-    from context_tracker.analysis.reconstruction import reconstruct_session
+    total_tokens = sum(b["tokens"] for b in blocks)
+    stale = [b for b in blocks if not b.get("ref", True) and not b.get("cached")]
+    stale_tokens = sum(b["tokens"] for b in stale)
+    dead_weight_ratio = round(stale_tokens / max(total_tokens, 1), 3)
 
-    messages, _ = parse_raw_transcript(transcript_path)
-    hook_events = _cached_read_events(session_id)
-    turns, snapshots, content_store, epochs, _, block_registry = reconstruct_session(messages, hook_events)
+    total_cache_read = sum(c["cache_read"] for c in churn)
+    total_input = sum(c["input"] for c in churn)
+    total_cache_total = sum(
+        c["cache_read"] + c["cache_creation"] + c["input"] for c in churn
+    )
+    cache_hit_rate = round(total_cache_read / max(total_cache_total, 1), 3)
 
-    if not snapshots:
-        return json.dumps({"error": "No turns found"})
+    api_calls = len(churn)
+    peak_resident = max(
+        (c["cache_read"] + c["cache_creation"] + c["input"] for c in churn),
+        default=0,
+    )
 
-    last = snapshots[-1]
+    # Simple urgency: score 0-100 based on dead weight and cache hit rate
+    urgency = min(100, int(dead_weight_ratio * 50 + (1 - cache_hit_rate) * 50))
+    if urgency >= 70:
+        recommendation = "urgent_clear"
+    elif urgency >= 40:
+        recommendation = "clear"
+    else:
+        recommendation = "continue"
+
     return json.dumps({
         "session_id": session_id,
-        "turn_count": len(snapshots),
-        "total_blocks": len(last.block_ids),
-        "total_tokens_est": last.total_tokens_est,
-        "epoch_count": len(epochs),
-        "status": "health_analysis_available",
-        "note": "Full health signals will be computed as analysis matures",
+        "api_calls": api_calls,
+        "total_blocks": len(blocks),
+        "total_tokens": total_tokens,
+        "stale_blocks": len(stale),
+        "stale_tokens": stale_tokens,
+        "dead_weight_ratio": dead_weight_ratio,
+        "cache_hit_rate": cache_hit_rate,
+        "peak_resident_tokens": peak_resident,
+        "subagent_count": len(subagents),
+        "urgency_score": urgency,
+        "recommendation": recommendation,
     }, indent=2)
 
 
@@ -409,27 +432,80 @@ def mcp_get_block_lifespans(session_id: str = "", top_n: int = 20) -> str:
             return json.dumps({"error": "No sessions found"})
         session_id = sessions[0]
 
-    transcript_path = _find_transcript(session_id)
-    if not transcript_path:
+    try:
+        from context_tracker.ccscope.reconcile import reconcile
+        blocks, churn, subagents = reconcile(session_id)
+    except FileNotFoundError:
         return json.dumps({"error": "Transcript not found for session"})
 
-    from context_tracker.transcript_parser import parse_raw_transcript
-    from context_tracker.analysis.reconstruction import reconstruct_session
-
-    messages, _ = parse_raw_transcript(transcript_path)
-    hook_events = _cached_read_events(session_id)
-    turns, snapshots, content_store, epochs, _, block_registry = reconstruct_session(messages, hook_events)
-
-    if not snapshots:
-        return json.dumps({"error": "No turns found"})
+    # Build lifespan records sorted by entry turn, then by tokens descending
+    lifespans = [
+        {
+            "id": b["id"],
+            "type": b.get("type", ""),
+            "label": b["label"],
+            "tokens": b["tokens"],
+            "enter": b.get("enter"),
+            "exit": b.get("exit"),
+            "cached": b.get("cached", False),
+            "ref": b.get("ref", True),
+            "stale": not b.get("ref", True) and not b.get("cached", False),
+        }
+        for b in blocks
+        if b.get("enter") is not None
+    ]
+    lifespans.sort(key=lambda x: (x["enter"], -x["tokens"]))
 
     return json.dumps({
         "session_id": session_id,
-        "turn_count": len(snapshots),
-        "total_blocks": len(snapshots[-1].block_ids) if snapshots else 0,
-        "block_count_in_store": len(content_store),
-        "status": "lifespans_available",
-        "note": "Full block lifespan data will be wired as analysis matures",
+        "api_calls": len(churn),
+        "total_blocks": len(blocks),
+        "lifespans": lifespans[:top_n],
+    }, indent=2)
+
+
+@mcp.tool(description="Get cache-read churn analysis: total cache reads, new input, churn ratio, API call count. The real cost metric for Claude Code sessions.")
+def mcp_get_cache_churn(session_id: str = "") -> str:
+    if not session_id:
+        sessions = list_sessions()
+        if not sessions:
+            return json.dumps({"error": "No sessions found"})
+        session_id = sessions[0]
+
+    try:
+        from context_tracker.ccscope.reconcile import reconcile
+        blocks, churn, subagents = reconcile(session_id)
+    except FileNotFoundError:
+        return json.dumps({"error": "Transcript not found for session"})
+
+    total_cache_read = sum(c["cache_read"] for c in churn)
+    total_input = sum(c["input"] for c in churn)
+    total_output = sum(c["output"] for c in churn)
+    total_cache_creation = sum(c["cache_creation"] for c in churn)
+    ratio = total_cache_read // max(total_input, 1)
+
+    # Subagent churn
+    sub_cache_read = sum(s["total_cache_read"] for s in subagents)
+
+    # Peak resident from churn: max total per call
+    peak_resident = max(
+        (c["cache_read"] + c["cache_creation"] + c["input"] for c in churn),
+        default=0,
+    )
+
+    return json.dumps({
+        "session_id": session_id,
+        "api_calls": len(churn),
+        "total_cache_read": total_cache_read,
+        "total_new_input": total_input,
+        "total_output": total_output,
+        "total_cache_creation": total_cache_creation,
+        "cache_read_to_input_ratio": ratio,
+        "peak_resident_tokens": peak_resident,
+        "subagent_count": len(subagents),
+        "subagent_cache_read": sub_cache_read,
+        "combined_cache_read": total_cache_read + sub_cache_read,
+        "headline": f"{ratio:,}x cache-read:input ratio across {len(churn)} API calls. Peak resident {peak_resident:,} tokens.",
     }, indent=2)
 
 
