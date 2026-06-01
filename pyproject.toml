@@ -29,6 +29,7 @@ packages = ["src/context_tracker"]
 [project.scripts]
 context-tracker = "context_tracker.server:main"
 context-tracker-hook = "context_tracker.hooks:main"
+ccscope = "context_tracker.ccscope.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
