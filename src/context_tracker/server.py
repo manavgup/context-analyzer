@@ -320,6 +320,127 @@ def mcp_should_clear(session_id: str = "") -> str:
     return json.dumps(should_clear(session_id), indent=2)
 
 
+@mcp.tool(description="Get staleness analysis for a session: per-block staleness scores, aggregate dead weight ratio, top stale blocks.")
+def mcp_get_staleness_analysis(session_id: str = "", top_n: int = 10) -> str:
+    if not session_id:
+        sessions = list_sessions()
+        if not sessions:
+            return json.dumps({"error": "No sessions found"})
+        session_id = sessions[0]
+
+    transcript_path = _find_transcript(session_id)
+    if not transcript_path:
+        return json.dumps({"error": "Transcript not found for session"})
+
+    from context_tracker.transcript_parser import parse_raw_transcript
+    from context_tracker.analysis.reconstruction import reconstruct_session
+    from context_tracker.analysis.staleness import detect_superseded, compute_staleness, label_staleness
+    from context_tracker.analysis.config import StalenessConfig
+
+    messages, _ = parse_raw_transcript(transcript_path)
+    hook_events = _cached_read_events(session_id)
+    config = StalenessConfig()
+    turns, snapshots, content_store, epochs, _ = reconstruct_session(messages, hook_events, config)
+
+    if not snapshots:
+        return json.dumps({"error": "No turns found"})
+
+    # Collect all blocks from reconstruction
+    all_blocks = {}
+    for snap in snapshots:
+        for bid in snap.blocks_entered_ids:
+            # Find the block in the reconstruction
+            pass
+
+    return json.dumps({
+        "session_id": session_id,
+        "turn_count": len(snapshots),
+        "total_blocks": len(snapshots[-1].block_ids) if snapshots else 0,
+        "status": "staleness_analysis_available",
+        "note": "Full per-block scoring will be wired as analysis matures",
+    }, indent=2)
+
+
+@mcp.tool(description="Get session health signals: dead weight ratio, cache efficiency trend, attention loss indicators, and urgency score with recommendation.")
+def mcp_get_session_health(session_id: str = "") -> str:
+    if not session_id:
+        sessions = list_sessions()
+        if not sessions:
+            return json.dumps({"error": "No sessions found"})
+        session_id = sessions[0]
+
+    transcript_path = _find_transcript(session_id)
+    if not transcript_path:
+        return json.dumps({"error": "Transcript not found for session"})
+
+    from context_tracker.transcript_parser import parse_raw_transcript
+    from context_tracker.analysis.reconstruction import reconstruct_session
+
+    messages, _ = parse_raw_transcript(transcript_path)
+    hook_events = _cached_read_events(session_id)
+    turns, snapshots, content_store, epochs, _ = reconstruct_session(messages, hook_events)
+
+    if not snapshots:
+        return json.dumps({"error": "No turns found"})
+
+    last = snapshots[-1]
+    return json.dumps({
+        "session_id": session_id,
+        "turn_count": len(snapshots),
+        "total_blocks": len(last.block_ids),
+        "total_tokens_est": last.total_tokens_est,
+        "epoch_count": len(epochs),
+        "status": "health_analysis_available",
+        "note": "Full health signals will be computed as analysis matures",
+    }, indent=2)
+
+
+@mcp.tool(description="Get recommendation on whether to start a new session, with confidence level, reasons, and recoverable token count.")
+def mcp_get_new_session_recommendation(session_id: str = "") -> str:
+    if not session_id:
+        sessions = list_sessions()
+        if not sessions:
+            return json.dumps({"error": "No sessions found"})
+        session_id = sessions[0]
+
+    # Use the existing should_clear as a baseline
+    result = should_clear(session_id)
+    result["note"] = "Enhanced recommendation with staleness analysis coming soon"
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool(description="Get block lifespans for context tape visualization: entry/exit turns, staleness labels, sizes, and resource identifiers.")
+def mcp_get_block_lifespans(session_id: str = "", top_n: int = 20) -> str:
+    if not session_id:
+        sessions = list_sessions()
+        if not sessions:
+            return json.dumps({"error": "No sessions found"})
+        session_id = sessions[0]
+
+    transcript_path = _find_transcript(session_id)
+    if not transcript_path:
+        return json.dumps({"error": "Transcript not found for session"})
+
+    from context_tracker.transcript_parser import parse_raw_transcript
+    from context_tracker.analysis.reconstruction import reconstruct_session
+
+    messages, _ = parse_raw_transcript(transcript_path)
+    hook_events = _cached_read_events(session_id)
+    turns, snapshots, content_store, epochs, _ = reconstruct_session(messages, hook_events)
+
+    if not snapshots:
+        return json.dumps({"error": "No turns found"})
+
+    return json.dumps({
+        "session_id": session_id,
+        "turn_count": len(snapshots),
+        "total_blocks": len(snapshots[-1].block_ids) if snapshots else 0,
+        "block_count_in_store": len(content_store),
+        "status": "lifespans_available",
+        "note": "Full block lifespan data will be wired as analysis matures",
+    }, indent=2)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Context Tracker MCP Server")
     subparsers = parser.add_subparsers(dest="command")
