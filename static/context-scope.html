@@ -630,12 +630,10 @@ document.getElementById("resetBtn").onclick=()=>{trace=JSON.parse(JSON.stringify
   budget=1000000;document.querySelectorAll(".budget button").forEach(x=>x.classList.toggle("act",+x.dataset.b===1000000));endTour();};
 modal.addEventListener("click",e=>{if(e.target===modal)modal.classList.remove("show");});
 
-/* boot */
-renderTour();renderAll();setTurn(0);
-
-// Auto-load blocks.json + churn.json if available
+/* boot — try real data first, fall back to SAMPLE */
 (async function(){
   const params = new URLSearchParams(location.search);
+  let loaded = false;
   try {
     const traceUrl = params.get('trace') || './blocks.json';
     const resp = await fetch(traceUrl);
@@ -643,16 +641,14 @@ renderTour();renderAll();setTurn(0);
       const data = await resp.json();
       if (Array.isArray(data) && data.length > 0) {
         trace = data;
+        loaded = true;
         sel = null; turn = 0;
         recompute();
-        // Set budget to 1M for opus sessions
         budget = 1000000;
         document.querySelectorAll(".budget button").forEach(x => x.classList.toggle("act", +x.dataset.b === 1000000));
-        endTour();
-        renderAll(); setTurn(0);
       }
     }
-  } catch(e) { console.warn('blocks.json not loaded:', e); }
+  } catch(e) { /* no blocks.json, use SAMPLE */ }
   try {
     const churnUrl = params.get('churn') || './churn.json';
     const resp = await fetch(churnUrl);
@@ -660,10 +656,16 @@ renderTour();renderAll();setTurn(0);
       const data = await resp.json();
       if (Array.isArray(data) && data.length > 0) {
         CHURN = data;
-        drawChurn();
       }
     }
-  } catch(e) { console.warn('churn.json not loaded:', e); }
+  } catch(e) { /* no churn.json */ }
+  if (loaded) {
+    // Real data: skip tour, render directly
+    renderAll(); setTurn(0); drawChurn();
+  } else {
+    // Sample data: show tour
+    renderTour(); renderAll(); setTurn(0);
+  }
 })();
 </script>
 </body>
