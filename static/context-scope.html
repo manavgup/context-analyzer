@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CONTEXT SCOPE — context window forensics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0c0f14; --panel:#141a22; --panel2:#10151c;
+    --line:rgba(255,255,255,.075); --line2:rgba(255,255,255,.13);
+    --tx:#e7ebf2; --mut:#8b95a6; --mut2:#5e6979;
+    --c-system:#d9a441; --c-tooldef:#b07d34; --c-skill:#d96fb0;
+    --c-user:#4fb6d9; --c-assistant:#56cf8e; --c-thinking:#7f86bd;
+    --c-tool_call:#9b7fe0; --c-tool_result:#e0734d; --c-retrieved:#3fc2b1;
+    --c-summary:#c9c46a;
+    --danger:#e0734d; --good:#56cf8e; --warn:#d9a441;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+    --sans:'IBM Plex Sans',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--tx);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.45}
+  body{background:
+    radial-gradient(1200px 600px at 85% -10%, rgba(224,115,77,.06), transparent 60%),
+    radial-gradient(900px 500px at 10% 110%, rgba(79,182,217,.05), transparent 60%),
+    var(--bg); min-height:100vh}
+  .wrap{max-width:1180px;margin:0 auto;padding:26px 22px 90px}
+  ::-webkit-scrollbar{height:9px;width:9px}
+  ::-webkit-scrollbar-thumb{background:var(--line2);border-radius:6px}
+
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;
+    border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:18px}
+  .brand h1{font-size:20px;letter-spacing:.32em;font-weight:600;margin:0;display:flex;align-items:center;gap:11px}
+  .brand h1 .dot{width:9px;height:9px;border-radius:50%;background:var(--c-tool_result);
+    box-shadow:0 0 12px var(--c-tool_result);animation:pulse 2.4s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .brand p{margin:7px 0 0;color:var(--mut);font-size:12.5px;max-width:560px}
+  .readout{font-family:var(--mono);text-align:right;min-width:188px}
+  .readout .big{font-size:26px;font-weight:600;line-height:1.1}
+  .readout .status{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;margin-top:3px}
+  .readout .stsub{font-size:10.5px;color:var(--mut);margin-top:2px;letter-spacing:0;text-transform:none;font-weight:400;max-width:200px;margin-left:auto}
+
+  .panel{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);
+    border-radius:12px;padding:18px 18px 16px;margin-bottom:18px;position:relative;overflow:hidden}
+  .panel::after{content:"";position:absolute;inset:0;pointer-events:none;
+    background-image:repeating-linear-gradient(0deg,rgba(255,255,255,.013) 0 1px,transparent 1px 3px);
+    opacity:.5;mix-blend-mode:overlay}
+  .ph{display:flex;align-items:center;justify-content:space-between;gap:12px;position:relative;z-index:1}
+  .ph h2{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--mut);font-weight:600;margin:0}
+  .ph .hint{font-size:11px;color:var(--mut2);font-family:var(--mono)}
+  .cap{position:relative;z-index:1;font-size:12px;color:var(--mut);margin:6px 0 14px;max-width:760px}
+  .cap b{color:var(--tx);font-weight:600}
+
+  /* TOUR */
+  .tour{padding:0;overflow:visible}
+  .tour .cta{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 18px}
+  .tour .cta .t{font-size:13px}
+  .tour .cta .t b{color:var(--c-user)}
+  .tour .step{padding:18px;border-left:3px solid var(--c-user);background:linear-gradient(90deg,rgba(79,182,217,.08),transparent 70%)}
+  .tour .step .stepnum{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;color:var(--c-user);text-transform:uppercase}
+  .tour .step h3{margin:6px 0 7px;font-size:17px;font-weight:600;letter-spacing:.01em}
+  .tour .step p{margin:0;font-size:13.5px;line-height:1.6;color:var(--tx);max-width:820px}
+  .tour .step p em{color:var(--c-tool_result);font-style:normal;font-weight:600}
+  .tour .nav{display:flex;align-items:center;gap:10px;margin-top:16px}
+  .tour .dots{display:flex;gap:6px;margin-left:auto}
+  .tour .dots i{width:7px;height:7px;border-radius:50%;background:var(--line2);transition:.2s}
+  .tour .dots i.on{background:var(--c-user);transform:scale(1.3)}
+
+  #macro{width:100%;display:block;position:relative;z-index:1}
+  .tip{position:fixed;pointer-events:none;z-index:80;background:#0a0d12;border:1px solid var(--line2);
+    border-radius:8px;padding:9px 11px;font-family:var(--mono);font-size:11px;opacity:0;transition:opacity .1s;
+    box-shadow:0 10px 30px rgba(0,0,0,.5);max-width:240px}
+  .tip .row{display:flex;justify-content:space-between;gap:14px;white-space:nowrap}
+  .tip .sw{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px;vertical-align:middle}
+  .tip h4{margin:0 0 6px;font-size:11px;letter-spacing:.1em;color:var(--tx)}
+  .tip hr{border:none;border-top:1px solid var(--line);margin:6px 0}
+
+  .controls{display:flex;align-items:center;gap:14px;flex-wrap:wrap;position:relative;z-index:1}
+  .scrub{flex:1;min-width:240px;display:flex;align-items:center;gap:12px}
+  input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:3px;flex:1;
+    background:linear-gradient(90deg,var(--c-user),var(--c-assistant));outline:none;cursor:pointer}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+    background:#fff;border:3px solid var(--bg);box-shadow:0 0 0 1px var(--line2),0 2px 8px rgba(0,0,0,.5);cursor:grab}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid var(--bg);cursor:grab}
+  .turnlabel{font-family:var(--mono);font-size:12px;color:var(--mut);min-width:118px}
+  .turnlabel b{color:var(--tx)}
+  button{font-family:var(--sans);cursor:pointer;border-radius:8px;border:1px solid var(--line2);
+    background:#1a212b;color:var(--tx);padding:7px 11px;font-size:12px;transition:.13s}
+  button:hover{border-color:var(--mut2);background:#222a35}
+  button.ic{width:34px;padding:7px 0;text-align:center;font-family:var(--mono)}
+  button.primary{background:var(--c-user);border-color:var(--c-user);color:#06141b;font-weight:600}
+  button.on{background:var(--c-tool_result);border-color:var(--c-tool_result);color:#160a05;font-weight:600}
+  .budget{display:flex;gap:6px;align-items:center}
+  .budget span{font-size:11px;color:var(--mut2);font-family:var(--mono);margin-right:2px}
+  .budget button{padding:6px 9px;font-family:var(--mono);font-size:11px}
+  .budget button.act{border-color:var(--c-user);color:var(--c-user)}
+
+  .tabs{display:flex;gap:6px}
+  .tabs button{padding:5px 12px;font-size:11px;letter-spacing:.05em}
+  .tabs button.act{border-color:var(--c-user);color:var(--c-user);background:#16222b}
+
+  .tape-frame{position:relative;z-index:1}
+  .axis{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--mut2);margin:2px 2px 7px;letter-spacing:.04em}
+  .axis .r{color:var(--c-assistant)}
+  .tapewrap{position:relative}
+  .tape{display:flex;height:66px;border-radius:7px;overflow:hidden;border:1px solid var(--line2);background:#0a0d12}
+  .tapewrap::after{content:"";position:absolute;right:0;top:0;bottom:0;width:3px;border-radius:0 7px 7px 0;
+    background:var(--c-assistant);box-shadow:0 0 14px var(--c-assistant);z-index:6;pointer-events:none}
+  .seg{position:relative;min-width:2px;cursor:pointer;overflow:hidden;
+    transition:filter .12s, flex-basis .5s cubic-bezier(.4,0,.2,1)}
+  .seg::before{content:"";position:absolute;inset:0;background:currentColor;opacity:.85}
+  .seg.cached::after{content:"";position:absolute;inset:0;
+    background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.32) 0 4px,transparent 4px 8px)}
+  .seg:hover{filter:brightness(1.25) saturate(1.2);z-index:3}
+  .seg.dim{filter:brightness(.28) saturate(.35)}
+  .seg.hi{outline:2px solid #fff;outline-offset:-2px;z-index:5;filter:brightness(1.15)}
+  .seg.villain{outline:2px solid var(--danger);outline-offset:-2px;z-index:5}
+  .seg .lab{position:absolute;left:5px;top:6px;font-family:var(--mono);font-size:9.5px;color:#0a0d12;
+    font-weight:600;z-index:2;white-space:nowrap;text-shadow:0 1px 1px rgba(255,255,255,.25);pointer-events:none}
+  .seg .lab2{position:absolute;left:5px;bottom:6px;font-family:var(--mono);font-size:8.5px;color:#0a0d12;
+    z-index:2;white-space:nowrap;pointer-events:none;opacity:.8}
+  .seg.ghost{background:transparent;cursor:default;border-left:1px dashed var(--line2)}
+  .seg.ghost::before{opacity:0}
+  .seg.ghost .lab{color:var(--mut2);text-shadow:none}
+  .edgeread{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:8px;justify-content:space-between}
+  .edgeread .b{color:var(--tx)}
+  .edgeread .buried{color:var(--danger)}
+
+  .lanes{position:relative;z-index:1}
+  .lane{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+  .lane .name{font-family:var(--mono);font-size:10.5px;width:92px;text-align:right;color:var(--mut);flex-shrink:0}
+  .lane .track{flex:1;height:17px;position:relative;background:#0a0d12;border-radius:4px;border:1px solid var(--line)}
+  .lane .blk{position:absolute;top:2px;bottom:2px;border-radius:3px;background:currentColor;opacity:.78;cursor:pointer}
+  .lane .blk:hover{opacity:1;filter:brightness(1.2)}
+  .lane .blk.stale{outline:1.5px dashed var(--danger);opacity:.92}
+  .lane .now{position:absolute;top:-2px;bottom:-2px;width:2px;background:#fff;opacity:.75;z-index:5}
+  .lanes-x{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--mut2);margin:6px 0 0 102px}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .comp .barrow{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-family:var(--mono);font-size:11px}
+  .comp .barrow .nm{width:90px;color:var(--mut);flex-shrink:0}
+  .comp .barrow .bar{flex:1;height:12px;background:#0a0d12;border-radius:3px;overflow:hidden;border:1px solid var(--line)}
+  .comp .barrow .bar i{display:block;height:100%;background:currentColor;border-radius:3px;transition:width .45s}
+  .comp .barrow .vl{width:78px;text-align:right;color:var(--tx)}
+  .cache-row{display:flex;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+  .cache-card{flex:1;background:#0a0d12;border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+  .cache-card .k{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut2)}
+  .cache-card .v{font-family:var(--mono);font-size:20px;font-weight:600;margin-top:3px}
+  .cache-card .v small{font-size:11px;color:var(--mut);font-weight:400}
+
+  .insp{position:relative;z-index:1;min-height:200px}
+  .insp .empty{color:var(--mut2);font-size:12.5px;display:flex;align-items:center;justify-content:center;
+    height:180px;text-align:center;border:1px dashed var(--line);border-radius:8px;font-family:var(--mono)}
+  .insp .head{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+  .insp .head .tag{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    padding:3px 8px;border-radius:5px;color:#0a0d12;font-weight:600}
+  .insp .head .ttl{font-weight:600;font-size:14px}
+  .insp .meta{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;margin-bottom:12px;font-family:var(--mono);font-size:11.5px}
+  .insp .meta .m .l{color:var(--mut2);font-size:10px}
+  .insp .meta .m .d{color:var(--tx)}
+  .insp .body{background:#0a0d12;border:1px solid var(--line);border-radius:8px;padding:11px 13px;
+    font-family:var(--mono);font-size:11.5px;color:var(--mut);line-height:1.55;white-space:pre-wrap;max-height:150px;overflow:auto}
+  .pill{display:inline-block;font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:20px;border:1px solid var(--line2)}
+  .pill.bad{color:var(--danger);border-color:var(--danger)}
+  .pill.ok{color:var(--good);border-color:var(--good)}
+
+  #diag{border-color:rgba(224,115,77,.4);background:linear-gradient(180deg,rgba(224,115,77,.07),var(--panel2))}
+  #diag .ph h2{color:var(--danger)}
+  #diag .dbody{position:relative;z-index:1;font-size:13px;line-height:1.6;color:var(--tx)}
+  #diag .dbody b{color:var(--danger)}
+  #diag .dbody .case{margin:10px 0;padding:10px 13px;border-left:2px solid var(--danger);
+    background:rgba(224,115,77,.05);border-radius:0 6px 6px 0;font-size:12.5px;color:var(--mut)}
+  #diag.hidden{display:none}
+
+  /* grouped legend */
+  .legend{display:flex;flex-wrap:wrap;gap:10px 22px;margin-top:4px;position:relative;z-index:1}
+  .lgroup{display:flex;flex-direction:column;gap:5px}
+  .lgroup .gt{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut2)}
+  .lgroup .items{display:flex;flex-wrap:wrap;gap:4px 12px}
+  .li{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;color:var(--mut)}
+  .li .sw{width:11px;height:11px;border-radius:3px}
+  .li .sw.h{background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.4) 0 3px,transparent 3px 6px)}
+
+  .modal{position:fixed;inset:0;background:rgba(4,6,9,.78);display:none;align-items:center;justify-content:center;z-index:100;padding:24px}
+  .modal.show{display:flex}
+  .modal .box{background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:22px;max-width:560px;width:100%}
+  .modal h3{margin:0 0 8px;letter-spacing:.1em;font-size:13px;text-transform:uppercase;color:var(--mut)}
+  .modal p{color:var(--mut);font-size:12px;margin:0 0 12px}
+  .modal textarea{width:100%;height:200px;background:#0a0d12;border:1px solid var(--line2);border-radius:8px;
+    color:var(--tx);font-family:var(--mono);font-size:11px;padding:11px;resize:vertical}
+  .modal .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+  .modal .err{color:var(--danger);font-family:var(--mono);font-size:11px;margin-top:8px;min-height:14px}
+  .right-tools{display:flex;gap:8px;align-items:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <h1><span class="dot"></span>CONTEXT&nbsp;SCOPE</h1>
+      <p>See an LLM context window the way the model does — one token sequence that grows every turn. Find buried instructions, spot the wrong turn, and know when to compact.</p>
+    </div>
+    <div class="readout" id="readout">
+      <div class="big">—</div>
+      <div class="status">—</div>
+      <div class="stsub"></div>
+    </div>
+  </header>
+
+  <!-- TOUR -->
+  <div class="panel tour" id="tour"></div>
+
+  <!-- MACRO -->
+  <div class="panel">
+    <div class="ph"><h2>1 · Context growth over turns</h2><span class="hint">stacked by type</span></div>
+    <p class="cap"><b>Read it as:</b> each turn adds a layer. When the white total line climbs toward the dashed <b>budget</b>, that's your “time to compact” signal. The ▼ marks where output quality broke.</p>
+    <svg id="macro" viewBox="0 0 1120 280" preserveAspectRatio="none"></svg>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="panel">
+    <div class="controls">
+      <button class="ic" id="play">▶</button>
+      <button class="ic" id="prev">◀</button>
+      <button class="ic" id="next">▶</button>
+      <div class="scrub">
+        <input type="range" id="scrub" min="0" max="11" value="0" step="1">
+        <span class="turnlabel">turn <b id="tl">0</b> / 11</span>
+      </div>
+      <div class="budget">
+        <span>budget</span>
+        <button data-b="16000">16k</button>
+        <button data-b="32000" class="act">32k</button>
+        <button data-b="64000">64k</button>
+        <button data-b="200000">200k</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAPE / LANES -->
+  <div class="panel">
+    <div class="ph">
+      <h2 id="tapeTitle">2 · Context tape — what the model actually reads</h2>
+      <div class="tabs"><button id="tabTape" class="act">Tape</button><button id="tabLanes">Swimlanes</button></div>
+    </div>
+    <p class="cap" id="tapeCap"><b>Read it as:</b> the full token sequence, oldest on the left, the <b>generation edge</b> (where the model writes its next token) on the right. Block width = token count. An important instruction sitting far to the left is at risk of being ignored. Click any block to inspect it.</p>
+
+    <div id="tapeView" class="tape-frame">
+      <div class="axis"><span>◄ OLDEST · entered first</span><span class="r">NEWEST · generation edge ►</span></div>
+      <div class="tapewrap"><div class="tape" id="tape"></div></div>
+      <div class="edgeread">
+        <span><span class="b" id="genTok">—</span> tokens reach the model this turn</span>
+        <span id="buriedRead"></span>
+      </div>
+    </div>
+
+    <div id="lanesView" class="lanes" style="display:none">
+      <div id="lanes"></div>
+      <div class="lanes-x" id="lanesX"></div>
+    </div>
+  </div>
+
+  <!-- DIAGNOSTIC -->
+  <div class="panel hidden" id="diag">
+    <div class="ph"><h2>⚠ Where it went wrong</h2><span class="hint">turn 7</span></div>
+    <div class="dbody" id="diagBody"></div>
+  </div>
+
+  <!-- LOWER -->
+  <div class="grid2">
+    <div class="panel comp">
+      <div class="ph"><h2>3 · Composition this turn</h2><span class="hint">tokens by type</span></div>
+      <p class="cap"><b>Read it as:</b> where your token budget is actually going right now. Big tool-result or retrieved bars mean noise is crowding out signal.</p>
+      <div id="comp"></div>
+      <div class="cache-row" id="cacheRow"></div>
+    </div>
+
+    <div class="panel">
+      <div class="ph">
+        <h2>4 · Block inspector</h2>
+        <div class="right-tools">
+          <button id="loadBtn" style="font-size:11px">Load trace</button>
+          <button id="resetBtn" style="font-size:11px">Reset</button>
+        </div>
+      </div>
+      <p class="cap"><b>Read it as:</b> details for the block you clicked — including how far it sits from the generation edge.</p>
+      <div class="insp" id="insp"><div class="empty">click any segment in the tape or a lane block to inspect it</div></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="tip" id="tip"></div>
+
+<div class="modal" id="modal">
+  <div class="box">
+    <h3>Load your own trace</h3>
+    <p>Paste a JSON array of blocks: <code style="font-family:var(--mono);color:var(--c-user)">{ id, type, label, tokens, enter, exit?, cached?, ref?, content? }</code>. <b>type</b> ∈ system, tooldef, skill, user, assistant, thinking, tool_call, tool_result, retrieved, summary. <b>enter</b> = turn it entered; <b>exit</b> = turn it was evicted.</p>
+    <textarea id="ta" spellcheck="false"></textarea>
+    <div class="err" id="modalErr"></div>
+    <div class="acts"><button id="cancelBtn">Cancel</button><button id="applyBtn" class="primary">Apply trace</button></div>
+  </div>
+</div>
+
+<script>
+const TYPES=["system","tooldef","skill","summary","retrieved","tool_result","tool_call","thinking","user","assistant"];
+const LABELS={system:"system",tooldef:"tool defs",skill:"skill",summary:"summary",retrieved:"retrieved",
+  tool_result:"tool result",tool_call:"tool call",thinking:"thinking",user:"user",assistant:"assistant"};
+const GROUPS=[
+  {gt:"Fixed prefix · cached & cheap",t:["system","tooldef","skill"]},
+  {gt:"Conversation",t:["user","assistant","thinking"]},
+  {gt:"Tool input / output",t:["tool_call","tool_result","retrieved"]},
+  {gt:"Context management",t:["summary"]},
+];
+const COL={}; TYPES.forEach(t=>COL[t]=getComputedStyle(document.documentElement).getPropertyValue('--c-'+t).trim());
+
+/* ---------- sample trace: agentic RAG-debug session ---------- */
+const SAMPLE=[
+  {id:"sys",type:"system",label:"system prompt",tokens:2800,enter:0,cached:true,ref:true,
+   content:"You are a senior data engineer. Constraint up front: keep the design vendor-neutral — no provider-specific SDK calls in the core ingestion path."},
+  {id:"tdf",type:"tooldef",label:"tool defs",tokens:900,enter:0,cached:true,ref:true,content:"read_file, run_bash, search_repo, vector_query. Static, fully cacheable."},
+  {id:"skl",type:"skill",label:"data-eng skill",tokens:1600,enter:0,cached:true,ref:true,content:"Ingestion best practices: chunking, dedup, idempotent upserts, eval harness."},
+  {id:"u1",type:"user",label:"u1",tokens:130,enter:1,exit:9,ref:true,content:"RAG recall dropped after the last deploy. Find why. Keep it vendor-neutral like the brief says."},
+  {id:"a1",type:"assistant",label:"a1",tokens:420,enter:1,exit:9,ref:true,content:"Starting with the ingestion config and the recent change log. Keeping the core path provider-agnostic."},
+  {id:"u2",type:"user",label:"u2",tokens:90,enter:2,exit:9,ref:false,content:"Go ahead."},
+  {id:"tc2",type:"tool_call",label:"read config",tokens:55,enter:2,exit:9,ref:false,content:"read_file('ingest/config.py')"},
+  {id:"tr2",type:"tool_result",label:"config.py",tokens:1200,enter:2,exit:9,ref:true,content:"chunk_size=512, overlap=64, embedder via env, upsert batch=128. Nothing obviously wrong."},
+  {id:"a2",type:"assistant",label:"a2",tokens:510,enter:2,exit:9,ref:true,content:"Config is fine. Pulling the server log around the deploy."},
+  {id:"u3",type:"user",label:"u3",tokens:100,enter:3,exit:9,ref:false,content:"Grab the logs."},
+  {id:"tc3",type:"tool_call",label:"read log",tokens:60,enter:3,exit:9,ref:false,content:"run_bash('cat logs/ingest-2026-05.log')"},
+  {id:"tr3",type:"tool_result",label:"FULL LOG DUMP",tokens:14200,enter:3,exit:9,ref:false,
+   content:"14,200 tokens of raw log — the whole month, unfiltered. The one relevant line (a dimension-mismatch warning) is buried ~line 3,900. This dump dominates the window and pushes the original vendor-neutral constraint ~22k tokens back from the generation edge."},
+  {id:"a3",type:"assistant",label:"a3",tokens:640,enter:3,exit:9,ref:true,content:"Found a dimension-mismatch: new embedder outputs 1024-dim, index is 768-dim, writes silently fail."},
+  {id:"u4",type:"user",label:"u4",tokens:110,enter:4,exit:9,ref:false,content:"How do we fix it cleanly?"},
+  {id:"th4",type:"thinking",label:"thinking",tokens:380,enter:4,exit:9,ref:true,content:"Re-create index at 1024 and re-ingest, behind the embedder interface."},
+  {id:"a4",type:"assistant",label:"a4",tokens:470,enter:4,exit:9,ref:true,content:"Recreate the index at 1024 dims and backfill, keeping the embedder behind the existing interface."},
+  {id:"u5",type:"user",label:"u5",tokens:120,enter:5,exit:9,ref:false,content:"Show similar past incidents."},
+  {id:"tc5",type:"tool_call",label:"vector_query",tokens:58,enter:5,exit:9,ref:false,content:"vector_query('dimension mismatch index recall')"},
+  {id:"tr5",type:"retrieved",label:"6 chunks",tokens:2400,enter:5,exit:9,ref:true,content:"6 chunks. 2 relevant; 4 are near-duplicates of the same incident — redundant tokens."},
+  {id:"a5",type:"assistant",label:"a5",tokens:520,enter:5,exit:9,ref:true,content:"Same root cause hit you in March. The fix then was a guarded re-index migration."},
+  {id:"u6",type:"user",label:"u6",tokens:95,enter:6,ref:true,content:"Write the migration."},
+  {id:"a6",type:"assistant",label:"a6",tokens:430,enter:6,ref:true,content:"Drafting an idempotent re-index + backfill."},
+  {id:"u7",type:"user",label:"u7",tokens:140,enter:7,ref:true,content:"Make it production-grade."},
+  {id:"th7",type:"thinking",label:"thinking",tokens:300,enter:7,ref:true,content:"The vendor-neutral rule is far up-context now, behind a 14k log dump. Easy to lose here."},
+  {id:"a7",type:"assistant",label:"a7 ⚠",tokens:600,enter:7,ref:true,
+   content:"DRIFT: the script now imports a provider-specific client SDK directly in the core ingestion path — violating the vendor-neutral constraint from the system prompt and u1. That instruction was buried ~22k tokens back, after the giant log dump, and got overridden by the freshest, nearest context."},
+  {id:"u8",type:"user",label:"u8",tokens:110,enter:8,ref:true,content:"Run the tests."},
+  {id:"tc8",type:"tool_call",label:"run tests",tokens:60,enter:8,ref:false,content:"run_bash('pytest tests/ingest')"},
+  {id:"tr8",type:"tool_result",label:"test output",tokens:1800,enter:8,ref:true,content:"2 failures tied to the SDK import (no creds in CI)."},
+  {id:"a8",type:"assistant",label:"a8",tokens:480,enter:8,ref:true,content:"Tests fail in CI because of the hard SDK dependency."},
+  {id:"sum9",type:"summary",label:"compact 1–5",tokens:850,enter:9,ref:true,
+   content:"COMPACTION: turns 1–5 (incl. the 14k log dump and redundant retrievals) replaced by an 850-token summary: 'recall dropped due to 768↔1024 embedding dim mismatch; fix = guarded re-index + backfill; keep design vendor-neutral.' Context drops ~31k → ~11k and the constraint is restated near the edge."},
+  {id:"u9",type:"user",label:"u9",tokens:120,enter:9,ref:true,content:"Redo it vendor-neutral and rerun."},
+  {id:"a9",type:"assistant",label:"a9",tokens:500,enter:9,ref:true,content:"Refactored behind the embedder interface, no provider SDK in the core path. Re-running."},
+  {id:"u10",type:"user",label:"u10",tokens:100,enter:10,ref:true,content:"Tests passing now?"},
+  {id:"a10",type:"assistant",label:"a10",tokens:460,enter:10,ref:true,content:"All green — the abstraction removed the CI credential dependency."},
+  {id:"u11",type:"user",label:"u11",tokens:115,enter:11,ref:true,content:"Ship it. Summarize the fix."},
+  {id:"tc11",type:"tool_call",label:"open PR",tokens:55,enter:11,ref:false,content:"run_bash('gh pr create ...')"},
+  {id:"tr11",type:"tool_result",label:"PR url",tokens:1500,enter:11,ref:true,content:"PR opened with diff + description."},
+  {id:"a11",type:"assistant",label:"a11",tokens:540,enter:11,ref:true,content:"Root cause: embedding dim mismatch. Fix: guarded re-index + backfill behind a vendor-neutral interface. PR up."},
+];
+
+/* ---------- state ---------- */
+let trace=JSON.parse(JSON.stringify(SAMPLE));
+let maxTurn=0,turn=0,budget=32000,view="tape",sel=null,playing=null;
+let highlight=[],dimOthers=false,villain=null;
+const FLAG_TURN=7;
+
+function recompute(){maxTurn=Math.max(...trace.map(b=>b.enter));}
+function present(b,t){return b.enter<=t&&(b.exit==null||b.exit>t);}
+function blocksAt(t){return trace.filter(b=>present(b,t)).sort((a,b)=>(a.enter-b.enter)||(TYPES.indexOf(a.type)-TYPES.indexOf(b.type)));}
+function totalAt(t){return blocksAt(t).reduce((s,b)=>s+b.tokens,0);}
+function maxTotal(){let m=0;for(let t=0;t<=maxTurn;t++)m=Math.max(m,totalAt(t));return m;}
+function typeSumAt(t){const o={};TYPES.forEach(x=>o[x]=0);blocksAt(t).forEach(b=>o[b.type]+=b.tokens);return o;}
+function tokensRightOf(id,t){const o=blocksAt(t);const i=o.findIndex(b=>b.id===id);if(i<0)return null;return o.slice(i+1).reduce((s,b)=>s+b.tokens,0);}
+function driftRisk(t){const o=blocksAt(t);let mx=0;o.forEach(b=>{if(b.enter<=1&&(b.type==="system"||b.type==="user"||b.type==="skill")){const r=o.slice(o.indexOf(b)+1).reduce((s,x)=>s+x.tokens,0);mx=Math.max(mx,r);}});return mx;}
+const fmt=n=>n>=1000?(n/1000).toFixed(n>=10000?0:1)+"k":""+n;
+
+/* ---------- macro ---------- */
+const svg=document.getElementById("macro");
+const SVGW=1120,SVGH=280,P={l:54,r:18,t:20,b:26};
+function yMax(){return Math.max(maxTotal(),budget)*1.14;}
+function xT(t){return P.l+(maxTurn?t/maxTurn:0)*(SVGW-P.l-P.r);}
+function yV(v){return SVGH-P.b-(v/yMax())*(SVGH-P.t-P.b);}
+function drawMacro(){
+  let s="";const ym=yMax();
+  [0,.25,.5,.75,1].forEach(g=>{const v=ym*g,y=yV(v);
+    s+=`<line x1="${P.l}" y1="${y}" x2="${SVGW-P.r}" y2="${y}" stroke="rgba(255,255,255,.06)"/>`;
+    s+=`<text x="${P.l-8}" y="${y+3}" text-anchor="end" fill="#5e6979" font-size="9" font-family="monospace">${fmt(v)}</text>`;});
+  const yb=yV(budget);
+  s+=`<rect x="${P.l}" y="${P.t}" width="${SVGW-P.l-P.r}" height="${yb-P.t}" fill="rgba(224,115,77,.06)"/>`;
+  s+=`<line x1="${P.l}" y1="${yb}" x2="${SVGW-P.r}" y2="${yb}" stroke="var(--danger)" stroke-width="1.2" stroke-dasharray="6 4"/>`;
+  s+=`<text x="${SVGW-P.r}" y="${yb-6}" text-anchor="end" fill="var(--danger)" font-size="9.5" font-family="monospace">budget ${fmt(budget)} · compact above here</text>`;
+  const cum={};for(let t=0;t<=maxTurn;t++)cum[t]=0;
+  TYPES.forEach(tp=>{let top=[],bot=[];
+    for(let t=0;t<=maxTurn;t++){const ts=typeSumAt(t);bot.push([xT(t),yV(cum[t])]);cum[t]+=ts[tp];top.push([xT(t),yV(cum[t])]);}
+    let d="M"+top.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" L");
+    for(let i=bot.length-1;i>=0;i--)d+=" L"+bot[i][0].toFixed(1)+","+bot[i][1].toFixed(1);d+="Z";
+    s+=`<path d="${d}" fill="${COL[tp]}" fill-opacity="0.82" stroke="${COL[tp]}" stroke-opacity="0.5" stroke-width="0.5"/>`;});
+  let tl="M";for(let t=0;t<=maxTurn;t++)tl+=(t?"L":"")+xT(t).toFixed(1)+","+yV(totalAt(t)).toFixed(1)+" ";
+  s+=`<path d="${tl}" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="1.2"/>`;
+  if(FLAG_TURN<=maxTurn){const fx=xT(FLAG_TURN);
+    s+=`<line x1="${fx}" y1="${P.t}" x2="${fx}" y2="${SVGH-P.b}" stroke="var(--danger)" stroke-opacity=".45" stroke-dasharray="3 3"/>`;
+    s+=`<path d="M${fx-6},${P.t-12} L${fx+6},${P.t-12} L${fx},${P.t-2} Z" fill="var(--danger)"/>`;
+    s+=`<text x="${fx}" y="${P.t-15}" text-anchor="middle" fill="var(--danger)" font-size="8.5" font-family="monospace">drift</text>`;}
+  const cx=xT(turn);
+  s+=`<line x1="${cx}" y1="${P.t-4}" x2="${cx}" y2="${SVGH-P.b}" stroke="#fff" stroke-width="1.4"/>`;
+  s+=`<circle cx="${cx}" cy="${yV(totalAt(turn))}" r="4.5" fill="#fff"/>`;
+  for(let t=0;t<=maxTurn;t++)s+=`<text x="${xT(t)}" y="${SVGH-9}" text-anchor="middle" fill="#5e6979" font-size="9" font-family="monospace">${t}</text>`;
+  for(let t=0;t<=maxTurn;t++){const w=(SVGW-P.l-P.r)/(maxTurn||1);
+    s+=`<rect class="hit" data-t="${t}" x="${xT(t)-w/2}" y="${P.t-14}" width="${w}" height="${SVGH-P.t-P.b+14}" fill="transparent" style="cursor:pointer"/>`;}
+  svg.innerHTML=s;
+  svg.querySelectorAll(".hit").forEach(r=>{r.addEventListener("mousemove",e=>showMacroTip(e,+r.dataset.t));
+    r.addEventListener("mouseleave",hideTip);r.addEventListener("click",()=>setTurn(+r.dataset.t));});
+}
+
+/* ---------- tooltip ---------- */
+const tip=document.getElementById("tip");
+function showMacroTip(e,t){const ts=typeSumAt(t),tot=totalAt(t);
+  let h=`<h4>TURN ${t} · ${fmt(tot)} tok ${t===FLAG_TURN?'· <span style="color:var(--danger)">⚠ flagged</span>':''}</h4>`;
+  TYPES.forEach(tp=>{if(ts[tp]>0)h+=`<div class="row"><span><span class="sw" style="background:${COL[tp]}"></span>${LABELS[tp]}</span><span>${fmt(ts[tp])}</span></div>`;});
+  h+=`<hr><div class="row"><span>vs budget</span><span style="color:${tot>budget?'var(--danger)':'var(--good)'}">${Math.round(tot/budget*100)}%</span></div>`;
+  showTip(e,h);}
+function showTip(e,html){tip.innerHTML=html;tip.style.opacity="1";let x=e.clientX+16,y=e.clientY+16;
+  if(x+250>innerWidth)x=e.clientX-250;if(y+170>innerHeight)y=e.clientY-170;tip.style.left=x+"px";tip.style.top=y+"px";}
+function hideTip(){tip.style.opacity="0";}
+
+/* ---------- tape ---------- */
+const tapeEl=document.getElementById("tape");
+function drawTape(){
+  const blks=blocksAt(turn),tot=totalAt(turn),denom=Math.max(tot,budget);
+  let dom=null;blks.forEach(b=>{if(!dom||b.tokens>dom.tokens)dom=b;});
+  let html="";
+  blks.forEach(b=>{
+    const pct=b.tokens/denom*100;
+    const isHi=highlight.includes(b.id);
+    const isDim=dimOthers&&!isHi;
+    const isVil=villain===b.id;
+    const cls=["seg",b.cached?"cached":"",isHi?"hi":"",isVil?"villain":"",isDim?"dim":""].join(" ");
+    const showLab=pct>5.5;
+    const domTag=(dom&&dom.id===b.id&&b.tokens/tot>0.3)?`<span class="lab2">◄ largest block</span>`:"";
+    html+=`<div class="${cls}" style="flex:${b.tokens} ${b.tokens} 0;color:${COL[b.type]}" data-id="${b.id}">
+      ${showLab?`<span class="lab">${b.label} · ${fmt(b.tokens)}</span>`:""}${showLab?domTag:""}</div>`;
+  });
+  if(tot<budget)html+=`<div class="seg ghost" style="flex:${budget-tot} ${budget-tot} 0"><span class="lab">free budget · ${fmt(budget-tot)}</span></div>`;
+  tapeEl.innerHTML=html;
+  document.getElementById("genTok").textContent=fmt(tot);
+  tapeEl.querySelectorAll(".seg[data-id]").forEach(el=>{const b=trace.find(x=>x.id===el.dataset.id);
+    el.addEventListener("mousemove",e=>showTip(e,segTip(b)));el.addEventListener("mouseleave",hideTip);
+    el.addEventListener("click",()=>select(b));});
+  // buried readout
+  const br=document.getElementById("buriedRead");
+  if(sel&&present(sel,turn)){const r=tokensRightOf(sel.id,turn);
+    const cls=r>15000?"buried":"b";
+    br.innerHTML=`selected “${sel.label}” sits <span class="${cls}">${fmt(r)} tokens</span> from the edge`;
+  }else{const dr=driftRisk(turn);
+    br.innerHTML=dr>15000?`<span class="buried">⚠ a turn-0/1 instruction is buried ${fmt(dr)} tokens deep</span>`:`<span class="b">instructions still near the edge</span>`;}
+}
+function segTip(b){const span=(b.exit==null?maxTurn:b.exit-1)-b.enter+1;
+  return `<h4><span class="sw" style="background:${COL[b.type]}"></span>${b.label}</h4>
+    <div class="row"><span>type</span><span>${LABELS[b.type]}</span></div>
+    <div class="row"><span>tokens</span><span>${b.tokens.toLocaleString()}</span></div>
+    <div class="row"><span>entered</span><span>turn ${b.enter}</span></div>
+    <div class="row"><span>in context</span><span>${span} turn${span>1?'s':''}</span></div>
+    <div class="row"><span>cached</span><span>${b.cached?'yes (≈free)':'no'}</span></div>
+    <div class="row"><span>referenced</span><span style="color:${b.ref?'var(--good)':'var(--danger)'}">${b.ref?'yes':'stale'}</span></div>`;}
+
+/* ---------- lanes ---------- */
+function drawLanes(){const cont=document.getElementById("lanes");let html="";
+  TYPES.forEach(tp=>{const lb=trace.filter(b=>b.type===tp);if(!lb.length)return;
+    html+=`<div class="lane"><span class="name">${LABELS[tp]}</span><div class="track">`;
+    lb.forEach(b=>{const start=b.enter,end=(b.exit==null?maxTurn:b.exit-1);
+      const left=(start/(maxTurn||1))*100,w=Math.max(((end-start+1)/(maxTurn+1))*100,1.5);
+      const span=end-start+1,stale=span>=5&&!b.ref;
+      html+=`<div class="blk ${stale?'stale':''}" style="left:${left}%;width:${w}%;color:${COL[tp]}" data-id="${b.id}"></div>`;});
+    html+=`<div class="now" style="left:${(turn/(maxTurn||1))*100}%"></div></div></div>`;});
+  cont.innerHTML=html;
+  cont.querySelectorAll(".blk").forEach(el=>{const b=trace.find(x=>x.id===el.dataset.id);
+    el.addEventListener("mousemove",e=>showTip(e,segTip(b)));el.addEventListener("mouseleave",hideTip);
+    el.addEventListener("click",()=>select(b));});
+  let xs="";for(let t=0;t<=maxTurn;t++)xs+=`<span>${t}</span>`;document.getElementById("lanesX").innerHTML=xs;}
+
+/* ---------- comp + cache ---------- */
+function drawComp(){const ts=typeSumAt(turn),tot=totalAt(turn);let html="";
+  TYPES.forEach(tp=>{if(ts[tp]<=0)return;const pct=tot?ts[tp]/tot*100:0;
+    html+=`<div class="barrow" style="color:${COL[tp]}"><span class="nm">${LABELS[tp]}</span>
+      <span class="bar"><i style="width:${pct}%"></i></span><span class="vl">${fmt(ts[tp])} · ${pct.toFixed(0)}%</span></div>`;});
+  document.getElementById("comp").innerHTML=html;
+  const blks=blocksAt(turn);
+  const cached=blks.filter(b=>b.cached).reduce((s,b)=>s+b.tokens,0);
+  const dyn=tot-cached,stale=blks.filter(b=>!b.ref).reduce((s,b)=>s+b.tokens,0);
+  document.getElementById("cacheRow").innerHTML=`
+    <div class="cache-card"><div class="k">cached ≈ free</div><div class="v" style="color:var(--good)">${fmt(cached)} <small>${tot?Math.round(cached/tot*100):0}%</small></div></div>
+    <div class="cache-card"><div class="k">dynamic / paid</div><div class="v">${fmt(dyn)} <small>reprocessed</small></div></div>
+    <div class="cache-card"><div class="k">stale / unused</div><div class="v" style="color:${stale>5000?'var(--danger)':'var(--tx)'}">${fmt(stale)} <small>${tot?Math.round(stale/tot*100):0}%</small></div></div>`;}
+
+/* ---------- inspector ---------- */
+function select(b){sel=b;drawInsp();if(view==="tape")drawTape();}
+function drawInsp(){const el=document.getElementById("insp");
+  if(!sel){el.innerHTML=`<div class="empty">click any segment in the tape or a lane block to inspect it</div>`;return;}
+  const b=sel,span=(b.exit==null?maxTurn:b.exit-1)-b.enter+1;
+  const r=present(b,turn)?tokensRightOf(b.id,turn):null;
+  el.innerHTML=`
+    <div class="head"><span class="tag" style="background:${COL[b.type]}">${LABELS[b.type]}</span><span class="ttl">${b.label}</span></div>
+    <div class="meta">
+      <div class="m"><div class="l">TOKENS</div><div class="d">${b.tokens.toLocaleString()}</div></div>
+      <div class="m"><div class="l">ENTERED</div><div class="d">turn ${b.enter}${b.exit!=null?` · evicted ${b.exit}`:""}</div></div>
+      <div class="m"><div class="l">LIFESPAN</div><div class="d">${span} turn${span>1?'s':''}</div></div>
+      <div class="m"><div class="l">FROM EDGE</div><div class="d">${r==null?'—':fmt(r)+' tok behind'} ${r>15000?'<span class="pill bad">buried</span>':''}</div></div>
+      <div class="m"><div class="l">STATE</div><div class="d"><span class="pill ${b.cached?'ok':''}">${b.cached?'cached':'dynamic'}</span> <span class="pill ${b.ref?'ok':'bad'}">${b.ref?'referenced':'stale'}</span></div></div>
+    </div>
+    <div class="body">${b.content||"(no content captured)"}</div>`;}
+
+/* ---------- diagnostic ---------- */
+function drawDiag(){document.getElementById("diagBody").innerHTML=`
+  Output quality drops at <b>turn 7</b>: the assistant writes a provider-specific SDK call into the core path, violating the <b>vendor-neutral rule</b> from the system prompt and u1.
+  <div class="case"><b>What the tape shows.</b> The rule is at the far left (entered turn 0–1); the <b>14k-token log dump</b> from turn 3 fills the middle, pushing the rule ~22k tokens from the edge. The model anchors on the nearest context and loses the buried rule.</div>
+  <div class="case"><b>Contributing signals.</b> The log dump is <span class="pill bad">stale</span> in the swimlane — unreferenced for 4+ turns. The turn-5 retrieval added 4 near-duplicate chunks. Both crowd out signal.</div>
+  <div class="case"><b>The fix (turn 9).</b> Compaction replaces turns 1–5 with an 850-token summary that restates the rule near the edge. Context falls ~31k → ~11k and the model recovers. Catch this <i>before</i> turn 7.</div>`;}
+
+/* ---------- health readout ---------- */
+function drawReadout(){const tot=totalAt(turn),fill=tot/budget,blks=blocksAt(turn);
+  const stale=blks.filter(b=>!b.ref).reduce((s,b)=>s+b.tokens,0),sr=tot?stale/tot:0,dr=driftRisk(turn);
+  let word,col,sub;
+  if(tot>budget){word="OVER BUDGET";col="var(--danger)";sub="Past your working budget — compact now.";}
+  else if(fill>0.85){word="NEAR LIMIT";col="var(--warn)";sub="Approaching budget — plan to compact.";}
+  else if(dr>15000){word="DRIFT RISK";col="var(--danger)";sub="A key instruction is buried far from the edge.";}
+  else if(sr>0.4){word="NOISY";col="var(--warn)";sub="Lots of unreferenced tokens — consider pruning.";}
+  else{word="HEALTHY";col="var(--good)";sub="Room to spare, mostly live content.";}
+  const r=document.getElementById("readout");
+  r.querySelector(".big").textContent=tot.toLocaleString();
+  r.querySelector(".big").style.color=tot>budget?"var(--danger)":"var(--tx)";
+  const st=r.querySelector(".status");st.textContent=word+" · "+Math.round(fill*100)+"% of budget";st.style.color=col;
+  r.querySelector(".stsub").textContent=sub;}
+
+/* ---------- legend ---------- */
+(function(){let h="";GROUPS.forEach(g=>{h+=`<div class="lgroup"><span class="gt">${g.gt}</span><div class="items">`;
+  g.t.forEach(tp=>h+=`<div class="li"><span class="sw" style="background:${COL[tp]}"></span>${LABELS[tp]}</div>`);
+  h+=`</div></div>`;});
+  h+=`<div class="lgroup"><span class="gt">overlay</span><div class="items"><div class="li"><span class="sw h" style="background:var(--mut2)"></span>hatched = cached</div></div></div>`;
+  document.getElementById("legend").innerHTML=h;})();
+
+/* ---------- TOUR ---------- */
+const TOUR=[
+ {turn:0,view:"tape",hi:["sys","tdf","skl"],dim:true,title:"The fixed prefix",
+  text:"Every session opens with a fixed prefix — <em>system prompt, tool definitions, a skill</em>. ~5k tokens, all cached (note the hatching), so it's nearly free and stays pinned at the far left for the whole session."},
+ {turn:2,view:"tape",hi:[],dim:false,title:"Gentle, healthy growth",
+  text:"Normal turns add small user/assistant blocks and a modest tool result. The tape fills slowly, instructions stay near the edge, status reads HEALTHY. This is what good looks like."},
+ {turn:3,view:"tape",hi:["tr3","sys","u1"],dim:true,villain:"tr3",title:"One tool call, 14k tokens",
+  text:"A single <em>run_bash</em> dumps a 14,200-token raw log into the window. One action nearly tripled the context. Watch the orange block swallow the tape — and shove the original instructions (highlighted) hard to the left."},
+ {turn:7,view:"tape",hi:["sys","u1","tr3","a7"],dim:true,villain:"tr3",diag:true,title:"The wrong turn",
+  text:"Quality breaks. The vendor-neutral rule now sits <em>~22k tokens behind the edge</em>, buried behind the log dump. The model anchors on the nearest context and drifts — writing the exact SDK call it was told to avoid. The diagnostic panel below breaks it down."},
+ {turn:8,view:"tape",hi:[],dim:false,budget:32000,title:"Read the budget line",
+  text:"On the growth chart we're now at ~96% of a 32k budget — deep in the red danger band. That line is your <em>when-to-clear</em> cue. Ideally you act here, before the drift, not after."},
+ {turn:9,view:"tape",hi:["sum9"],dim:true,title:"Compaction & recovery",
+  text:"Compaction replaces turns 1–5 (including the log dump) with an 850-token <em>summary</em> that restates the rule near the edge. Context craters from ~31k to ~11k. Next turn, the model recovers."},
+ {turn:11,view:"lanes",hi:[],dim:false,title:"The whole loop, in one view",
+  text:"Switch to Swimlanes any time to see block lifespans — dashed-red bars are stale dead weight. The loop: watch <em>composition</em> while tuning prompts, scan for the <em>buried-instruction</em> pattern to find wrong turns, and treat the <em>budget line + stale ratio</em> as your signal to compact. Now scrub freely and explore your own traces."},
+];
+let tourActive=false,tourStep=0;
+function applyTourStep(){const s=TOUR[tourStep];
+  highlight=s.hi||[];dimOthers=!!s.dim;villain=s.villain||null;
+  if(s.budget){budget=s.budget;document.querySelectorAll(".budget button").forEach(x=>x.classList.toggle("act",+x.dataset.b===budget));}
+  if(s.view&&s.view!==view)switchView(s.view);
+  document.getElementById("diag").classList.toggle("hidden",!s.diag);if(s.diag)drawDiag();
+  setTurn(s.turn);renderTour();}
+function renderTour(){const el=document.getElementById("tour");
+  if(!tourActive){el.innerHTML=`<div class="cta"><div class="t"><b>New here?</b> Take the guided tour — 7 steps that walk through how context accumulates and where it breaks.</div><button class="primary" id="startTour">▶ Start guided tour</button></div>`;
+    document.getElementById("startTour").onclick=()=>{tourActive=true;tourStep=0;applyTourStep();};return;}
+  const s=TOUR[tourStep];let dots="";TOUR.forEach((_,i)=>dots+=`<i class="${i===tourStep?'on':''}"></i>`);
+  el.innerHTML=`<div class="step"><div class="stepnum">Guided tour · step ${tourStep+1} of ${TOUR.length} · turn ${s.turn}</div>
+    <h3>${s.title}</h3><p>${s.text}</p>
+    <div class="nav">
+      <button id="tBack" ${tourStep===0?'disabled style=opacity:.4':''}>◀ Back</button>
+      <button class="primary" id="tNext">${tourStep===TOUR.length-1?'Finish ✓':'Next ▶'}</button>
+      <button id="tExit">Exit tour</button>
+      <div class="dots">${dots}</div></div></div>`;
+  document.getElementById("tBack").onclick=()=>{if(tourStep>0){tourStep--;applyTourStep();}};
+  document.getElementById("tNext").onclick=()=>{if(tourStep<TOUR.length-1){tourStep++;applyTourStep();}else endTour();};
+  document.getElementById("tExit").onclick=endTour;}
+function endTour(){tourActive=false;highlight=[];dimOthers=false;villain=null;
+  document.getElementById("diag").classList.add("hidden");renderTour();renderAll();}
+
+/* ---------- orchestration ---------- */
+function renderAll(){recompute();document.getElementById("scrub").max=maxTurn;
+  drawMacro();drawComp();drawReadout();
+  if(view==="tape")drawTape();else drawLanes();
+  drawInsp();
+  document.getElementById("tl").textContent=turn;document.getElementById("scrub").value=turn;}
+function setTurn(t){turn=Math.max(0,Math.min(maxTurn,t));renderAll();}
+function switchView(v){view=v;
+  document.getElementById("tabTape").classList.toggle("act",v==="tape");
+  document.getElementById("tabLanes").classList.toggle("act",v==="lanes");
+  document.getElementById("tapeView").style.display=v==="tape"?"":"none";
+  document.getElementById("lanesView").style.display=v==="lanes"?"":"none";
+  document.getElementById("tapeTitle").textContent=v==="tape"?"2 · Context tape — what the model actually reads":"2 · Swimlanes — how long each block lives";
+  document.getElementById("tapeCap").innerHTML=v==="tape"
+    ?`<b>Read it as:</b> the full token sequence, oldest on the left, the <b>generation edge</b> on the right. Block width = token count. An important instruction far to the left is at risk of being ignored. Click any block to inspect it.`
+    :`<b>Read it as:</b> a timeline per block type. Bar length = how many turns the block stayed in context. <b>Dashed-red</b> bars are stale — taking up space without being used. The white line is the current turn.`;}
+
+/* ---------- controls ---------- */
+document.getElementById("scrub").addEventListener("input",e=>setTurn(+e.target.value));
+document.getElementById("prev").onclick=()=>setTurn(turn-1);
+document.getElementById("next").onclick=()=>setTurn(turn+1);
+document.getElementById("play").onclick=function(){
+  if(playing){clearInterval(playing);playing=null;this.textContent="▶";return;}
+  this.textContent="❚❚";if(turn>=maxTurn)turn=0;
+  playing=setInterval(()=>{if(turn>=maxTurn){clearInterval(playing);playing=null;document.getElementById("play").textContent="▶";return;}setTurn(turn+1);},900);};
+document.querySelectorAll(".budget button").forEach(b=>b.onclick=()=>{budget=+b.dataset.b;
+  document.querySelectorAll(".budget button").forEach(x=>x.classList.remove("act"));b.classList.add("act");renderAll();});
+document.getElementById("tabTape").onclick=()=>{switchView("tape");renderAll();};
+document.getElementById("tabLanes").onclick=()=>{switchView("lanes");renderAll();};
+
+const modal=document.getElementById("modal");
+document.getElementById("loadBtn").onclick=()=>{document.getElementById("ta").value=JSON.stringify(SAMPLE.slice(0,6),null,1);
+  document.getElementById("modalErr").textContent="";modal.classList.add("show");};
+document.getElementById("cancelBtn").onclick=()=>modal.classList.remove("show");
+document.getElementById("applyBtn").onclick=()=>{try{const d=JSON.parse(document.getElementById("ta").value);
+  if(!Array.isArray(d)||!d.length)throw new Error("expected a non-empty array");
+  d.forEach((b,i)=>{if(b.type==null||b.tokens==null||b.enter==null)throw new Error(`block ${i}: needs type, tokens, enter`);
+    if(!TYPES.includes(b.type))throw new Error(`block ${i}: unknown type "${b.type}"`);b.id=b.id||("b"+i);b.label=b.label||b.type;});
+  trace=d;sel=null;turn=0;endTour();modal.classList.remove("show");renderAll();}
+  catch(err){document.getElementById("modalErr").textContent="✗ "+err.message;}};
+document.getElementById("resetBtn").onclick=()=>{trace=JSON.parse(JSON.stringify(SAMPLE));sel=null;turn=0;
+  budget=32000;document.querySelectorAll(".budget button").forEach(x=>x.classList.toggle("act",+x.dataset.b===32000));endTour();};
+modal.addEventListener("click",e=>{if(e.target===modal)modal.classList.remove("show");});
+
+/* boot */
+renderTour();renderAll();setTurn(0);
+
+// Auto-load blocks.json if available
+(function(){
+  const params = new URLSearchParams(location.search);
+  const traceUrl = params.get('trace') || './blocks.json';
+  fetch(traceUrl).then(r => {
+    if (!r.ok) throw new Error(r.status);
+    return r.json();
+  }).then(data => {
+    if (Array.isArray(data) && data.length > 0) {
+      trace = data;
+      maxTurn = Math.max(...trace.map(b => b.exit != null ? b.exit : b.enter));
+      turn = 0;
+      render();
+    }
+  }).catch(() => { /* blocks.json not found, use built-in SAMPLE */ });
+})();
+</script>
+</body>
+</html>

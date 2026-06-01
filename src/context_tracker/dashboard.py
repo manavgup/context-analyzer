@@ -168,12 +168,15 @@ def create_app(
                 "active_tokens": active_tokens,
                 "stale_tokens": stale_tokens + dead_weight_tokens,
                 "total_tokens": total,
+                "actual_context_tokens": snap.actual_context_tokens,
                 "block_count": block_count,
                 "stale_block_count": stale_count + dead_count,
                 "input_tokens": snap.input_tokens,
                 "output_tokens": snap.output_tokens,
                 "cache_read_tokens": snap.cache_read_tokens,
                 "cache_creation_tokens": snap.cache_creation_tokens,
+                "compaction_detected": snap.compaction_detected,
+                "epoch": snap.epoch,
                 "api_call_count": snap.api_call_count,
             })
 
@@ -311,16 +314,30 @@ def create_app(
 
         return {"turn": turn_number, "messages": msgs_out}
 
+    @app.get("/")
+    def serve_dashboard():
+        index = static_dir / "context-scope.html"
+        if index.exists():
+            return FileResponse(str(index))
+        return HTMLResponse("<h1>Context Analyzer</h1><p>Run ccscope build first.</p>")
+
+    @app.get("/blocks.json")
+    def get_blocks_json():
+        blocks_path = static_dir / "blocks.json"
+        if blocks_path.exists():
+            return FileResponse(str(blocks_path), media_type="application/json")
+        raise HTTPException(status_code=404, detail="Run ccscope build first")
+
+    @app.get("/churn.json")
+    def get_churn_json():
+        churn_path = static_dir / "churn.json"
+        if churn_path.exists():
+            return FileResponse(str(churn_path), media_type="application/json")
+        raise HTTPException(status_code=404, detail="Run ccscope build first")
+
     # Serve static files if directory exists
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
-
-        @app.get("/")
-        def serve_dashboard():
-            index = static_dir / "dashboard.html"
-            if index.exists():
-                return FileResponse(str(index))
-            return HTMLResponse("<h1>Context Analyzer</h1><p>Dashboard not built yet.</p>")
 
     return app
 
