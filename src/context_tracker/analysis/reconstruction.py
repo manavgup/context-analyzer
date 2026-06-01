@@ -245,6 +245,29 @@ def reconstruct_session(
     # Process each message in order, building context blocks
     for msg in messages:
         if msg.entry_type == "system":
+            # Create pinned blocks for system messages
+            for cb in msg.content_blocks:
+                block_counter += 1
+                block_id = f"b{block_counter:06d}"
+                content = cb.content or ""
+                chash = _content_hash(content)
+                size_tokens = _estimate_tokens(cb.size_chars)
+
+                context_block = ContextBlock(
+                    block_id=block_id,
+                    turn_entered=1,
+                    api_call_entered=0,
+                    epoch_entered=0,
+                    block_type=BlockType.SYSTEM,
+                    size_chars=cb.size_chars,
+                    size_tokens_est=size_tokens,
+                    content_hash=chash,
+                    is_pinned=True,
+                    timestamp=msg.timestamp,
+                )
+                all_blocks[block_id] = context_block
+                all_block_ids.append(block_id)
+                content_store.add(block_id, content)
             continue
 
         # Determine which turn this message belongs to
@@ -319,6 +342,61 @@ def reconstruct_session(
         if msg.entry_type == "assistant" and msg.output_tokens > 0:
             api_call_global_index += 1
 
+    # Create synthetic pinned blocks from first-turn cache_creation data
+    # if no explicit system blocks were found.
+    has_system_blocks = any(
+        b.block_type == BlockType.SYSTEM for b in all_blocks.values()
+    )
+    if not has_system_blocks and turns:
+        first_turn = turns[0]
+        if first_turn.api_calls:
+            first_call = first_turn.api_calls[0]
+            cache_creation = first_call.cache_creation_tokens
+            if cache_creation > 0:
+                # Estimate: ~6K tokens for system prompt (Claude Code default)
+                system_prompt_est = min(6000, cache_creation)
+                remainder = cache_creation - system_prompt_est
+
+                block_counter += 1
+                sp_block_id = f"b{block_counter:06d}"
+                sp_block = ContextBlock(
+                    block_id=sp_block_id,
+                    turn_entered=1,
+                    api_call_entered=0,
+                    epoch_entered=0,
+                    block_type=BlockType.SYSTEM,
+                    size_chars=system_prompt_est * _CHARS_PER_TOKEN,
+                    size_tokens_est=system_prompt_est,
+                    content_hash=_content_hash("__system_prompt__"),
+                    is_pinned=True,
+                    timestamp=first_turn.timestamp,
+                )
+                all_blocks[sp_block_id] = sp_block
+                all_block_ids.insert(0, sp_block_id)
+                content_store.add(sp_block_id, "[System Prompt — estimated from cache data]")
+
+                if remainder > 0:
+                    block_counter += 1
+                    claude_md_block_id = f"b{block_counter:06d}"
+                    claude_md_block = ContextBlock(
+                        block_id=claude_md_block_id,
+                        turn_entered=1,
+                        api_call_entered=0,
+                        epoch_entered=0,
+                        block_type=BlockType.SYSTEM,
+                        size_chars=remainder * _CHARS_PER_TOKEN,
+                        size_tokens_est=remainder,
+                        content_hash=_content_hash("__claude_md_skills__"),
+                        is_pinned=True,
+                        timestamp=first_turn.timestamp,
+                    )
+                    all_blocks[claude_md_block_id] = claude_md_block
+                    all_block_ids.insert(1, claude_md_block_id)
+                    content_store.add(
+                        claude_md_block_id,
+                        "[CLAUDE.md + Skills — estimated from cache data]",
+                    )
+
     # Build per-turn snapshots
     # Walk through turns and accumulate blocks entered per turn
     blocks_by_turn: dict[int, list[str]] = {}
@@ -348,7 +426,7 @@ def reconstruct_session(
                     current_epoch = ContextEpoch(
                         epoch_number=len(epochs),
                         started_at_turn=tn,
-                        compact_summary_length=ce.compact_summary_length,
+                        compaction_summary_size=ce.compact_summary_length,
                         blocks_before_compaction=len(previous_block_ids),
                     )
                     epochs.append(current_epoch)

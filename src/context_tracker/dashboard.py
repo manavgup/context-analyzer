@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -9,10 +10,24 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from context_tracker.analysis.config import StalenessConfig
-from context_tracker.analysis.staleness import compute_staleness, detect_superseded
+from context_tracker.analysis.models import BlockType, ContextBlock
+from context_tracker.analysis.staleness import (
+    compute_staleness,
+    detect_superseded,
+    detect_task_boundaries,
+)
 from context_tracker.storage import DEFAULT_TRACE_DIR, list_sessions, read_events
 from context_tracker.transcript_parser import parse_raw_transcript
 from context_tracker.analysis.reconstruction import reconstruct_session
+
+# Reuse the same session ID pattern as storage.py
+_SESSION_ID_RE = re.compile(r'^[a-zA-Z0-9_-]+$')
+
+
+def _validate_session_id(session_id: str) -> None:
+    """Validate session ID format. Raises HTTPException(400) for invalid IDs."""
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(status_code=400, detail="Invalid session ID")
 
 DEFAULT_TRANSCRIPT_DIR = Path.home() / ".claude" / "projects"
 DEFAULT_STATIC_DIR = Path(__file__).parent.parent.parent / "static"
@@ -45,6 +60,7 @@ def create_app(
 
     @app.get("/api/session/{session_id}/summary")
     def get_session_summary(session_id: str):
+        _validate_session_id(session_id)
         transcript_path = _find_transcript(session_id, transcript_dir)
         if transcript_path is None:
             events = read_events(session_id, trace_dir=trace_dir)
@@ -56,6 +72,7 @@ def create_app(
     @app.get("/api/session/{session_id}/turns")
     def get_session_turns(session_id: str):
         """Per-turn summary data for sediment chart and scorecards."""
+        _validate_session_id(session_id)
         transcript_path = _find_transcript(session_id, transcript_dir)
         if transcript_path is None:
             raise HTTPException(status_code=404, detail="Transcript not found")
@@ -67,10 +84,25 @@ def create_app(
         )
 
         config = StalenessConfig()
-        superseded = detect_superseded(list(block_registry.values()))
+
+        # P2-4: Detect task boundaries from turns
+        task_boundaries = detect_task_boundaries(turns, config)
+
+        # P2-3: Build assistant text indexed by turn number for reference scanning
+        assistant_texts_by_turn: dict[int, list[str]] = {}
+        for bid, block in block_registry.items():
+            if block.block_type == BlockType.ASSISTANT_TEXT:
+                tn = block.turn_entered
+                if tn not in assistant_texts_by_turn:
+                    assistant_texts_by_turn[tn] = []
+                text = content_store.get_content(bid)
+                if text:
+                    assistant_texts_by_turn[tn].append(text)
 
         # Build resource_last_used map incrementally per turn
         resource_last_used: dict[str, int] = {}
+        # P2-2: Track blocks seen so far for incremental superseded computation
+        blocks_seen_so_far: list[ContextBlock] = []
 
         turn_data = []
         for snap in snapshots:
@@ -79,6 +111,12 @@ def create_app(
                 block = block_registry.get(bid)
                 if block and block.resource:
                     resource_last_used[block.resource] = snap.turn_number
+                # P2-2: Accumulate blocks for incremental superseded map
+                if block:
+                    blocks_seen_so_far.append(block)
+
+            # P2-2: Compute superseded only from blocks seen up to this turn
+            superseded = detect_superseded(blocks_seen_so_far)
 
             # Score all blocks at this turn
             system_tokens = 0
@@ -94,14 +132,19 @@ def create_app(
                 if not block:
                     continue
 
+                # P2-3: Gather assistant messages from turns after block entered
+                messages_since: list[str] = []
+                for t in range(block.turn_entered + 1, snap.turn_number + 1):
+                    messages_since.extend(assistant_texts_by_turn.get(t, []))
+
                 score_val, label = compute_staleness(
                     block=block,
                     current_turn=snap.turn_number,
                     config=config,
                     resource_last_used=resource_last_used,
-                    messages_since_block=[],
+                    messages_since_block=messages_since,
                     active_resources=set(resource_last_used.keys()),
-                    task_boundaries=[],
+                    task_boundaries=task_boundaries,
                     superseded_map=superseded,
                 )
 
@@ -153,6 +196,7 @@ def create_app(
     @app.get("/api/session/{session_id}/blocks")
     def get_session_blocks(session_id: str):
         """Block metadata for context tape. No content (lazy loaded)."""
+        _validate_session_id(session_id)
         transcript_path = _find_transcript(session_id, transcript_dir)
         if transcript_path is None:
             raise HTTPException(status_code=404, detail="Transcript not found")
@@ -164,15 +208,29 @@ def create_app(
         )
 
         config = StalenessConfig()
-        superseded = detect_superseded(list(block_registry.values()))
+        task_boundaries = detect_task_boundaries(turns, config)
 
-        # Build resource_last_used from all turns
+        # Build resource_last_used from all turns (final state for /blocks)
         resource_last_used: dict[str, int] = {}
         for snap in snapshots:
             for bid in snap.blocks_entered_ids:
                 block = block_registry.get(bid)
                 if block and block.resource:
                     resource_last_used[block.resource] = snap.turn_number
+
+        # Superseded at final turn uses all blocks (correct for final snapshot)
+        superseded = detect_superseded(list(block_registry.values()))
+
+        # Build assistant text by turn for reference scanning
+        assistant_texts_by_turn: dict[int, list[str]] = {}
+        for bid, blk in block_registry.items():
+            if blk.block_type == BlockType.ASSISTANT_TEXT:
+                tn = blk.turn_entered
+                if tn not in assistant_texts_by_turn:
+                    assistant_texts_by_turn[tn] = []
+                text = content_store.get_content(bid)
+                if text:
+                    assistant_texts_by_turn[tn].append(text)
 
         last_turn = snapshots[-1].turn_number if snapshots else 0
 
@@ -181,14 +239,20 @@ def create_app(
             block = block_registry.get(bid)
             if not block:
                 continue
+
+            # Gather assistant messages from turns after block entered
+            messages_since: list[str] = []
+            for t in range(block.turn_entered + 1, last_turn + 1):
+                messages_since.extend(assistant_texts_by_turn.get(t, []))
+
             score_val, label = compute_staleness(
                 block=block,
                 current_turn=last_turn,
                 config=config,
                 resource_last_used=resource_last_used,
-                messages_since_block=[],
+                messages_since_block=messages_since,
                 active_resources=set(resource_last_used.keys()),
-                task_boundaries=[],
+                task_boundaries=task_boundaries,
                 superseded_map=superseded,
             )
             blocks_out.append({
@@ -209,6 +273,7 @@ def create_app(
     @app.get("/api/session/{session_id}/turn/{turn_number}/messages")
     def get_turn_messages(session_id: str, turn_number: int):
         """Full message content for a specific turn (drilldown)."""
+        _validate_session_id(session_id)
         transcript_path = _find_transcript(session_id, transcript_dir)
         if transcript_path is None:
             raise HTTPException(status_code=404, detail="Transcript not found")
@@ -269,6 +334,14 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=9201)
     args = parser.parse_args()
+
+    if args.host != "127.0.0.1":
+        import sys
+        print(
+            f"WARNING: Binding to {args.host} exposes session data on the network. "
+            "Use 127.0.0.1 (default) to restrict access to localhost.",
+            file=sys.stderr,
+        )
 
     app = create_app()
     uvicorn.run(app, host=args.host, port=args.port)

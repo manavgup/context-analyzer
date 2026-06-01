@@ -25,7 +25,7 @@ import re
 from collections import defaultdict
 
 from context_tracker.analysis.config import StalenessConfig
-from context_tracker.analysis.models import BlockType, ContextBlock
+from context_tracker.analysis.models import BlockType, ContextBlock, ConversationTurn
 
 # Common identifiers that produce false-positive reference matches
 _FALSE_POSITIVE_IDENTIFIERS: set[str] = frozenset({
@@ -338,3 +338,57 @@ def compute_staleness(
     score = max(0.0, min(1.0, score))
 
     return (score, label_staleness(score))
+
+
+def detect_task_boundaries(
+    turns: list[ConversationTurn],
+    config: StalenessConfig,
+) -> list[int]:
+    """Detect task boundaries based on time gaps and keyword overlap.
+
+    A boundary is detected when:
+    1. The time gap between consecutive turns exceeds config.task_boundary_time_gap minutes
+    2. Both prompts are at least config.min_prompt_length_for_boundary characters long
+    3. The keyword overlap between consecutive prompts is below config.task_boundary_overlap
+
+    Returns:
+        List of turn numbers where task boundaries were detected.
+    """
+    from datetime import datetime
+
+    boundaries: list[int] = []
+
+    for i in range(1, len(turns)):
+        prev = turns[i - 1]
+        curr = turns[i]
+
+        # Need timestamps to detect time gap
+        if not prev.timestamp or not curr.timestamp:
+            continue
+
+        try:
+            t1 = datetime.fromisoformat(prev.timestamp.replace("Z", "+00:00"))
+            t2 = datetime.fromisoformat(curr.timestamp.replace("Z", "+00:00"))
+            gap_minutes = (t2 - t1).total_seconds() / 60
+        except (ValueError, TypeError):
+            continue
+
+        if gap_minutes <= config.task_boundary_time_gap:
+            continue
+
+        # Only check overlap on long prompts
+        min_len = config.min_prompt_length_for_boundary
+        if len(curr.user_prompt_text) < min_len or len(prev.user_prompt_text) < min_len:
+            continue
+
+        # Simple keyword overlap (Jaccard)
+        prev_words = set(prev.user_prompt_text.lower().split())
+        curr_words = set(curr.user_prompt_text.lower().split())
+        if not prev_words or not curr_words:
+            continue
+        overlap = len(prev_words & curr_words) / max(len(prev_words | curr_words), 1)
+
+        if overlap < config.task_boundary_overlap:
+            boundaries.append(curr.turn_number)
+
+    return boundaries
