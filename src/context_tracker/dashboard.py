@@ -314,6 +314,176 @@ def create_app(
 
         return {"turn": turn_number, "messages": msgs_out}
 
+    @app.get("/api/session/{session_id}/call/{call_index}/content")
+    def get_call_content(session_id: str, call_index: int):
+        """Full message content for a specific API call (by call index 0-based).
+
+        Uses the ccscope transcript parser which indexes by API call,
+        matching the v3 dashboard's turn numbering.
+        """
+        _validate_session_id(session_id)
+        transcript_path = _find_transcript(session_id, transcript_dir)
+        if transcript_path is None:
+            raise HTTPException(status_code=404, detail="Transcript not found")
+
+        import json
+
+        # Parse transcript entries directly — we need the raw content
+        # for the specific API call
+        if not transcript_path.exists():
+            raise HTTPException(status_code=404, detail="Transcript not found")
+
+        entries = []
+        api_call_idx = -1
+        target_entries = []
+        pending_user_entries = []
+
+        with open(transcript_path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                entry_type = entry.get("type", "")
+                if entry_type in ("file-history-snapshot", "last-prompt", "pr-link", "queue-operation"):
+                    continue
+
+                if entry_type == "user":
+                    # Buffer user messages — they belong to the next API call
+                    pending_user_entries.append(entry)
+                    continue
+
+                if entry_type == "assistant":
+                    message = entry.get("message", {})
+                    usage = message.get("usage", {})
+                    stop_reason = message.get("stop_reason")
+                    output_tokens = usage.get("output_tokens", 0)
+                    model = message.get("model", "")
+
+                    if stop_reason is None or output_tokens == 0 or model == "synthetic":
+                        continue
+
+                    api_call_idx += 1
+
+                    if api_call_idx == call_index:
+                        # This is the API call we want
+                        target_entries = list(pending_user_entries)
+                        target_entries.append(entry)
+                        break
+
+                    # Clear pending for next call
+                    pending_user_entries = []
+
+        if not target_entries:
+            raise HTTPException(status_code=404, detail=f"API call {call_index} not found")
+
+        # Extract content blocks from the target entries
+        messages_out = []
+        for entry in target_entries:
+            entry_type = entry.get("type", "")
+            message = entry.get("message", {})
+            content = message.get("content", "")
+            timestamp = entry.get("timestamp", "")
+
+            if isinstance(content, str) and content:
+                messages_out.append({
+                    "type": "user" if entry_type == "user" else "assistant",
+                    "role": "user" if entry_type == "user" else "assistant",
+                    "content": content[:8000],
+                    "size_chars": len(content),
+                    "is_truncated": len(content) > 8000,
+                    "timestamp": timestamp,
+                })
+            elif isinstance(content, list):
+                for item in content:
+                    if not isinstance(item, dict):
+                        continue
+                    block_type = item.get("type", "")
+
+                    if block_type == "text":
+                        text = item.get("text", "")
+                        messages_out.append({
+                            "type": "assistant_text" if entry_type == "assistant" else "user_text",
+                            "role": entry_type,
+                            "content": text[:8000],
+                            "size_chars": len(text),
+                            "is_truncated": len(text) > 8000,
+                            "timestamp": timestamp,
+                        })
+
+                    elif block_type == "thinking":
+                        text = item.get("thinking", "")
+                        messages_out.append({
+                            "type": "thinking",
+                            "role": "assistant",
+                            "content": text[:8000],
+                            "size_chars": len(text),
+                            "is_truncated": len(text) > 8000,
+                            "timestamp": timestamp,
+                        })
+
+                    elif block_type == "tool_use":
+                        tool_input = item.get("input", {})
+                        input_str = json.dumps(tool_input, indent=2) if isinstance(tool_input, dict) else str(tool_input)
+                        tool_name = item.get("name", "unknown")
+                        resource = ""
+                        if tool_name in ("Read", "Edit", "Write"):
+                            resource = tool_input.get("file_path", "") if isinstance(tool_input, dict) else ""
+                        elif tool_name == "Bash":
+                            resource = (tool_input.get("command", "")[:100] if isinstance(tool_input, dict) else "")
+                        messages_out.append({
+                            "type": "tool_use",
+                            "role": "assistant",
+                            "tool_name": tool_name,
+                            "resource": resource,
+                            "content": input_str[:8000],
+                            "size_chars": len(input_str),
+                            "is_truncated": len(input_str) > 8000,
+                            "tool_use_id": item.get("id", ""),
+                            "timestamp": timestamp,
+                        })
+
+                    elif block_type == "tool_result":
+                        result_content = item.get("content", "")
+                        if isinstance(result_content, list):
+                            result_content = "\n".join(
+                                b.get("text", "") if isinstance(b, dict) else str(b)
+                                for b in result_content
+                            )
+                        elif not isinstance(result_content, str):
+                            result_content = str(result_content)
+                        messages_out.append({
+                            "type": "tool_result",
+                            "role": "tool",
+                            "content": result_content[:8000],
+                            "size_chars": len(result_content),
+                            "is_truncated": len(result_content) > 8000,
+                            "is_error": bool(item.get("is_error", False)),
+                            "tool_use_id": item.get("tool_use_id", ""),
+                            "timestamp": timestamp,
+                        })
+
+        # Add usage info from the assistant entry
+        for entry in target_entries:
+            if entry.get("type") == "assistant":
+                usage = entry.get("message", {}).get("usage", {})
+                return {
+                    "call_index": call_index,
+                    "messages": messages_out,
+                    "usage": {
+                        "input_tokens": usage.get("input_tokens", 0),
+                        "output_tokens": usage.get("output_tokens", 0),
+                        "cache_read": usage.get("cache_read_input_tokens", 0),
+                        "cache_creation": usage.get("cache_creation_input_tokens", 0),
+                    },
+                }
+
+        return {"call_index": call_index, "messages": messages_out, "usage": {}}
+
     @app.get("/")
     def serve_dashboard():
         # Prefer v3 dashboard, fall back to v2
@@ -338,6 +508,13 @@ def create_app(
         if churn_path.exists():
             return FileResponse(str(churn_path), media_type="application/json")
         raise HTTPException(status_code=404, detail="Run ccscope build first")
+
+    @app.get("/meta.json")
+    def get_meta_json():
+        meta_path = static_dir / "meta.json"
+        if meta_path.exists():
+            return FileResponse(str(meta_path), media_type="application/json")
+        raise HTTPException(status_code=404, detail="No meta.json")
 
     # Serve static files if directory exists
     if static_dir.exists():

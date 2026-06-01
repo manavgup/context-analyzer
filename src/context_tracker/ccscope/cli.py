@@ -88,6 +88,11 @@ def cmd_build(args):
 
     blocks_path, churn_path = write_output(blocks, churn, output_dir)
 
+    # Write meta.json for the dashboard to know the session ID
+    import json as _json
+    meta_path = output_dir / "meta.json"
+    meta_path.write_text(_json.dumps({"session_id": session_id}), encoding="utf-8")
+
     # Summary
     total_cr = sum(c["cache_read"] for c in churn)
     total_in = sum(c["input"] for c in churn)

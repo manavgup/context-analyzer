@@ -604,6 +604,7 @@ html, body {
   // ===== STATE =====
   let blocks = [];
   let churn = [];
+  let meta = {};  // {session_id, model} from meta.json
   let pinnedTokens = 0;
   let currentTurn = 0;
   let maxTurn = 0;
@@ -613,6 +614,7 @@ html, body {
   let growthChart = null;
   let churnChart = null;
   let selectedBlockIdx = -1;
+  let callContentCache = {};  // cache fetched content by call index
 
   // Derived data (computed once)
   let labels = [];
@@ -661,9 +663,10 @@ html, body {
 
   // ===== DATA LOADING =====
   async function loadData() {
-    const [blocksResp, churnResp] = await Promise.all([
+    const [blocksResp, churnResp, metaResp] = await Promise.all([
       fetch('./blocks.json'),
       fetch('./churn.json'),
+      fetch('./meta.json').catch(() => ({ ok: false })),
     ]);
 
     if (!blocksResp.ok || !churnResp.ok) {
@@ -674,7 +677,23 @@ html, body {
 
     blocks = await blocksResp.json();
     churn = await churnResp.json();
+    if (metaResp.ok) {
+      try { meta = await metaResp.json(); } catch(e) { meta = {}; }
+    }
     return true;
+  }
+
+  // Fetch real content for an API call from the server
+  async function fetchCallContent(callIndex) {
+    if (callContentCache[callIndex]) return callContentCache[callIndex];
+    if (!meta.session_id) return null;
+    try {
+      const resp = await fetch('/api/session/' + encodeURIComponent(meta.session_id) + '/call/' + callIndex + '/content');
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      callContentCache[callIndex] = data;
+      return data;
+    } catch(e) { return null; }
   }
 
   // ===== DERIVED COMPUTATION =====
@@ -1146,53 +1165,87 @@ html, body {
       return;
     }
 
-    const distance = block.exit !== null && block.exit !== undefined
-      ? Math.max(0, maxTurn - block.enter)
-      : 'pinned';
-
+    // Show metadata immediately, then fetch real content
     let html = '<div class="inspector-body">';
 
     html += '<div class="inspector-field">' +
-      '<div class="inspector-field-label">Block ID</div>' +
-      '<div class="inspector-field-value">' + escapeHtml(block.id) + '</div></div>';
-
-    html += '<div class="inspector-field">' +
       '<div class="inspector-field-label">Type</div>' +
-      '<div class="inspector-field-value"><span class="block-badge ' + getBadgeClass(block.type) + '">' + escapeHtml(block.type) + '</span></div></div>';
+      '<div class="inspector-field-value"><span class="block-badge ' + getBadgeClass(block.type) + '">' + escapeHtml(block.type) + '</span> ' + escapeHtml(block.label || '') + '</div></div>';
 
     html += '<div class="inspector-field">' +
       '<div class="inspector-field-label">Tokens</div>' +
       '<div class="inspector-field-value">' + fmtExact(block.tokens) + '</div></div>';
 
     html += '<div class="inspector-field">' +
-      '<div class="inspector-field-label">Entry Turn</div>' +
-      '<div class="inspector-field-value">' + block.enter + '</div></div>';
+      '<div class="inspector-field-label">API Call</div>' +
+      '<div class="inspector-field-value">' + block.enter + (block.cached ? ' (pinned, always resident)' : '') + '</div></div>';
 
-    if (block.exit !== null && block.exit !== undefined) {
-      html += '<div class="inspector-field">' +
-        '<div class="inspector-field-label">Exit Turn</div>' +
-        '<div class="inspector-field-value">' + block.exit + '</div></div>';
-    }
-
+    // Content area — fetch real content from API
     html += '<div class="inspector-field">' +
-      '<div class="inspector-field-label">Cached</div>' +
-      '<div class="inspector-field-value">' + (block.cached ? 'Yes (pinned prefix)' : 'No') + '</div></div>';
-
-    html += '<div class="inspector-field">' +
-      '<div class="inspector-field-label">Distance from Edge</div>' +
-      '<div class="inspector-field-value">' + distance + ' turns</div></div>';
-
-    // Content
-    const content = block.content || '';
-    if (content.length > 0) {
-      const display = content.length > 2000 ? content.slice(0, 2000) + '\n... (truncated)' : content;
-      html += '<div class="inspector-field">' +
-        '<div class="inspector-field-label">Content</div>' +
-        '<div class="inspector-content">' + escapeHtml(display) + '</div></div>';
-    }
+      '<div class="inspector-field-label">Content</div>' +
+      '<div class="inspector-content" id="inspector-content-area">Loading...</div></div>';
 
     html += '</div>';
     el.innerHTML = html;
+
+    // Fetch real content from the server
+    loadInspectorContent(block);
+  }
+
+  async function loadInspectorContent(block) {
+    const contentEl = document.getElementById('inspector-content-area');
+    if (!contentEl) return;
+
+    // For pinned blocks, show the summary
+    if (block.cached) {
+      contentEl.textContent = block.content || '(pinned prefix block — ' + fmtExact(block.tokens) + ' tokens)';
+      return;
+    }
+
+    // Fetch real content from the API
+    const callIndex = block.enter;
+    const data = await fetchCallContent(callIndex);
+
+    if (!data || !data.messages || data.messages.length === 0) {
+      contentEl.textContent = block.content || '(no content available)';
+      return;
+    }
+
+    // Render all messages for this API call
+    let html = '';
+    for (const msg of data.messages) {
+      const type = msg.type || msg.role || 'unknown';
+      const badgeCls = getBadgeClass(type);
+      const toolInfo = msg.tool_name ? ' <b>' + escapeHtml(msg.tool_name) + '</b>' + (msg.resource ? ' → ' + escapeHtml(msg.resource) : '') : '';
+      const sizeInfo = msg.size_chars ? ' <span style="color:var(--text-muted)">(' + fmt(Math.round(msg.size_chars / 4)) + ' tok)</span>' : '';
+      const truncNote = msg.is_truncated ? ' <span style="color:var(--danger)">[truncated]</span>' : '';
+      const errorNote = msg.is_error ? ' <span style="color:var(--danger)">[ERROR]</span>' : '';
+
+      html += '<div style="margin-bottom:12px;border-left:3px solid ' + getBadgeColor(type) + ';padding-left:10px;">';
+      html += '<div style="margin-bottom:4px;"><span class="block-badge ' + badgeCls + '">' + escapeHtml(type) + '</span>' + toolInfo + sizeInfo + truncNote + errorNote + '</div>';
+      html += '<pre style="margin:0;font-size:11px;line-height:1.5;color:var(--text-secondary);white-space:pre-wrap;word-break:break-word;max-height:300px;overflow-y:auto;background:#f9fafb;border:1px solid var(--border);border-radius:6px;padding:8px;">' + escapeHtml(msg.content || '') + '</pre>';
+      html += '</div>';
+    }
+
+    // Usage info
+    if (data.usage && (data.usage.input_tokens || data.usage.cache_read)) {
+      const u = data.usage;
+      const total = (u.input_tokens || 0) + (u.cache_read || 0) + (u.cache_creation || 0);
+      html += '<div style="margin-top:8px;padding:8px 10px;background:var(--churn-bg);border-radius:6px;font-size:11px;font-family:var(--mono);">';
+      html += 'API Usage: ' + fmt(total) + ' input (' + fmt(u.cache_read || 0) + ' cache_read + ' + fmt(u.cache_creation || 0) + ' cache_create + ' + (u.input_tokens || 0) + ' new) → ' + fmt(u.output_tokens || 0) + ' output';
+      html += '</div>';
+    }
+
+    contentEl.innerHTML = html;
+  }
+
+  function getBadgeColor(type) {
+    const colors = {
+      system: 'var(--system)', skill: '#ec4899', user: '#3b82f6', user_text: '#3b82f6',
+      assistant: '#10b981', assistant_text: '#10b981', thinking: '#8b5cf6',
+      tool_use: '#f59e0b', tool_call: '#f59e0b', tool_result: '#ef4444',
+    };
+    return colors[type] || '#6b7280';
   }
 
   // ===== SCRUBBER =====
@@ -1206,9 +1259,23 @@ html, body {
     document.getElementById('scrubber-range').value = currentTurn;
     updateScrubberLabel();
     updateTurnMarker();
-    selectedBlockIdx = -1;
+    selectedBlockIdx = 0;
     renderTurnDetails();
-    renderInspector(null);
+    // Auto-select first non-pinned block and load its content
+    const listEl = document.getElementById('turn-blocks-list');
+    if (listEl._rows && listEl._rows.length > 0) {
+      // Find first non-pinned block
+      const firstDynamic = listEl._rows.findIndex(b => !b.cached);
+      const idx = firstDynamic >= 0 ? firstDynamic : 0;
+      selectedBlockIdx = idx;
+      renderInspector(listEl._rows[idx]);
+      // Highlight it
+      const rowEls = listEl.querySelectorAll('.turn-block-row');
+      rowEls.forEach(r => r.classList.remove('selected'));
+      if (rowEls[idx]) rowEls[idx].classList.add('selected');
+    } else {
+      renderInspector(null);
+    }
   }
 
   function togglePlay() {
