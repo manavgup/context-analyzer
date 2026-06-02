@@ -599,15 +599,43 @@ def _mark_compaction(blocks: list[dict[str, Any]], compaction_turn: int) -> None
 # ---------------------------------------------------------------------------
 
 
+def _is_injected_content(text: str) -> bool:
+    """Detect system-injected content that isn't a real user prompt.
+
+    Claude Code injects skill expansions, command handlers, and system
+    reminders as user messages. These look like user text but aren't
+    typed by the user.
+    """
+    t = text.strip()
+    if not t:
+        return True
+    # Skill/command invocations
+    if "<command-message>" in t or "<command-name>" in t:
+        return True
+    # Skill expansion content (starts with "Base directory for this skill:")
+    if t.startswith("Base directory for this skill:"):
+        return True
+    # Local command output injected into context
+    if "<local-command-caveat>" in t or "<local-command-stdout>" in t:
+        return True
+    # System reminders injected as user messages
+    if t.startswith("<system-reminder>"):
+        return True
+    return False
+
+
 def _has_user_text_block(content: str | list) -> bool:
-    """Check if user message content contains a text block (not just tool_result)."""
+    """Check if user message content contains a real user text prompt.
+
+    Filters out system-injected content (skill expansions, command handlers).
+    """
     if isinstance(content, str):
-        return bool(content.strip())
+        return bool(content.strip()) and not _is_injected_content(content)
     if isinstance(content, list):
         for block in content:
             if isinstance(block, dict) and block.get("type") == "text":
                 text = block.get("text", "")
-                if text.strip():
+                if text.strip() and not _is_injected_content(text):
                     return True
     return False
 
@@ -649,10 +677,10 @@ def build_turn_map(transcript_path: Path) -> list[dict[str, Any]]:
     # Each item: (api_call_index_of_first_call_after_prompt, user_prompt_text)
     turn_boundaries: list[tuple[int, str]] = []
 
-    # We need to detect which api_call_index a user text prompt precedes.
-    # User entries are buffered until the next completed assistant entry.
-    pending_has_user_text = False
-    pending_user_prompt = ""
+    # Buffer ALL user text prompts until the next completed assistant entry.
+    # Multiple prompts can arrive before one API call (e.g., user sends
+    # several messages rapidly). Each is its own conversation turn.
+    pending_prompts: list[str] = []
 
     for entry in entries:
         etype = entry.get("type", "")
@@ -664,8 +692,7 @@ def build_turn_map(transcript_path: Path) -> list[dict[str, Any]]:
             msg = entry.get("message", {})
             content = msg.get("content", "")
             if _has_user_text_block(content):
-                pending_has_user_text = True
-                pending_user_prompt = _extract_user_prompt(content)
+                pending_prompts.append(_extract_user_prompt(content))
             continue
 
         if etype == "assistant":
@@ -673,11 +700,13 @@ def build_turn_map(transcript_path: Path) -> list[dict[str, Any]]:
             if not _is_completed_assistant(msg):
                 continue
 
-            # This is a completed API call at api_call_index
-            if pending_has_user_text:
-                turn_boundaries.append((api_call_index, pending_user_prompt))
-                pending_has_user_text = False
-                pending_user_prompt = ""
+            # This is a completed API call at api_call_index.
+            # Record ALL pending user prompts as separate turn boundaries.
+            # The first N-1 prompts share this API call index (they had
+            # no API calls of their own), the last one "owns" this call.
+            for prompt in pending_prompts:
+                turn_boundaries.append((api_call_index, prompt))
+            pending_prompts = []
 
             api_call_index += 1
 
@@ -686,18 +715,33 @@ def build_turn_map(transcript_path: Path) -> list[dict[str, Any]]:
     if not turn_boundaries:
         return []
 
-    # Build turn_map from boundaries
+    # Include API calls before the first real prompt (injected skill content)
+    # by pushing the first boundary's first_call to 0
+    if turn_boundaries[0][0] > 0:
+        turn_boundaries[0] = (0, turn_boundaries[0][1])
+
+    # Build turn_map from boundaries.
+    # Handle merged prompts: when multiple prompts share the same first_call,
+    # earlier ones get an empty API call range (first_call == last_call == the
+    # shared call index, and only the last prompt in the group "owns" the calls).
     turn_map: list[dict[str, Any]] = []
     for i, (first_call, prompt) in enumerate(turn_boundaries):
         conv_turn = i + 1  # 1-based
         if i + 1 < len(turn_boundaries):
-            last_call = turn_boundaries[i + 1][0] - 1
+            next_first = turn_boundaries[i + 1][0]
+            if next_first > first_call:
+                last_call = next_first - 1
+            else:
+                # Merged prompt: this prompt shares the API call with the next.
+                # Give it the same call index (one API call range).
+                last_call = first_call
         else:
             last_call = total_api_calls - 1
+
         turn_map.append({
             "conv_turn": conv_turn,
             "first_call": first_call,
-            "last_call": last_call,
+            "last_call": max(first_call, last_call),
             "user_prompt": prompt,
         })
 
