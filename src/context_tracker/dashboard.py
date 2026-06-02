@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 
@@ -17,8 +18,20 @@ from context_tracker.analysis.staleness import (
     detect_superseded,
     detect_task_boundaries,
 )
+from context_tracker.db import (
+    DEFAULT_DB_PATH,
+    BlockRecord,
+    HookEventRecord,
+    SessionRecord,
+    SubagentRecord,
+    get_engine,
+    get_session_factory,
+)
+from context_tracker.ingest import ingest_session
 from context_tracker.storage import DEFAULT_TRACE_DIR, list_sessions, read_events
 from context_tracker.transcript_parser import parse_raw_transcript
+
+logger = logging.getLogger(__name__)
 
 # Reuse the same session ID pattern as storage.py
 _SESSION_ID_RE = re.compile(r'^[a-zA-Z0-9_-]+$')
@@ -42,12 +55,32 @@ def _find_transcript(session_id: str, transcript_dir: Path) -> Path | None:
     return None
 
 
+def _ensure_ingested(
+    session_id: str,
+    trace_dir: Path,
+    db_path: Path,
+    projects_dir: Path | None = None,
+) -> SessionRecord | None:
+    """Get session from SQLite, auto-ingesting if missing."""
+    engine = get_engine(db_path)
+    factory = get_session_factory(engine)
+    with factory() as db:
+        existing = db.get(SessionRecord, session_id)
+        if existing:
+            return existing
+    # Not in DB — try to ingest
+    return ingest_session(
+        session_id, trace_dir=trace_dir, db_path=db_path, projects_dir=projects_dir,
+    )
+
+
 def create_app(
     trace_dir: Path = DEFAULT_TRACE_DIR,
     transcript_dir: Path = DEFAULT_TRANSCRIPT_DIR,
     static_dir: Path = DEFAULT_STATIC_DIR,
+    db_path: Path = DEFAULT_DB_PATH,
 ) -> FastAPI:
-    app = FastAPI(title="Context Analyzer", version="0.3.0")
+    app = FastAPI(title="Context Analyzer", version="0.4.0")
 
     @app.get("/api/health")
     def health_check():
@@ -55,19 +88,119 @@ def create_app(
 
     @app.get("/api/sessions")
     def get_sessions():
-        sessions = list_sessions(trace_dir=trace_dir)
-        return sessions
+        """List all sessions with summary stats from SQLite."""
+        session_ids = list_sessions(trace_dir=trace_dir)
+        results = []
+        engine = get_engine(db_path)
+        factory = get_session_factory(engine)
+        with factory() as db:
+            for sid in session_ids:
+                rec = db.get(SessionRecord, sid)
+                if not rec:
+                    # Auto-ingest on first access
+                    rec = _ensure_ingested(sid, trace_dir, db_path, transcript_dir)
+                    if not rec:
+                        results.append({"session_id": sid})
+                        continue
+                    # Re-fetch inside this session
+                    rec = db.get(SessionRecord, sid)
+                    if not rec:
+                        results.append({"session_id": sid})
+                        continue
+                results.append({
+                    "session_id": rec.session_id,
+                    "model": rec.model,
+                    "total_turns": rec.total_turns,
+                    "total_api_calls": rec.total_api_calls,
+                    "total_blocks": rec.total_blocks,
+                    "peak_context_tokens": rec.peak_context_tokens,
+                    "total_input_tokens": rec.total_input_tokens,
+                    "total_output_tokens": rec.total_output_tokens,
+                    "total_cache_read": rec.total_cache_read,
+                    "total_cost_usd": rec.total_cost_usd,
+                })
+        return results
 
     @app.get("/api/session/{session_id}/summary")
     def get_session_summary(session_id: str):
+        """Full session summary from SQLite."""
         _validate_session_id(session_id)
-        transcript_path = _find_transcript(session_id, transcript_dir)
-        if transcript_path is None:
-            events = read_events(session_id, trace_dir=trace_dir)
-            if not events:
+        rec = _ensure_ingested(session_id, trace_dir, db_path, transcript_dir)
+        if not rec:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        engine = get_engine(db_path)
+        factory = get_session_factory(engine)
+        with factory() as db:
+            rec = db.get(SessionRecord, session_id)
+            if not rec:
                 raise HTTPException(status_code=404, detail="Session not found")
 
-        return {"session_id": session_id, "status": "ok"}
+            block_types = {}
+            for b in db.query(BlockRecord).filter_by(session_id=session_id):
+                block_types[b.block_type] = block_types.get(b.block_type, 0) + 1
+
+            hook_types = {}
+            for h in db.query(HookEventRecord).filter_by(session_id=session_id):
+                hook_types[h.event_type] = hook_types.get(h.event_type, 0) + 1
+
+            subagent_count = db.query(SubagentRecord).filter_by(session_id=session_id).count()
+
+            return {
+                "session_id": rec.session_id,
+                "model": rec.model,
+                "total_turns": rec.total_turns,
+                "total_api_calls": rec.total_api_calls,
+                "total_blocks": rec.total_blocks,
+                "peak_context_tokens": rec.peak_context_tokens,
+                "total_input_tokens": rec.total_input_tokens,
+                "total_output_tokens": rec.total_output_tokens,
+                "total_cache_read": rec.total_cache_read,
+                "total_cache_creation": rec.total_cache_creation,
+                "total_cost_usd": rec.total_cost_usd,
+                "health_score": rec.health_score,
+                "block_type_counts": block_types,
+                "hook_event_counts": hook_types,
+                "subagent_count": subagent_count,
+            }
+
+    @app.get("/api/sessions/trends")
+    def get_session_trends():
+        """Cross-session aggregation for trend analysis."""
+        session_ids = list_sessions(trace_dir=trace_dir)
+        engine = get_engine(db_path)
+        factory = get_session_factory(engine)
+
+        trends = []
+        with factory() as db:
+            for sid in session_ids:
+                rec = db.get(SessionRecord, sid)
+                if not rec:
+                    rec_obj = _ensure_ingested(sid, trace_dir, db_path, transcript_dir)
+                    if not rec_obj:
+                        continue
+                    rec = db.get(SessionRecord, sid)
+                    if not rec:
+                        continue
+                trends.append({
+                    "session_id": rec.session_id,
+                    "model": rec.model,
+                    "total_turns": rec.total_turns,
+                    "total_api_calls": rec.total_api_calls,
+                    "peak_context_tokens": rec.peak_context_tokens,
+                    "total_cache_read": rec.total_cache_read,
+                    "total_output_tokens": rec.total_output_tokens,
+                    "total_cost_usd": rec.total_cost_usd,
+                    "source_mtime": rec.source_mtime,
+                })
+
+        return {
+            "session_count": len(trends),
+            "total_cost": round(sum(t["total_cost_usd"] for t in trends), 2),
+            "total_cache_read": sum(t["total_cache_read"] for t in trends),
+            "total_api_calls": sum(t["total_api_calls"] for t in trends),
+            "sessions": trends,
+        }
 
     @app.get("/api/session/{session_id}/turns")
     def get_session_turns(session_id: str):
