@@ -290,57 +290,108 @@ html, body {
   min-width: 36px;
 }
 
-/* ===== BOTTOM TWO-COL ===== */
-.bottom-row {
+/* ===== BOTTOM THREE-COL ===== */
+.bottom-grid {
   display: grid;
-  grid-template-columns: 1fr 380px;
-  gap: 20px;
+  grid-template-columns: 280px 1fr 1fr;
+  gap: 16px;
+  margin-top: 20px;
 }
-
-.turn-details, .block-inspector {
+.bottom-card {
   background: var(--card);
-  border: 1px solid var(--border);
   border-radius: 12px;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
   box-shadow: var(--shadow);
-  overflow: hidden;
-}
-
-.panel-title {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-secondary);
-  padding: 14px 18px 10px;
-  border-bottom: 1px solid var(--border);
-}
-
-/* Turn details rows */
-.turn-blocks-list {
-  max-height: 400px;
+  max-height: 440px;
   overflow-y: auto;
 }
-
-.turn-block-row {
+.bottom-card-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+.bottom-card-title-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 18px;
-  border-bottom: 1px solid #f3f4f6;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.bottom-card-title-row .bottom-card-title { margin-bottom: 0; }
+.view-all-link {
+  font-size: 11px;
+  color: var(--accent);
   cursor: pointer;
-  transition: background 0.1s;
+  text-decoration: none;
+  font-weight: 500;
 }
+.view-all-link:hover { text-decoration: underline; }
 
-.turn-block-row:hover {
-  background: #f9fafb;
+/* Composition bars */
+.comp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
 }
+.comp-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.comp-name { color: var(--text-secondary); width: 85px; flex-shrink: 0; }
+.comp-bar-track { flex: 1; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+.comp-bar { height: 100%; border-radius: 3px; }
+.comp-val { font-family: var(--mono); font-size: 11px; color: var(--text); width: 65px; text-align: right; flex-shrink: 0; }
 
-.turn-block-row.selected {
-  background: rgba(99,102,241,0.06);
-  border-left: 3px solid var(--accent);
-  padding-left: 15px;
+/* Delta section (below composition) */
+.delta-section { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.delta-title { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 6px; text-align: center; }
+.delta-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 11px; }
+.delta-name { color: var(--text-secondary); }
+.delta-val { font-family: var(--mono); font-weight: 600; color: #d97706; }
+.delta-row.total { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 4px; }
+.delta-row.total .delta-name { color: var(--text); font-weight: 600; }
+
+/* Top growth rows */
+.growth-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 12px;
 }
+.growth-row:hover { background: rgba(99,102,241,0.04); margin: 0 -8px; padding: 6px 8px; border-radius: 4px; }
+.growth-turn { font-family: var(--mono); color: var(--accent); }
+.growth-delta { font-family: var(--mono); font-weight: 600; color: #d97706; }
 
+/* Message rows */
+.msg-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  padding-left: 8px;
+}
+.msg-row:hover { background: rgba(0,0,0,0.02); }
+.msg-role { font-family: var(--mono); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; width: 40px; flex-shrink: 0; }
+.msg-role.user { color: #3b82f6; }
+.msg-role.asst { color: #7c3aed; }
+.msg-role.tool { color: #10b981; }
+.msg-cat-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.msg-cat-label { font-size: 10px; color: var(--text-muted); width: 55px; flex-shrink: 0; }
+.msg-content-preview { flex: 1; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-size-bar { width: 60px; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; flex-shrink: 0; }
+.msg-size-fill { height: 100%; border-radius: 2px; }
+.msg-size-val { font-family: var(--mono); font-size: 10px; color: var(--text-muted); width: 40px; text-align: right; flex-shrink: 0; }
+
+/* Badge classes (still used in content modal) */
 .block-badge {
   font-family: var(--mono);
   font-size: 10px;
@@ -352,7 +403,6 @@ html, body {
   white-space: nowrap;
   flex-shrink: 0;
 }
-
 .badge-system { background: var(--system-bg); color: #7c3aed; }
 .badge-skill { background: rgba(236,72,153,0.1); color: #db2777; }
 .badge-tool_result { background: rgba(249,115,22,0.1); color: #ea580c; }
@@ -361,56 +411,51 @@ html, body {
 .badge-assistant { background: var(--working-bg); color: #059669; }
 .badge-default { background: #f3f4f6; color: #6b7280; }
 
-.block-label-text {
-  flex: 1;
-  font-size: 12.5px;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* Content modal (for View All) */
+.content-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-
-.block-tokens {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-/* Block inspector */
-.inspector-body {
-  padding: 16px 18px;
-  max-height: 400px;
+.content-modal {
+  background: var(--card);
+  border-radius: 12px;
+  width: 80vw;
+  max-width: 900px;
+  max-height: 80vh;
   overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+  padding: 24px;
 }
-
-.inspector-empty {
-  padding: 40px 18px;
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 13px;
+.content-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
 }
-
-.inspector-field {
-  margin-bottom: 12px;
-}
-
-.inspector-field-label {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-  margin-bottom: 2px;
+.content-modal-header h3 {
+  font-size: 14px;
   font-weight: 600;
-}
-
-.inspector-field-value {
-  font-family: var(--mono);
-  font-size: 12.5px;
   color: var(--text);
-  word-break: break-all;
 }
+.content-modal-close {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.content-modal-close:hover { border-color: var(--accent); color: var(--accent); }
 
 .inspector-content {
   background: var(--bg);
@@ -425,6 +470,13 @@ html, body {
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.empty-state {
+  padding: 30px 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 /* Loading */
@@ -451,9 +503,14 @@ html, body {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* Responsive */
+@media (max-width: 1100px) {
+  .bottom-grid { grid-template-columns: 280px 1fr; }
+  .bottom-card:nth-child(3) { grid-column: 1 / -1; }
+}
+
 @media (max-width: 900px) {
   .scorecards { grid-template-columns: repeat(2, 1fr); }
-  .bottom-row { grid-template-columns: 1fr; }
+  .bottom-grid { grid-template-columns: 1fr; }
   .churn-stats { grid-template-columns: repeat(2, 1fr); }
 }
 
@@ -568,19 +625,26 @@ html, body {
       <button class="scrubber-btn speed-btn" id="btn-speed" title="Speed">1x</button>
     </div>
 
-    <!-- Section 5: Turn Details + Block Inspector -->
-    <div class="bottom-row">
-      <div class="turn-details">
-        <div class="panel-title" id="turn-details-title">Turn Details</div>
-        <div class="turn-blocks-list" id="turn-blocks-list">
-          <div class="inspector-empty">Select a turn to see block details</div>
-        </div>
+    <!-- Section 5: Three-Column Bottom -->
+    <div class="bottom-grid">
+      <!-- Col 1: Composition -->
+      <div class="bottom-card" id="col-composition">
+        <div class="bottom-card-title">Composition (Cumulative)</div>
+        <div id="comp-bars"></div>
+        <div id="comp-delta"></div>
       </div>
-      <div class="block-inspector">
-        <div class="panel-title">Block Inspector</div>
-        <div id="inspector-body">
-          <div class="inspector-empty">Click a block to inspect</div>
+      <!-- Col 2: Top Growth Turns -->
+      <div class="bottom-card" id="col-growth">
+        <div class="bottom-card-title">Top Growth Turns</div>
+        <div id="growth-list"></div>
+      </div>
+      <!-- Col 3: Messages -->
+      <div class="bottom-card" id="col-messages">
+        <div class="bottom-card-title-row">
+          <div class="bottom-card-title" id="messages-title">Messages</div>
+          <a class="view-all-link" id="view-all-link">View All &rarr;</a>
         </div>
+        <div id="messages-list"></div>
       </div>
     </div>
 
@@ -613,7 +677,6 @@ html, body {
   let playTimer = null;
   let growthChart = null;
   let churnChart = null;
-  let selectedBlockIdx = -1;
   let callContentCache = {};  // cache fetched content by call index
 
   // Derived data (computed once)
@@ -1047,196 +1110,356 @@ html, body {
     churnChart.update('none');
   }
 
-  // ===== TURN DETAILS =====
-  function renderTurnDetails() {
+  // ===== COMPOSITION (COL 1) =====
+  function renderComposition() {
     const c = churn[currentTurn];
-    const titleEl = document.getElementById('turn-details-title');
-    const listEl = document.getElementById('turn-blocks-list');
+    const barsEl = document.getElementById('comp-bars');
+    const deltaEl = document.getElementById('comp-delta');
 
     if (!c) {
-      titleEl.textContent = 'Turn Details';
-      listEl.innerHTML = '<div class="inspector-empty">No data for this turn</div>';
+      barsEl.innerHTML = '<div class="empty-state">No data</div>';
+      deltaEl.innerHTML = '';
       return;
     }
 
     const resident = residentData[currentTurn];
-    titleEl.textContent = 'Turn ' + c.turn + ' \u2014 ' + fmtExact(resident) + ' tok resident';
-
-    // Get blocks: pinned blocks + working set block for this turn
-    const rows = [];
-
-    // Always show pinned prefix blocks
     const pinned = blocks.filter(b => b.cached === true);
+
+    // Categorize pinned blocks
+    let systemTokens = 0;
+    let skillTokens = 0;
     for (const b of pinned) {
-      rows.push(b);
+      if (b.type === 'system') systemTokens += b.tokens;
+      else skillTokens += b.tokens;
     }
 
-    // Working set block for this turn
+    // Working set = resident - pinned prefix
+    const workingSet = Math.max(0, resident - pinnedTokens);
+
+    // Parse working set block to split conversation vs tool I/O
+    let convTokens = 0;
+    let toolTokens = 0;
+    let convCount = 0;
+    let toolCount = 0;
     const wsBlock = blocks.find(b => b.enter === c.turn && b.exit !== null && b.exit !== undefined);
     if (wsBlock) {
-      // Parse the content field to extract individual tool blocks
       const content = wsBlock.content || '';
       const lines = content.split('\n').filter(l => l.trim());
-
-      // First line is the summary, rest are individual tool calls
-      const toolLines = lines.slice(1);
-      if (toolLines.length > 0) {
-        for (const line of toolLines) {
-          // Parse: "tool_result: Bash -> git (194 tok)" or "user: user prompt (28 tok)"
-          const match = line.match(/^(\w+):\s+(.+?)\s*\(([0-9,]+)\s*tok\)\s*$/);
-          if (match) {
-            const type = match[1];
-            const label = match[2];
-            const tokens = parseInt(match[3].replace(/,/g, ''), 10);
-            rows.push({
-              id: wsBlock.id + '_' + rows.length,
-              type: type,
-              label: label,
-              tokens: tokens,
-              enter: c.turn,
-              exit: c.turn + 1,
-              cached: false,
-              ref: true,
-              content: line,
-              _synthetic: true,
-            });
-          } else if (line.trim()) {
-            // Unparseable line, show as-is
-            rows.push({
-              id: wsBlock.id + '_' + rows.length,
-              type: 'default',
-              label: line.trim(),
-              tokens: 0,
-              enter: c.turn,
-              exit: c.turn + 1,
-              cached: false,
-              ref: true,
-              content: line,
-              _synthetic: true,
-            });
+      for (const line of lines.slice(1)) {
+        const match = line.match(/^(\w+):\s+(.+?)\s*\(([0-9,]+)\s*tok\)\s*$/);
+        if (match) {
+          const type = match[1];
+          const tokens = parseInt(match[3].replace(/,/g, ''), 10);
+          if (type === 'user' || type === 'assistant' || type === 'assistant_text' || type === 'user_text' || type === 'thinking') {
+            convTokens += tokens;
+            convCount++;
+          } else {
+            toolTokens += tokens;
+            toolCount++;
           }
         }
-      } else {
-        // No parsed tool lines; show the whole block
-        rows.push(wsBlock);
       }
     }
 
-    if (rows.length === 0) {
-      listEl.innerHTML = '<div class="inspector-empty">No blocks at this turn</div>';
+    // If no parse, attribute working set proportionally
+    if (convTokens === 0 && toolTokens === 0 && workingSet > 0) {
+      convTokens = workingSet;
+    }
+
+    const buffer = Math.max(0, BUDGET - resident);
+    const maxVal = BUDGET;
+
+    const categories = [
+      { name: 'System', tokens: systemTokens, color: '#f97316' },
+      { name: 'CLAUDE.md', tokens: skillTokens, color: '#ec4899' },
+      { name: 'Conversation', tokens: convTokens, color: '#3b82f6', count: convCount },
+      { name: 'Tool I/O', tokens: toolTokens, color: '#10b981', count: toolCount },
+      { name: 'Buffer', tokens: buffer, color: '#d1d5db' },
+    ];
+
+    let html = '';
+    for (const cat of categories) {
+      const pct = maxVal > 0 ? Math.max(0, Math.min(100, (cat.tokens / maxVal) * 100)) : 0;
+      const countStr = cat.count !== undefined ? ' (' + cat.count + ' msgs)' : '';
+      html += '<div class="comp-row">' +
+        '<div class="comp-dot" style="background:' + cat.color + '"></div>' +
+        '<div class="comp-name">' + cat.name + '</div>' +
+        '<div class="comp-bar-track"><div class="comp-bar" style="width:' + pct.toFixed(1) + '%;background:' + cat.color + '"></div></div>' +
+        '<div class="comp-val">' + fmt(cat.tokens) + countStr + '</div>' +
+        '</div>';
+    }
+    barsEl.innerHTML = html;
+
+    // Delta section (this turn)
+    if (currentTurn > 0) {
+      const prevResident = residentData[currentTurn - 1];
+      const delta = resident - prevResident;
+
+      // Try to split delta into conv/tool
+      let prevConv = 0, prevTool = 0;
+      const prevC = churn[currentTurn - 1];
+      const prevWs = blocks.find(b => b.enter === prevC.turn && b.exit !== null && b.exit !== undefined);
+      if (prevWs) {
+        const prevContent = prevWs.content || '';
+        const prevLines = prevContent.split('\n').filter(l => l.trim());
+        for (const line of prevLines.slice(1)) {
+          const match = line.match(/^(\w+):\s+(.+?)\s*\(([0-9,]+)\s*tok\)\s*$/);
+          if (match) {
+            const type = match[1];
+            const tokens = parseInt(match[3].replace(/,/g, ''), 10);
+            if (type === 'user' || type === 'assistant' || type === 'assistant_text' || type === 'user_text' || type === 'thinking') {
+              prevConv += tokens;
+            } else {
+              prevTool += tokens;
+            }
+          }
+        }
+      }
+
+      const deltaConv = convTokens - prevConv;
+      const deltaTool = toolTokens - prevTool;
+
+      const fmtDelta = (v) => (v >= 0 ? '+' : '') + fmt(v);
+
+      deltaEl.innerHTML =
+        '<div class="delta-section">' +
+          '<div class="delta-title">This Turn</div>' +
+          '<div class="delta-row"><span class="delta-name">Conversation</span><span class="delta-val">' + fmtDelta(deltaConv) + '</span></div>' +
+          '<div class="delta-row"><span class="delta-name">Tool I/O</span><span class="delta-val">' + fmtDelta(deltaTool) + '</span></div>' +
+          '<div class="delta-row total"><span class="delta-name">Total</span><span class="delta-val">' + fmtDelta(delta) + '</span></div>' +
+        '</div>';
+    } else {
+      deltaEl.innerHTML = '';
+    }
+  }
+
+  // ===== TOP GROWTH TURNS (COL 2) =====
+  let topGrowthData = []; // pre-computed
+
+  function computeTopGrowth() {
+    topGrowthData = [];
+    for (let i = 1; i < churn.length; i++) {
+      const growth = residentData[i] - residentData[i - 1];
+      topGrowthData.push({ turn: churn[i].turn, index: i, growth: growth });
+    }
+    topGrowthData.sort((a, b) => b.growth - a.growth);
+    topGrowthData = topGrowthData.slice(0, 15);
+  }
+
+  function renderTopGrowth() {
+    const el = document.getElementById('growth-list');
+    if (topGrowthData.length === 0) {
+      el.innerHTML = '<div class="empty-state">No growth data</div>';
       return;
     }
 
     let html = '';
-    for (let i = 0; i < rows.length; i++) {
-      const b = rows[i];
-      const badgeCls = getBadgeClass(b.type);
-      const sel = i === selectedBlockIdx ? ' selected' : '';
-      html += '<div class="turn-block-row' + sel + '" data-idx="' + i + '">' +
-        '<span class="block-badge ' + badgeCls + '">' + escapeHtml(b.type) + '</span>' +
-        '<span class="block-label-text">' + escapeHtml(b.label) + '</span>' +
-        '<span class="block-tokens">' + (b.tokens > 0 ? fmtExact(b.tokens) + ' tok' : '') + '</span>' +
+    for (const item of topGrowthData) {
+      const sign = item.growth >= 0 ? '+' : '';
+      const color = item.growth > 0 ? '#d97706' : '#10b981';
+      const active = item.index === currentTurn ? ' style="background:rgba(99,102,241,0.06);margin:0 -8px;padding:6px 8px;border-radius:4px;"' : '';
+      html += '<div class="growth-row" data-turn="' + item.index + '"' + active + '>' +
+        '<span class="growth-turn">Turn ' + item.turn + '</span>' +
+        '<span class="growth-delta" style="color:' + color + '">' + sign + fmt(item.growth) + '</span>' +
         '</div>';
     }
+    el.innerHTML = html;
 
-    listEl.innerHTML = html;
-
-    // Store rows reference for click handler
-    listEl._rows = rows;
-
-    // Click handler
-    listEl.querySelectorAll('.turn-block-row').forEach(el => {
-      el.addEventListener('click', () => {
-        const idx = parseInt(el.dataset.idx, 10);
-        selectedBlockIdx = idx;
-        // Update selection styling
-        listEl.querySelectorAll('.turn-block-row').forEach(r => r.classList.remove('selected'));
-        el.classList.add('selected');
-        renderInspector(rows[idx]);
+    // Click handlers
+    el.querySelectorAll('.growth-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const t = parseInt(row.dataset.turn, 10);
+        goToTurn(t);
       });
     });
   }
 
-  // ===== BLOCK INSPECTOR =====
-  function renderInspector(block) {
-    const el = document.getElementById('inspector-body');
-    if (!block) {
-      el.innerHTML = '<div class="inspector-empty">Click a block to inspect</div>';
+  // ===== MESSAGES (COL 3) =====
+  function renderMessages() {
+    const c = churn[currentTurn];
+    const titleEl = document.getElementById('messages-title');
+    const listEl = document.getElementById('messages-list');
+    const viewAllLink = document.getElementById('view-all-link');
+
+    if (!c) {
+      titleEl.textContent = 'Messages';
+      listEl.innerHTML = '<div class="empty-state">No messages</div>';
       return;
     }
 
-    // Show metadata immediately, then fetch real content
-    let html = '<div class="inspector-body">';
+    titleEl.textContent = 'Messages \u2014 Turn ' + c.turn;
 
-    html += '<div class="inspector-field">' +
-      '<div class="inspector-field-label">Type</div>' +
-      '<div class="inspector-field-value"><span class="block-badge ' + getBadgeClass(block.type) + '">' + escapeHtml(block.type) + '</span> ' + escapeHtml(block.label || '') + '</div></div>';
+    // Show placeholder then fetch
+    listEl.innerHTML = '<div class="empty-state" style="padding:16px">Loading messages...</div>';
 
-    html += '<div class="inspector-field">' +
-      '<div class="inspector-field-label">Tokens</div>' +
-      '<div class="inspector-field-value">' + fmtExact(block.tokens) + '</div></div>';
+    // Wire View All
+    viewAllLink.onclick = () => openContentModal(currentTurn);
 
-    html += '<div class="inspector-field">' +
-      '<div class="inspector-field-label">API Call</div>' +
-      '<div class="inspector-field-value">' + block.enter + (block.cached ? ' (pinned, always resident)' : '') + '</div></div>';
-
-    // Content area — fetch real content from API
-    html += '<div class="inspector-field">' +
-      '<div class="inspector-field-label">Content</div>' +
-      '<div class="inspector-content" id="inspector-content-area">Loading...</div></div>';
-
-    html += '</div>';
-    el.innerHTML = html;
-
-    // Fetch real content from the server
-    loadInspectorContent(block);
+    // Fetch content for this turn
+    fetchCallContent(currentTurn).then(data => {
+      if (!data || !data.messages || data.messages.length === 0) {
+        // Fall back to block-based summary
+        renderMessagesFallback(c, listEl);
+        return;
+      }
+      renderMessagesFromAPI(data, listEl);
+    });
   }
 
-  async function loadInspectorContent(block) {
-    const contentEl = document.getElementById('inspector-content-area');
-    if (!contentEl) return;
+  function renderMessagesFromAPI(data, listEl) {
+    const msgs = data.messages;
+    const maxSize = Math.max(1, ...msgs.map(m => m.size_chars || 0));
 
-    // For pinned blocks, show the summary
-    if (block.cached) {
-      contentEl.textContent = block.content || '(pinned prefix block — ' + fmtExact(block.tokens) + ' tokens)';
-      return;
-    }
-
-    // Fetch real content from the API
-    const callIndex = block.enter;
-    const data = await fetchCallContent(callIndex);
-
-    if (!data || !data.messages || data.messages.length === 0) {
-      contentEl.textContent = block.content || '(no content available)';
-      return;
-    }
-
-    // Render all messages for this API call
     let html = '';
-    for (const msg of data.messages) {
+    for (let i = 0; i < msgs.length; i++) {
+      const msg = msgs[i];
       const type = msg.type || msg.role || 'unknown';
-      const badgeCls = getBadgeClass(type);
-      const toolInfo = msg.tool_name ? ' <b>' + escapeHtml(msg.tool_name) + '</b>' + (msg.resource ? ' → ' + escapeHtml(msg.resource) : '') : '';
-      const sizeInfo = msg.size_chars ? ' <span style="color:var(--text-muted)">(' + fmt(Math.round(msg.size_chars / 4)) + ' tok)</span>' : '';
-      const truncNote = msg.is_truncated ? ' <span style="color:var(--danger)">[truncated]</span>' : '';
-      const errorNote = msg.is_error ? ' <span style="color:var(--danger)">[ERROR]</span>' : '';
+      const roleClass = (type === 'user' || type === 'user_text') ? 'user' :
+                         (type === 'assistant' || type === 'assistant_text' || type === 'thinking') ? 'asst' : 'tool';
+      const roleLabel = roleClass === 'user' ? 'USER' : roleClass === 'asst' ? 'ASSIS' : 'TOOL';
+      const isConv = (type === 'user' || type === 'assistant' || type === 'user_text' || type === 'assistant_text' || type === 'thinking');
+      const catColor = isConv ? '#3b82f6' : '#10b981';
+      const catLabel = isConv ? 'Conv' : 'Tool';
+      const preview = (msg.content || '').replace(/\s+/g, ' ').substring(0, 80);
+      const sizeChars = msg.size_chars || 0;
+      const sizeTok = Math.round(sizeChars / 4);
+      const barPct = maxSize > 0 ? Math.max(2, (sizeChars / maxSize) * 100) : 2;
+      const barColor = getBadgeColor(type);
+      const borderColor = getBadgeColor(type);
 
-      html += '<div style="margin-bottom:12px;border-left:3px solid ' + getBadgeColor(type) + ';padding-left:10px;">';
-      html += '<div style="margin-bottom:4px;"><span class="block-badge ' + badgeCls + '">' + escapeHtml(type) + '</span>' + toolInfo + sizeInfo + truncNote + errorNote + '</div>';
-      html += '<pre style="margin:0;font-size:11px;line-height:1.5;color:var(--text-secondary);white-space:pre-wrap;word-break:break-word;max-height:300px;overflow-y:auto;background:#f9fafb;border:1px solid var(--border);border-radius:6px;padding:8px;">' + escapeHtml(msg.content || '') + '</pre>';
-      html += '</div>';
+      html += '<div class="msg-row" data-idx="' + i + '" style="border-left-color:' + borderColor + '">' +
+        '<span class="msg-role ' + roleClass + '">' + roleLabel + '</span>' +
+        '<span class="msg-cat-dot" style="background:' + catColor + '"></span>' +
+        '<span class="msg-cat-label">' + catLabel + '</span>' +
+        '<span class="msg-content-preview">' + escapeHtml(preview) + '</span>' +
+        '<span class="msg-size-bar"><span class="msg-size-fill" style="width:' + barPct.toFixed(0) + '%;background:' + barColor + '"></span></span>' +
+        '<span class="msg-size-val">' + fmt(sizeTok) + '</span>' +
+        '</div>';
+    }
+    listEl.innerHTML = html;
+
+    // Click handler: show full content in modal
+    listEl.querySelectorAll('.msg-row').forEach(row => {
+      row.addEventListener('click', () => {
+        openContentModal(currentTurn);
+      });
+    });
+  }
+
+  function renderMessagesFallback(c, listEl) {
+    // Build from blocks data when API is unavailable
+    const wsBlock = blocks.find(b => b.enter === c.turn && b.exit !== null && b.exit !== undefined);
+    if (!wsBlock) {
+      listEl.innerHTML = '<div class="empty-state">No messages for this turn</div>';
+      return;
     }
 
-    // Usage info
-    if (data.usage && (data.usage.input_tokens || data.usage.cache_read)) {
-      const u = data.usage;
-      const total = (u.input_tokens || 0) + (u.cache_read || 0) + (u.cache_creation || 0);
-      html += '<div style="margin-top:8px;padding:8px 10px;background:var(--churn-bg);border-radius:6px;font-size:11px;font-family:var(--mono);">';
-      html += 'API Usage: ' + fmt(total) + ' input (' + fmt(u.cache_read || 0) + ' cache_read + ' + fmt(u.cache_creation || 0) + ' cache_create + ' + (u.input_tokens || 0) + ' new) → ' + fmt(u.output_tokens || 0) + ' output';
-      html += '</div>';
+    const content = wsBlock.content || '';
+    const lines = content.split('\n').filter(l => l.trim()).slice(1);
+    if (lines.length === 0) {
+      listEl.innerHTML = '<div class="empty-state">No parsed messages</div>';
+      return;
     }
 
-    contentEl.innerHTML = html;
+    const maxTok = Math.max(1, ...lines.map(l => {
+      const m = l.match(/\(([0-9,]+)\s*tok\)/);
+      return m ? parseInt(m[1].replace(/,/g, ''), 10) : 0;
+    }));
+
+    let html = '';
+    for (const line of lines) {
+      const match = line.match(/^(\w+):\s+(.+?)\s*\(([0-9,]+)\s*tok\)\s*$/);
+      if (!match) continue;
+      const type = match[1];
+      const label = match[2];
+      const tokens = parseInt(match[3].replace(/,/g, ''), 10);
+      const roleClass = (type === 'user' || type === 'user_text') ? 'user' :
+                         (type === 'assistant' || type === 'assistant_text' || type === 'thinking') ? 'asst' : 'tool';
+      const roleLabel = roleClass === 'user' ? 'USER' : roleClass === 'asst' ? 'ASSIS' : 'TOOL';
+      const isConv = roleClass !== 'tool';
+      const catColor = isConv ? '#3b82f6' : '#10b981';
+      const catLabel = isConv ? 'Conv' : 'Tool';
+      const barPct = Math.max(2, (tokens / maxTok) * 100);
+      const barColor = getBadgeColor(type);
+
+      html += '<div class="msg-row" style="border-left-color:' + barColor + '">' +
+        '<span class="msg-role ' + roleClass + '">' + roleLabel + '</span>' +
+        '<span class="msg-cat-dot" style="background:' + catColor + '"></span>' +
+        '<span class="msg-cat-label">' + catLabel + '</span>' +
+        '<span class="msg-content-preview">' + escapeHtml(label) + '</span>' +
+        '<span class="msg-size-bar"><span class="msg-size-fill" style="width:' + barPct.toFixed(0) + '%;background:' + barColor + '"></span></span>' +
+        '<span class="msg-size-val">' + fmt(tokens) + '</span>' +
+        '</div>';
+    }
+    listEl.innerHTML = html || '<div class="empty-state">No parsed messages</div>';
+  }
+
+  // ===== CONTENT MODAL (View All) =====
+  function openContentModal(turnIdx) {
+    // Remove existing modal if any
+    const existing = document.querySelector('.content-modal-overlay');
+    if (existing) existing.remove();
+
+    const c = churn[turnIdx];
+    if (!c) return;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'content-modal-overlay';
+    overlay.innerHTML =
+      '<div class="content-modal">' +
+        '<div class="content-modal-header">' +
+          '<h3>Turn ' + c.turn + ' — Full Content</h3>' +
+          '<button class="content-modal-close" id="modal-close-btn">&times;</button>' +
+        '</div>' +
+        '<div id="modal-content-body" style="font-family:var(--mono);font-size:11px;color:var(--text-secondary);">Loading...</div>' +
+      '</div>';
+
+    document.body.appendChild(overlay);
+
+    // Close handlers
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+    document.getElementById('modal-close-btn').addEventListener('click', () => overlay.remove());
+    const escHandler = (e) => { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', escHandler); } };
+    document.addEventListener('keydown', escHandler);
+
+    // Fetch and render full content
+    fetchCallContent(turnIdx).then(data => {
+      const body = document.getElementById('modal-content-body');
+      if (!body) return;
+
+      if (!data || !data.messages || data.messages.length === 0) {
+        body.textContent = '(no content available for this turn)';
+        return;
+      }
+
+      let html = '';
+      for (const msg of data.messages) {
+        const type = msg.type || msg.role || 'unknown';
+        const badgeCls = getBadgeClass(type);
+        const toolInfo = msg.tool_name ? ' <b>' + escapeHtml(msg.tool_name) + '</b>' + (msg.resource ? ' \u2192 ' + escapeHtml(msg.resource) : '') : '';
+        const sizeInfo = msg.size_chars ? ' <span style="color:var(--text-muted)">(' + fmt(Math.round(msg.size_chars / 4)) + ' tok)</span>' : '';
+        const truncNote = msg.is_truncated ? ' <span style="color:var(--danger)">[truncated]</span>' : '';
+        const errorNote = msg.is_error ? ' <span style="color:var(--danger)">[ERROR]</span>' : '';
+
+        html += '<div style="margin-bottom:12px;border-left:3px solid ' + getBadgeColor(type) + ';padding-left:10px;">';
+        html += '<div style="margin-bottom:4px;"><span class="block-badge ' + badgeCls + '">' + escapeHtml(type) + '</span>' + toolInfo + sizeInfo + truncNote + errorNote + '</div>';
+        html += '<pre style="margin:0;font-size:11px;line-height:1.5;color:var(--text-secondary);white-space:pre-wrap;word-break:break-word;max-height:300px;overflow-y:auto;background:#f9fafb;border:1px solid var(--border);border-radius:6px;padding:8px;">' + escapeHtml(msg.content || '') + '</pre>';
+        html += '</div>';
+      }
+
+      // Usage info
+      if (data.usage && (data.usage.input_tokens || data.usage.cache_read)) {
+        const u = data.usage;
+        const total = (u.input_tokens || 0) + (u.cache_read || 0) + (u.cache_creation || 0);
+        html += '<div style="margin-top:8px;padding:8px 10px;background:var(--churn-bg);border-radius:6px;font-size:11px;font-family:var(--mono);">';
+        html += 'API Usage: ' + fmt(total) + ' input (' + fmt(u.cache_read || 0) + ' cache_read + ' + fmt(u.cache_creation || 0) + ' cache_create + ' + (u.input_tokens || 0) + ' new) \u2192 ' + fmt(u.output_tokens || 0) + ' output';
+        html += '</div>';
+      }
+
+      body.innerHTML = html;
+    });
   }
 
   function getBadgeColor(type) {
@@ -1246,6 +1469,13 @@ html, body {
       tool_use: '#f59e0b', tool_call: '#f59e0b', tool_result: '#ef4444',
     };
     return colors[type] || '#6b7280';
+  }
+
+  // ===== RENDER ALL BOTTOM COLUMNS =====
+  function renderTurnDetails() {
+    renderComposition();
+    renderTopGrowth();
+    renderMessages();
   }
 
   // ===== SCRUBBER =====
@@ -1259,23 +1489,7 @@ html, body {
     document.getElementById('scrubber-range').value = currentTurn;
     updateScrubberLabel();
     updateTurnMarker();
-    selectedBlockIdx = 0;
     renderTurnDetails();
-    // Auto-select first non-pinned block and load its content
-    const listEl = document.getElementById('turn-blocks-list');
-    if (listEl._rows && listEl._rows.length > 0) {
-      // Find first non-pinned block
-      const firstDynamic = listEl._rows.findIndex(b => !b.cached);
-      const idx = firstDynamic >= 0 ? firstDynamic : 0;
-      selectedBlockIdx = idx;
-      renderInspector(listEl._rows[idx]);
-      // Highlight it
-      const rowEls = listEl.querySelectorAll('.turn-block-row');
-      rowEls.forEach(r => r.classList.remove('selected'));
-      if (rowEls[idx]) rowEls[idx].classList.add('selected');
-    } else {
-      renderInspector(null);
-    }
   }
 
   function togglePlay() {
@@ -1375,6 +1589,7 @@ html, body {
     if (!ok) return;
 
     computeDerived();
+    computeTopGrowth();
 
     // Hide loading, show content
     document.getElementById('loading').style.display = 'none';
