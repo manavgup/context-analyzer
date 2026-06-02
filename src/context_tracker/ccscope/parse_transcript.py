@@ -592,3 +592,113 @@ def _mark_compaction(blocks: list[dict[str, Any]], compaction_turn: int) -> None
         if b.get("exit") is not None:
             continue  # Already evicted
         b["exit"] = compaction_turn
+
+
+# ---------------------------------------------------------------------------
+# Conversation turn mapping
+# ---------------------------------------------------------------------------
+
+
+def _has_user_text_block(content: str | list) -> bool:
+    """Check if user message content contains a text block (not just tool_result)."""
+    if isinstance(content, str):
+        return bool(content.strip())
+    if isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text", "")
+                if text.strip():
+                    return True
+    return False
+
+
+def _extract_user_prompt(content: str | list) -> str:
+    """Extract the user prompt text from message content."""
+    if isinstance(content, str):
+        return content[:200]
+    if isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text", "")
+                if text.strip():
+                    return text[:200]
+    return ""
+
+
+def build_turn_map(transcript_path: Path) -> list[dict[str, Any]]:
+    """Map conversation turns to API call ranges.
+
+    A conversation turn = one user text prompt + all API calls until the
+    next user text prompt.
+
+    Returns list of:
+    {
+        "conv_turn": 1,           # Conversation turn number (1-based)
+        "first_call": 0,          # First API call index in this turn
+        "last_call": 5,           # Last API call index in this turn
+        "user_prompt": "Fix ...", # User prompt text (truncated)
+    }
+    """
+    entries = _load_entries(transcript_path)
+    if not entries:
+        return []
+
+    # Walk entries the same way as parse_transcript_to_blocks to track
+    # api_call_index, but also detect user text prompts.
+    api_call_index = 0
+    # Each item: (api_call_index_of_first_call_after_prompt, user_prompt_text)
+    turn_boundaries: list[tuple[int, str]] = []
+
+    # We need to detect which api_call_index a user text prompt precedes.
+    # User entries are buffered until the next completed assistant entry.
+    pending_has_user_text = False
+    pending_user_prompt = ""
+
+    for entry in entries:
+        etype = entry.get("type", "")
+
+        if etype in _SKIP_TYPES:
+            continue
+
+        if etype == "user":
+            msg = entry.get("message", {})
+            content = msg.get("content", "")
+            if _has_user_text_block(content):
+                pending_has_user_text = True
+                pending_user_prompt = _extract_user_prompt(content)
+            continue
+
+        if etype == "assistant":
+            msg = entry.get("message", {})
+            if not _is_completed_assistant(msg):
+                continue
+
+            # This is a completed API call at api_call_index
+            if pending_has_user_text:
+                turn_boundaries.append((api_call_index, pending_user_prompt))
+                pending_has_user_text = False
+                pending_user_prompt = ""
+
+            api_call_index += 1
+
+    total_api_calls = api_call_index
+
+    if not turn_boundaries:
+        return []
+
+    # Build turn_map from boundaries
+    turn_map: list[dict[str, Any]] = []
+    for i, (first_call, prompt) in enumerate(turn_boundaries):
+        conv_turn = i + 1  # 1-based
+        if i + 1 < len(turn_boundaries):
+            last_call = turn_boundaries[i + 1][0] - 1
+        else:
+            last_call = total_api_calls - 1
+        turn_map.append({
+            "conv_turn": conv_turn,
+            "first_call": first_call,
+            "last_call": last_call,
+            "user_prompt": prompt,
+        })
+
+    return turn_map

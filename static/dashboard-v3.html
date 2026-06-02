@@ -275,11 +275,11 @@ html, body {
 
 .scrubber-label {
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text);
   white-space: nowrap;
-  min-width: 120px;
+  min-width: 260px;
   text-align: center;
 }
 
@@ -669,6 +669,7 @@ html, body {
   let blocks = [];
   let churn = [];
   let meta = {};  // {session_id, model} from meta.json
+  let turnMap = [];  // conversation turn map
   let pinnedTokens = 0;
   let currentTurn = 0;
   let maxTurn = 0;
@@ -678,6 +679,7 @@ html, body {
   let growthChart = null;
   let churnChart = null;
   let callContentCache = {};  // cache fetched content by call index
+  let convTurnContentCache = {};  // cache fetched content by conv turn
 
   // Derived data (computed once)
   let labels = [];
@@ -726,10 +728,11 @@ html, body {
 
   // ===== DATA LOADING =====
   async function loadData() {
-    const [blocksResp, churnResp, metaResp] = await Promise.all([
+    const [blocksResp, churnResp, metaResp, turnMapResp] = await Promise.all([
       fetch('./blocks.json'),
       fetch('./churn.json'),
       fetch('./meta.json').catch(() => ({ ok: false })),
+      fetch('./turn_map.json').catch(() => ({ ok: false })),
     ]);
 
     if (!blocksResp.ok || !churnResp.ok) {
@@ -742,6 +745,9 @@ html, body {
     churn = await churnResp.json();
     if (metaResp.ok) {
       try { meta = await metaResp.json(); } catch(e) { meta = {}; }
+    }
+    if (turnMapResp.ok) {
+      try { turnMap = await turnMapResp.json(); } catch(e) { turnMap = []; }
     }
     return true;
   }
@@ -757,6 +763,30 @@ html, body {
       callContentCache[callIndex] = data;
       return data;
     } catch(e) { return null; }
+  }
+
+  // Fetch full content for a conversation turn (all API calls in the turn)
+  async function fetchConvTurnContent(convTurn) {
+    if (convTurnContentCache[convTurn]) return convTurnContentCache[convTurn];
+    if (!meta.session_id) return null;
+    try {
+      const resp = await fetch('/api/session/' + encodeURIComponent(meta.session_id) + '/conv_turn/' + convTurn + '/content');
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      convTurnContentCache[convTurn] = data;
+      return data;
+    } catch(e) { return null; }
+  }
+
+  // Find conversation turn for a given API call index
+  function getConvTurnForCall(callIndex) {
+    if (!turnMap || turnMap.length === 0) return null;
+    for (let i = turnMap.length - 1; i >= 0; i--) {
+      if (callIndex >= turnMap[i].first_call) {
+        return turnMap[i];
+      }
+    }
+    return null;
   }
 
   // ===== DERIVED COMPUTATION =====
@@ -813,8 +843,8 @@ html, body {
     document.getElementById('sc-churn-sub').textContent = fmtExact(ratio) + 'x ratio';
 
     document.getElementById('sc-calls').textContent = churn.length.toString();
-    // Compute session duration hint from call count
-    document.getElementById('sc-calls-sub').textContent = churn.length + ' API calls';
+    const convTurnInfo = turnMap.length > 0 ? turnMap.length + ' conv turns' : churn.length + ' API calls';
+    document.getElementById('sc-calls-sub').textContent = convTurnInfo;
 
     // Cost
     const costInput = totalInput * PRICING.input;
@@ -1238,10 +1268,31 @@ html, body {
 
   function computeTopGrowth() {
     topGrowthData = [];
-    for (let i = 1; i < churn.length; i++) {
-      const growth = residentData[i] - residentData[i - 1];
-      topGrowthData.push({ turn: churn[i].turn, index: i, growth: growth });
+
+    if (turnMap && turnMap.length > 0) {
+      // Group growth by conversation turn
+      for (const ct of turnMap) {
+        const firstCall = ct.first_call;
+        const lastCall = ct.last_call;
+        // Growth = resident at end of turn minus resident before the turn started
+        const endResident = residentData[lastCall] || 0;
+        const prevResident = firstCall > 0 ? residentData[firstCall - 1] : 0;
+        const growth = endResident - prevResident;
+        topGrowthData.push({
+          convTurn: ct.conv_turn,
+          firstCall: firstCall,
+          growth: growth,
+          prompt: ct.user_prompt || '',
+        });
+      }
+    } else {
+      // Fallback: per API call
+      for (let i = 1; i < churn.length; i++) {
+        const growth = residentData[i] - residentData[i - 1];
+        topGrowthData.push({ convTurn: null, firstCall: i, growth: growth });
+      }
     }
+
     topGrowthData.sort((a, b) => b.growth - a.growth);
     topGrowthData = topGrowthData.slice(0, 15);
   }
@@ -1253,19 +1304,28 @@ html, body {
       return;
     }
 
+    // Find which conv turn the current API call belongs to
+    const currentCt = getConvTurnForCall(currentTurn);
+    const currentConvTurn = currentCt ? currentCt.conv_turn : null;
+
     let html = '';
     for (const item of topGrowthData) {
       const sign = item.growth >= 0 ? '+' : '';
       const color = item.growth > 0 ? '#d97706' : '#10b981';
-      const active = item.index === currentTurn ? ' style="background:rgba(99,102,241,0.06);margin:0 -8px;padding:6px 8px;border-radius:4px;"' : '';
-      html += '<div class="growth-row" data-turn="' + item.index + '"' + active + '>' +
-        '<span class="growth-turn">Turn ' + item.turn + '</span>' +
+      const isActive = item.convTurn !== null
+        ? item.convTurn === currentConvTurn
+        : item.firstCall === currentTurn;
+      const active = isActive ? ' style="background:rgba(99,102,241,0.06);margin:0 -8px;padding:6px 8px;border-radius:4px;"' : '';
+      const label = item.convTurn !== null ? 'Turn ' + item.convTurn : 'Call ' + item.firstCall;
+      const promptHint = item.prompt ? ' title="' + escapeHtml(item.prompt) + '"' : '';
+      html += '<div class="growth-row" data-turn="' + item.firstCall + '"' + active + promptHint + '>' +
+        '<span class="growth-turn">' + label + '</span>' +
         '<span class="growth-delta" style="color:' + color + '">' + sign + fmt(item.growth) + '</span>' +
         '</div>';
     }
     el.innerHTML = html;
 
-    // Click handlers
+    // Click handlers: navigate to the first API call of that turn
     el.querySelectorAll('.growth-row').forEach(row => {
       row.addEventListener('click', () => {
         const t = parseInt(row.dataset.turn, 10);
@@ -1287,26 +1347,38 @@ html, body {
       return;
     }
 
-    titleEl.textContent = 'Messages \u2014 Turn ' + c.turn;
+    const ct = getConvTurnForCall(currentTurn);
 
-    // Show placeholder then fetch
-    listEl.innerHTML = '<div class="empty-state" style="padding:16px">Loading messages...</div>';
+    if (ct) {
+      // Use conversation turn grouping
+      titleEl.textContent = 'Messages \u2014 Turn ' + ct.conv_turn;
+      listEl.innerHTML = '<div class="empty-state" style="padding:16px">Loading messages...</div>';
+      viewAllLink.onclick = () => openConvTurnModal(ct.conv_turn);
 
-    // Wire View All
-    viewAllLink.onclick = () => openContentModal(currentTurn);
+      fetchConvTurnContent(ct.conv_turn).then(data => {
+        if (!data || !data.messages || data.messages.length === 0) {
+          renderMessagesFallback(c, listEl);
+          return;
+        }
+        renderMessagesFromAPI(data, listEl, ct.conv_turn);
+      });
+    } else {
+      // Fallback: single API call (no turn map)
+      titleEl.textContent = 'Messages \u2014 Call ' + c.turn;
+      listEl.innerHTML = '<div class="empty-state" style="padding:16px">Loading messages...</div>';
+      viewAllLink.onclick = () => openContentModal(currentTurn);
 
-    // Fetch content for this turn
-    fetchCallContent(currentTurn).then(data => {
-      if (!data || !data.messages || data.messages.length === 0) {
-        // Fall back to block-based summary
-        renderMessagesFallback(c, listEl);
-        return;
-      }
-      renderMessagesFromAPI(data, listEl);
-    });
+      fetchCallContent(currentTurn).then(data => {
+        if (!data || !data.messages || data.messages.length === 0) {
+          renderMessagesFallback(c, listEl);
+          return;
+        }
+        renderMessagesFromAPI(data, listEl);
+      });
+    }
   }
 
-  function renderMessagesFromAPI(data, listEl) {
+  function renderMessagesFromAPI(data, listEl, convTurn) {
     const msgs = data.messages;
     const maxSize = Math.max(1, ...msgs.map(m => m.size_chars || 0));
 
@@ -1341,7 +1413,11 @@ html, body {
     // Click handler: show full content in modal
     listEl.querySelectorAll('.msg-row').forEach(row => {
       row.addEventListener('click', () => {
-        openContentModal(currentTurn);
+        if (convTurn !== undefined) {
+          openConvTurnModal(convTurn);
+        } else {
+          openContentModal(currentTurn);
+        }
       });
     });
   }
@@ -1462,6 +1538,70 @@ html, body {
     });
   }
 
+  // ===== CONV TURN MODAL (View All for a conversation turn) =====
+  function openConvTurnModal(convTurn) {
+    const existing = document.querySelector('.content-modal-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'content-modal-overlay';
+    overlay.innerHTML =
+      '<div class="content-modal">' +
+        '<div class="content-modal-header">' +
+          '<h3>Conversation Turn ' + convTurn + ' — Full Content</h3>' +
+          '<button class="content-modal-close" id="modal-close-btn">&times;</button>' +
+        '</div>' +
+        '<div id="modal-content-body" style="font-family:var(--mono);font-size:11px;color:var(--text-secondary);">Loading...</div>' +
+      '</div>';
+
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+    document.getElementById('modal-close-btn').addEventListener('click', () => overlay.remove());
+    const escHandler = (e) => { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', escHandler); } };
+    document.addEventListener('keydown', escHandler);
+
+    fetchConvTurnContent(convTurn).then(data => {
+      const body = document.getElementById('modal-content-body');
+      if (!body) return;
+
+      if (!data || !data.messages || data.messages.length === 0) {
+        body.textContent = '(no content available for this turn)';
+        return;
+      }
+
+      let html = '<div style="margin-bottom:8px;font-size:12px;color:var(--text-muted);">' +
+        'API calls ' + data.first_call + ' \u2013 ' + data.last_call + ' (' + data.api_call_count + ' calls, ' + data.messages.length + ' messages)' +
+        '</div>';
+
+      for (const msg of data.messages) {
+        const type = msg.type || msg.role || 'unknown';
+        const badgeCls = getBadgeClass(type);
+        const toolInfo = msg.tool_name ? ' <b>' + escapeHtml(msg.tool_name) + '</b>' + (msg.resource ? ' \u2192 ' + escapeHtml(msg.resource) : '') : '';
+        const sizeInfo = msg.size_chars ? ' <span style="color:var(--text-muted)">(' + fmt(Math.round(msg.size_chars / 4)) + ' tok)</span>' : '';
+        const truncNote = msg.is_truncated ? ' <span style="color:var(--danger)">[truncated]</span>' : '';
+        const errorNote = msg.is_error ? ' <span style="color:var(--danger)">[ERROR]</span>' : '';
+
+        html += '<div style="margin-bottom:12px;border-left:3px solid ' + getBadgeColor(type) + ';padding-left:10px;">';
+        html += '<div style="margin-bottom:4px;"><span class="block-badge ' + badgeCls + '">' + escapeHtml(type) + '</span>' + toolInfo + sizeInfo + truncNote + errorNote + '</div>';
+        html += '<pre style="margin:0;font-size:11px;line-height:1.5;color:var(--text-secondary);white-space:pre-wrap;word-break:break-word;max-height:300px;overflow-y:auto;background:#f9fafb;border:1px solid var(--border);border-radius:6px;padding:8px;">' + escapeHtml(msg.content || '') + '</pre>';
+        html += '</div>';
+      }
+
+      if (data.usage && (data.usage.input_tokens || data.usage.cache_read)) {
+        const u = data.usage;
+        const total = (u.input_tokens || 0) + (u.cache_read || 0) + (u.cache_creation || 0);
+        html += '<div style="margin-top:8px;padding:8px 10px;background:var(--churn-bg);border-radius:6px;font-size:11px;font-family:var(--mono);">';
+        html += 'API Usage (total across ' + data.api_call_count + ' calls): ' + fmt(total) + ' input (' + fmt(u.cache_read || 0) + ' cache_read + ' + fmt(u.cache_creation || 0) + ' cache_create + ' + (u.input_tokens || 0) + ' new) \u2192 ' + fmt(u.output_tokens || 0) + ' output';
+        html += '</div>';
+      }
+
+      body.innerHTML = html;
+    });
+  }
+
   function getBadgeColor(type) {
     const colors = {
       system: 'var(--system)', skill: '#ec4899', user: '#3b82f6', user_text: '#3b82f6',
@@ -1480,8 +1620,12 @@ html, body {
 
   // ===== SCRUBBER =====
   function updateScrubberLabel() {
-    document.getElementById('scrubber-label').textContent =
-      'Turn ' + currentTurn + ' / ' + maxTurn;
+    const ct = getConvTurnForCall(currentTurn);
+    let label = 'API Call ' + currentTurn + ' / ' + maxTurn;
+    if (ct) {
+      label += ' \u00b7 Conv Turn ' + ct.conv_turn + ' / ' + turnMap.length;
+    }
+    document.getElementById('scrubber-label').textContent = label;
   }
 
   function goToTurn(t) {

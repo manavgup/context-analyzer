@@ -484,6 +484,193 @@ def create_app(
 
         return {"call_index": call_index, "messages": messages_out, "usage": {}}
 
+    @app.get("/api/session/{session_id}/conv_turn/{conv_turn}/content")
+    def get_conv_turn_content(session_id: str, conv_turn: int):
+        """Full content for a conversation turn (all API calls in the turn).
+
+        conv_turn is 1-based. Returns all messages across all API calls
+        that belong to this conversation turn.
+        """
+        _validate_session_id(session_id)
+
+        # Load turn_map to find the API call range
+        turn_map_path = static_dir / "turn_map.json"
+        if not turn_map_path.exists():
+            raise HTTPException(status_code=404, detail="Run ccscope build first")
+
+        import json
+        turn_map = json.loads(turn_map_path.read_text(encoding="utf-8"))
+
+        # Find the entry for this conv_turn
+        turn_entry = None
+        for entry in turn_map:
+            if entry["conv_turn"] == conv_turn:
+                turn_entry = entry
+                break
+        if turn_entry is None:
+            raise HTTPException(status_code=404, detail=f"Conversation turn {conv_turn} not found")
+
+        first_call = turn_entry["first_call"]
+        last_call = turn_entry["last_call"]
+
+        # Find transcript
+        transcript_path = _find_transcript(session_id, transcript_dir)
+        if transcript_path is None or not transcript_path.exists():
+            raise HTTPException(status_code=404, detail="Transcript not found")
+
+        # Parse transcript to extract all messages for the API call range
+        entries_raw = []
+        api_call_idx = -1
+        pending_user_entries = []
+        collecting = False  # True when we're in the target range
+
+        with open(transcript_path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                entry_type = entry.get("type", "")
+                if entry_type in ("file-history-snapshot", "last-prompt", "pr-link", "queue-operation"):
+                    continue
+
+                if entry_type == "user":
+                    pending_user_entries.append(entry)
+                    continue
+
+                if entry_type == "assistant":
+                    message = entry.get("message", {})
+                    usage = message.get("usage", {})
+                    stop_reason = message.get("stop_reason")
+                    output_tokens = usage.get("output_tokens", 0)
+                    model = message.get("model", "")
+
+                    if stop_reason is None or output_tokens == 0 or model == "synthetic":
+                        continue
+
+                    api_call_idx += 1
+
+                    if api_call_idx >= first_call and api_call_idx <= last_call:
+                        # Include pending user entries + this assistant entry
+                        entries_raw.extend(pending_user_entries)
+                        entries_raw.append(entry)
+                        collecting = True
+                    elif api_call_idx > last_call:
+                        break  # Past the range
+
+                    pending_user_entries = []
+
+        if not entries_raw:
+            raise HTTPException(status_code=404, detail=f"No entries found for conversation turn {conv_turn}")
+
+        # Extract content blocks (same logic as get_call_content)
+        messages_out = []
+        total_usage = {"input_tokens": 0, "output_tokens": 0, "cache_read": 0, "cache_creation": 0}
+
+        for entry in entries_raw:
+            entry_type = entry.get("type", "")
+            message = entry.get("message", {})
+            content = message.get("content", "")
+            timestamp = entry.get("timestamp", "")
+
+            if entry_type == "assistant":
+                usage = message.get("usage", {})
+                total_usage["input_tokens"] += usage.get("input_tokens", 0)
+                total_usage["output_tokens"] += usage.get("output_tokens", 0)
+                total_usage["cache_read"] += usage.get("cache_read_input_tokens", 0)
+                total_usage["cache_creation"] += usage.get("cache_creation_input_tokens", 0)
+
+            if isinstance(content, str) and content:
+                messages_out.append({
+                    "type": "user" if entry_type == "user" else "assistant",
+                    "role": "user" if entry_type == "user" else "assistant",
+                    "content": content[:8000],
+                    "size_chars": len(content),
+                    "is_truncated": len(content) > 8000,
+                    "timestamp": timestamp,
+                })
+            elif isinstance(content, list):
+                for item in content:
+                    if not isinstance(item, dict):
+                        continue
+                    block_type = item.get("type", "")
+
+                    if block_type == "text":
+                        text = item.get("text", "")
+                        messages_out.append({
+                            "type": "assistant_text" if entry_type == "assistant" else "user_text",
+                            "role": entry_type,
+                            "content": text[:8000],
+                            "size_chars": len(text),
+                            "is_truncated": len(text) > 8000,
+                            "timestamp": timestamp,
+                        })
+
+                    elif block_type == "thinking":
+                        text = item.get("thinking", "")
+                        messages_out.append({
+                            "type": "thinking",
+                            "role": "assistant",
+                            "content": text[:8000],
+                            "size_chars": len(text),
+                            "is_truncated": len(text) > 8000,
+                            "timestamp": timestamp,
+                        })
+
+                    elif block_type == "tool_use":
+                        tool_input = item.get("input", {})
+                        input_str = json.dumps(tool_input, indent=2) if isinstance(tool_input, dict) else str(tool_input)
+                        tool_name = item.get("name", "unknown")
+                        resource = ""
+                        if tool_name in ("Read", "Edit", "Write"):
+                            resource = tool_input.get("file_path", "") if isinstance(tool_input, dict) else ""
+                        elif tool_name == "Bash":
+                            resource = (tool_input.get("command", "")[:100] if isinstance(tool_input, dict) else "")
+                        messages_out.append({
+                            "type": "tool_use",
+                            "role": "assistant",
+                            "tool_name": tool_name,
+                            "resource": resource,
+                            "content": input_str[:8000],
+                            "size_chars": len(input_str),
+                            "is_truncated": len(input_str) > 8000,
+                            "tool_use_id": item.get("id", ""),
+                            "timestamp": timestamp,
+                        })
+
+                    elif block_type == "tool_result":
+                        result_content = item.get("content", "")
+                        if isinstance(result_content, list):
+                            result_content = "\n".join(
+                                b.get("text", "") if isinstance(b, dict) else str(b)
+                                for b in result_content
+                            )
+                        elif not isinstance(result_content, str):
+                            result_content = str(result_content)
+                        messages_out.append({
+                            "type": "tool_result",
+                            "role": "tool",
+                            "content": result_content[:8000],
+                            "size_chars": len(result_content),
+                            "is_truncated": len(result_content) > 8000,
+                            "is_error": bool(item.get("is_error", False)),
+                            "tool_use_id": item.get("tool_use_id", ""),
+                            "timestamp": timestamp,
+                        })
+
+        return {
+            "conv_turn": conv_turn,
+            "first_call": first_call,
+            "last_call": last_call,
+            "api_call_count": last_call - first_call + 1,
+            "messages": messages_out,
+            "usage": total_usage,
+        }
+
     @app.get("/")
     def serve_dashboard():
         # Prefer v3 dashboard, fall back to v2
@@ -515,6 +702,13 @@ def create_app(
         if meta_path.exists():
             return FileResponse(str(meta_path), media_type="application/json")
         raise HTTPException(status_code=404, detail="No meta.json")
+
+    @app.get("/turn_map.json")
+    def get_turn_map_json():
+        path = static_dir / "turn_map.json"
+        if path.exists():
+            return FileResponse(str(path), media_type="application/json")
+        raise HTTPException(status_code=404, detail="Run ccscope build first")
 
     # Serve static files if directory exists
     if static_dir.exists():

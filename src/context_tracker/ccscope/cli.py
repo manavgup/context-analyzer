@@ -14,6 +14,7 @@ import sys
 import webbrowser
 from pathlib import Path
 
+from context_tracker.ccscope.parse_transcript import build_turn_map
 from context_tracker.ccscope.reconcile import find_session_paths, reconcile, write_output
 
 
@@ -93,6 +94,15 @@ def cmd_build(args):
     meta_path = output_dir / "meta.json"
     meta_path.write_text(_json.dumps({"session_id": session_id}), encoding="utf-8")
 
+    # Write turn_map.json for conversation turn grouping
+    paths = find_session_paths(session_id)
+    if paths["transcript"]:
+        turn_map = build_turn_map(paths["transcript"])
+        turn_map_path = output_dir / "turn_map.json"
+        turn_map_path.write_text(_json.dumps(turn_map), encoding="utf-8")
+    else:
+        turn_map = []
+
     # Summary
     total_cr = sum(c["cache_read"] for c in churn)
     total_in = sum(c["input"] for c in churn)
@@ -102,6 +112,7 @@ def cmd_build(args):
     print(f"\nDone!")
     print(f"  Blocks:     {len(blocks)} ({len(pinned)} pinned, {len(spilled)} offloaded)")
     print(f"  Churn:      {len(churn)} API calls")
+    print(f"  Conv turns: {len(turn_map)}")
     print(f"  Cache read: {total_cr:,} tokens")
     print(f"  New input:  {total_in:,} tokens")
     print(f"  Ratio:      {total_cr // max(total_in, 1):,}x")
