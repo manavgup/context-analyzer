@@ -1,20 +1,22 @@
 """Tests for context window reconstruction."""
 
 
-from context_tracker.analysis.reconstruction import (
-    extract_resource,
-    group_into_turns,
-    reconstruct_session,
-    _extract_bash_program,
-    _detect_compactions_from_api,
-)
-from context_tracker.transcript_parser import TranscriptMessage
 from context_tracker.analysis.models import (
     ApiCall,
     BlockType,
-    ContentBlock as CB,
     ConversationTurn,
 )
+from context_tracker.analysis.models import (
+    ContentBlock as CB,
+)
+from context_tracker.analysis.reconstruction import (
+    _detect_compactions_from_api,
+    _extract_bash_program,
+    extract_resource,
+    group_into_turns,
+    reconstruct_session,
+)
+from context_tracker.transcript_parser import TranscriptMessage
 
 
 def _make_user_msg(seq: int, text: str, ts: str = "T") -> TranscriptMessage:

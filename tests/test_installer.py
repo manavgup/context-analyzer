@@ -1,10 +1,10 @@
 import json
 
 from context_tracker.installer import (
-    install_hooks,
-    uninstall_hooks,
     CONTEXT_TRACKER_MARKER,
     HOOK_EVENTS_TO_INSTALL,
+    install_hooks,
+    uninstall_hooks,
 )
 
 
@@ -66,7 +66,10 @@ def test_uninstall_removes_only_owned_hooks(tmp_path):
         "hooks": {
             "PostToolUse": [
                 {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo user-hook"}]},
-                {"hooks": [{"type": "command", "command": f"# {CONTEXT_TRACKER_MARKER}\npython3 -m context_tracker.hooks"}]},
+                {"hooks": [{"type": "command", "command": (
+                    f"# {CONTEXT_TRACKER_MARKER}\n"
+                    "python3 -m context_tracker.hooks"
+                )}]},
             ]
         }
     }))

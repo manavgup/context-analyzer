@@ -1,13 +1,11 @@
 """Tests for ccscope subagent transcript parsing."""
 
 import json
-import tempfile
 from pathlib import Path
 
 import pytest
 
 from context_tracker.ccscope.subagents import parse_subagents
-
 
 # ---------------------------------------------------------------------------
 # Helpers to build synthetic subagent data
@@ -395,7 +393,11 @@ class TestMultipleSubagents:
 # Test: real data (17 subagents)
 # ---------------------------------------------------------------------------
 
-REAL_SUBAGENTS_DIR = Path.home() / ".claude/projects/-Users-mg-Downloads-claude-src/81dc8a2f-2bc6-4241-81bb-9dea09f45a68/subagents"
+REAL_SUBAGENTS_DIR = (
+    Path.home()
+    / ".claude/projects/-Users-mg-Downloads-claude-src"
+    / "81dc8a2f-2bc6-4241-81bb-9dea09f45a68/subagents"
+)
 
 
 @pytest.mark.skipif(

@@ -118,7 +118,7 @@ def parse_raw_transcript(
     warnings: list[DataQualityWarning] = []
     sequence_index = 0
 
-    with open(transcript_path, "r", encoding="utf-8") as f:
+    with open(transcript_path, encoding="utf-8") as f:
         for line_number, raw_line in enumerate(f, start=1):
             raw_line = raw_line.strip()
             if not raw_line:

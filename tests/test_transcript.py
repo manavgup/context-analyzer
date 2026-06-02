@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 
-from context_tracker.transcript import parse_transcript
 from context_tracker.models import ApiTurnEvent
+from context_tracker.transcript import parse_transcript
 
 
 def _write_transcript(path: Path, entries: list[dict]) -> None:

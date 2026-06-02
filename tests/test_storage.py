@@ -1,7 +1,7 @@
 import pytest
 
 from context_tracker.models import PostToolUseEvent, SessionStartEvent
-from context_tracker.storage import append_event, read_events, list_sessions
+from context_tracker.storage import append_event, list_sessions, read_events
 
 
 def test_append_and_read_roundtrip(tmp_path):
@@ -80,8 +80,8 @@ def test_creates_directory_on_first_write(tmp_path):
 
 
 def test_rejects_path_traversal(tmp_path):
-    from context_tracker.storage import append_event
     from context_tracker.models import SessionStartEvent
+    from context_tracker.storage import append_event
 
     with pytest.raises(ValueError, match="Invalid session_id"):
         event = SessionStartEvent(session_id="../../../etc/passwd", source="startup", model="test")

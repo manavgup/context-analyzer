@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Literal, Union
+from datetime import UTC, datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -16,7 +16,7 @@ class BaseEvent(BaseModel):
     """Base fields shared by all events."""
 
     session_id: str
-    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     def to_jsonl(self) -> str:
         return self.model_dump_json()
@@ -110,19 +110,19 @@ EVENT_TYPE_MAP: dict[str, type[BaseEvent]] = {
     "api_turn": ApiTurnEvent,
 }
 
-TrackerEvent = Union[
-    PostToolUseEvent,
-    PostToolUseFailureEvent,
-    PreCompactEvent,
-    PostCompactEvent,
-    SessionStartEvent,
-    SessionEndEvent,
-    UserPromptEvent,
-    SubagentStartEvent,
-    SubagentStopEvent,
-    InstructionsLoadedEvent,
-    ApiTurnEvent,
-]
+TrackerEvent = (
+    PostToolUseEvent
+    | PostToolUseFailureEvent
+    | PreCompactEvent
+    | PostCompactEvent
+    | SessionStartEvent
+    | SessionEndEvent
+    | UserPromptEvent
+    | SubagentStartEvent
+    | SubagentStopEvent
+    | InstructionsLoadedEvent
+    | ApiTurnEvent
+)
 
 
 def parse_event(line: str) -> TrackerEvent | None:

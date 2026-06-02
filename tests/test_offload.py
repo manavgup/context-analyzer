@@ -2,10 +2,7 @@
 
 from pathlib import Path
 
-import pytest
-
 from context_tracker.ccscope.offload import resolve_offloads
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -16,7 +13,7 @@ def _tool_result_block(tool_use_id: str, content: str, tokens: int = 10) -> dict
     return {
         "id": f"t0-tool_result-{tool_use_id}",
         "type": "tool_result",
-        "label": f"Bash -> result",
+        "label": "Bash -> result",
         "tokens": tokens,
         "enter": 1,
         "exit": None,

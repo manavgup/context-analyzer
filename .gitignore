@@ -1,13 +1,49 @@
-.venv/
+# Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
 *.egg-info/
 dist/
 build/
+*.egg
+
+# Virtual environment
+.venv/
+venv/
+
+# Testing & coverage
 .coverage
+htmlcov/
 .pytest_cache/
+
+# Type checking & linting
+.mypy_cache/
+.ruff_cache/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-specific
 .claude/
 .agents/
 .context/
 node_modules/
+*.db
+
+# Skill files (tooling, not project code)
+*.skill
+python-project-scaffold/
+python-project-scaffold-workspace/
