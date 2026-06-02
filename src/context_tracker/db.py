@@ -40,6 +40,9 @@ class SessionRecord(Base):
     blocks = relationship("BlockRecord", back_populates="session", cascade="all, delete-orphan")
     hook_events = relationship("HookEventRecord", back_populates="session", cascade="all, delete-orphan")
     subagents = relationship("SubagentRecord", back_populates="session", cascade="all, delete-orphan")
+    tool_result_offloads = relationship(
+        "ToolResultOffloadRecord", back_populates="session", cascade="all, delete-orphan",
+    )
 
 
 class TurnRecord(Base):
@@ -119,6 +122,36 @@ class SubagentRecord(Base):
     total_output_tokens = Column(Integer, default=0)
 
     session = relationship("SessionRecord", back_populates="subagents")
+    api_calls = relationship("SubagentApiCallRecord", back_populates="subagent", cascade="all, delete-orphan")
+
+
+class SubagentApiCallRecord(Base):
+    """Per-API-call token data for a subagent's own context window."""
+    __tablename__ = "subagent_api_calls"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    subagent_id = Column(Integer, ForeignKey("subagents.id"), nullable=False)
+    session_id = Column(Text, nullable=False)  # denormalized for fast queries
+    call_index = Column(Integer, nullable=False)
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    cache_read = Column(Integer, default=0)
+    cache_creation = Column(Integer, default=0)
+
+    subagent = relationship("SubagentRecord", back_populates="api_calls")
+
+
+class ToolResultOffloadRecord(Base):
+    """Tool results that were offloaded to disk (too large for inline transcript)."""
+    __tablename__ = "tool_result_offloads"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(Text, ForeignKey("sessions.session_id"), nullable=False)
+    filename = Column(Text, nullable=False)  # e.g. "bdjqb7345.txt"
+    size_bytes = Column(Integer, default=0)
+    content_preview = Column(Text, nullable=True)  # first 500 chars
+
+    session = relationship("SessionRecord", back_populates="tool_result_offloads")
 
 
 def get_engine(db_path: Path = DEFAULT_DB_PATH):

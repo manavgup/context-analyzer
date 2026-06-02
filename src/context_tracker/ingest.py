@@ -13,7 +13,9 @@ from context_tracker.db import (
     BlockRecord,
     HookEventRecord,
     SessionRecord,
+    SubagentApiCallRecord,
     SubagentRecord,
+    ToolResultOffloadRecord,
     TurnRecord,
     get_engine,
     get_session_factory,
@@ -239,9 +241,9 @@ def ingest_session(
                     metadata_json=metadata_json,
                 ))
 
-        # --- Subagent records ---
+        # --- Subagent records + their per-call churn ---
         for sa in subagent_summaries:
-            db.add(SubagentRecord(
+            sa_rec = SubagentRecord(
                 session_id=session_id,
                 agent_id=sa.get("agent_id", ""),
                 agent_type=sa.get("agent_type"),
@@ -250,7 +252,40 @@ def ingest_session(
                 total_cache_read=sa.get("total_cache_read", 0),
                 total_api_calls=sa.get("api_calls", 0),
                 total_output_tokens=sa.get("total_output", 0),
-            ))
+            )
+            db.add(sa_rec)
+            db.flush()  # get sa_rec.id for FK
+
+            # Store each subagent's per-API-call churn
+            for sc in sa.get("churn", []):
+                db.add(SubagentApiCallRecord(
+                    subagent_id=sa_rec.id,
+                    session_id=session_id,
+                    call_index=sc.get("turn", 0),
+                    input_tokens=sc.get("input", 0),
+                    output_tokens=sc.get("output", 0),
+                    cache_read=sc.get("cache_read", 0),
+                    cache_creation=sc.get("cache_creation", 0),
+                ))
+
+        # --- Tool result offloads ---
+        tr_path = paths.get("tool_results")
+        if tr_path and Path(tr_path).exists():
+            for f in Path(tr_path).iterdir():
+                if not f.is_file():
+                    continue
+                size_bytes = f.stat().st_size
+                # Read first 500 chars for preview
+                try:
+                    preview = f.read_text(encoding="utf-8", errors="replace")[:500]
+                except OSError:
+                    preview = None
+                db.add(ToolResultOffloadRecord(
+                    session_id=session_id,
+                    filename=f.name,
+                    size_bytes=size_bytes,
+                    content_preview=preview,
+                ))
 
         db.commit()
         db.refresh(session_rec)
