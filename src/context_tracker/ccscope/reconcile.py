@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from context_tracker.ccscope.parse_transcript import parse_transcript_to_blocks
 from context_tracker.ccscope.offload import resolve_offloads
+from context_tracker.ccscope.parse_transcript import parse_transcript_to_blocks
 from context_tracker.ccscope.subagents import parse_subagents
 from context_tracker.storage import DEFAULT_TRACE_DIR
 
@@ -105,11 +105,11 @@ def overlay_hook_events(blocks: list[dict], hook_events_path: Path) -> list[dict
     Hook events provide real-time entry timing and failure details
     that the transcript may not capture.
     """
-    from context_tracker.models import parse_event, PostToolUseFailureEvent
+    from context_tracker.models import PostToolUseFailureEvent, parse_event
 
     # Read hook events
     failures = {}  # tool_use_id -> error info
-    with open(hook_events_path, "r") as f:
+    with open(hook_events_path) as f:
         for line in f:
             line = line.strip()
             if not line:

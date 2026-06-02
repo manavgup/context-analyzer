@@ -1,15 +1,15 @@
 """Tests for analysis data models."""
 
 from context_tracker.analysis.models import (
+    BlockStateAtTurn,
     BlockType,
     ContentBlock,
+    ContentStore,
     ContextBlock,
     ContextEpoch,
-    BlockStateAtTurn,
     ConversationTurn,
-    TurnSnapshot,
-    ContentStore,
     DataQualityWarning,
+    TurnSnapshot,
 )
 
 
@@ -34,7 +34,7 @@ def test_context_block_is_frozen():
     # Frozen — should raise on mutation
     try:
         block.size_chars = 9999
-        assert False, "Should have raised"
+        raise AssertionError("Should have raised")
     except AttributeError:
         pass
 

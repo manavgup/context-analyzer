@@ -3,20 +3,20 @@ import json
 import pytest
 
 from context_tracker.models import (
+    PostCompactEvent,
     PostToolUseEvent,
     PreCompactEvent,
-    PostCompactEvent,
     SessionStartEvent,
     UserPromptEvent,
 )
-from context_tracker.storage import append_event
 from context_tracker.server import (
-    get_session_summary,
-    get_tool_breakdown,
     get_compaction_history,
     get_context_hogs,
     get_session_history,
+    get_session_summary,
+    get_tool_breakdown,
 )
+from context_tracker.storage import append_event
 
 
 @pytest.fixture

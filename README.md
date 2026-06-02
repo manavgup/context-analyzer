@@ -9,21 +9,25 @@ Context window usage analyzer for Claude Code. An external MCP server that track
 - **Exposes MCP tools** for querying context usage mid-session
 - **Dashboard** for visualizing context composition, growth, cache efficiency, and identifying stale blocks
 
-## Quick start
+## Quick Start
 
 ```bash
-# Install
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+make install-dev
+make test
+make hook-install   # install Claude Code hooks
+make dev            # start dashboard on localhost:8080
+```
 
-# Install hooks into Claude Code
-python -m context_tracker.installer install
+## Development
 
-# Run tests
-pytest tests/ -v
-
-# Open dashboard
-open evidence/dashboard-v2.html
+```bash
+make help          # see all available targets
+make dev           # start dashboard dev server with reload
+make lint          # run linter
+make format        # format code
+make typecheck     # run mypy
+make coverage      # run tests with coverage
+make verify        # run full verification suite
 ```
 
 ## Architecture
@@ -62,3 +66,7 @@ Claude Code Hooks (shell commands)
 ## Roadmap
 
 See [GitHub Issues](https://github.com/manavgup/context-analyzer/issues) for the Phase 4 roadmap: Flask app migration, context tape, staleness detection, health score, drift detection.
+
+## License
+
+MIT

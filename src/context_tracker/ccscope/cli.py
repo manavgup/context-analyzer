@@ -9,14 +9,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 import webbrowser
 from pathlib import Path
 
 from context_tracker.ccscope.parse_transcript import build_turn_map
 from context_tracker.ccscope.reconcile import find_session_paths, reconcile, write_output
-
 
 DEFAULT_PROJECTS_DIR = Path.home() / ".claude" / "projects"
 DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "static"
@@ -109,7 +107,7 @@ def cmd_build(args):
     pinned = [b for b in blocks if b.get("cached")]
     spilled = [b for b in blocks if b.get("spilled_tokens")]
 
-    print(f"\nDone!")
+    print("\nDone!")
     print(f"  Blocks:     {len(blocks)} ({len(pinned)} pinned, {len(spilled)} offloaded)")
     print(f"  Churn:      {len(churn)} API calls")
     print(f"  Conv turns: {len(turn_map)}")
@@ -145,8 +143,9 @@ def cmd_open(args):
     print(f"\nServing at http://{host}:{port}")
     webbrowser.open(f"http://{host}:{port}")
 
-    from context_tracker.dashboard import create_app
     import uvicorn
+
+    from context_tracker.dashboard import create_app
     app = create_app()
     uvicorn.run(app, host=host, port=port)
 

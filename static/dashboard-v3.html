@@ -131,13 +131,24 @@ html, body {
 }
 
 /* ===== CHART PANELS ===== */
+.chart-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
 .chart-panel {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 20px 20px 16px;
-  margin-bottom: 20px;
   box-shadow: var(--shadow);
+}
+
+/* Full-width chart panels (not in a row) still get bottom margin */
+.chart-panel:not(.chart-row .chart-panel) {
+  margin-bottom: 20px;
 }
 
 .chart-panel-header {
@@ -569,7 +580,8 @@ html, body {
       </div>
     </div>
 
-    <!-- Section 2: Context Growth Chart -->
+    <!-- Section 2+3: Context Growth + Cache-Read Churn side by side -->
+    <div class="chart-row">
     <div class="chart-panel">
       <div class="chart-panel-header">
         <h2>Context Growth</h2>
@@ -580,7 +592,6 @@ html, body {
       </div>
     </div>
 
-    <!-- Section 3: Cache-Read Churn Chart -->
     <div class="chart-panel">
       <div class="chart-panel-header">
         <h2>Cache-Read Churn</h2>
@@ -608,6 +619,7 @@ html, body {
         </div>
       </div>
     </div>
+    </div> <!-- /chart-row -->
 
     <!-- Section 4: Scrubber -->
     <div class="scrubber">

@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from context_tracker.analysis.config import StalenessConfig
 from context_tracker.analysis.models import BlockType, ContextBlock
+from context_tracker.analysis.reconstruction import reconstruct_session
 from context_tracker.analysis.staleness import (
     compute_staleness,
     detect_superseded,
@@ -18,7 +19,6 @@ from context_tracker.analysis.staleness import (
 )
 from context_tracker.storage import DEFAULT_TRACE_DIR, list_sessions, read_events
 from context_tracker.transcript_parser import parse_raw_transcript
-from context_tracker.analysis.reconstruction import reconstruct_session
 
 # Reuse the same session ID pattern as storage.py
 _SESSION_ID_RE = re.compile(r'^[a-zA-Z0-9_-]+$')
@@ -333,12 +333,11 @@ def create_app(
         if not transcript_path.exists():
             raise HTTPException(status_code=404, detail="Transcript not found")
 
-        entries = []
         api_call_idx = -1
         target_entries = []
         pending_user_entries = []
 
-        with open(transcript_path, "r") as f:
+        with open(transcript_path) as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -428,11 +427,19 @@ def create_app(
 
                     elif block_type == "tool_use":
                         tool_input = item.get("input", {})
-                        input_str = json.dumps(tool_input, indent=2) if isinstance(tool_input, dict) else str(tool_input)
+                        input_str = (
+                            json.dumps(tool_input, indent=2)
+                            if isinstance(tool_input, dict)
+                            else str(tool_input)
+                        )
                         tool_name = item.get("name", "unknown")
                         resource = ""
                         if tool_name in ("Read", "Edit", "Write"):
-                            resource = tool_input.get("file_path", "") if isinstance(tool_input, dict) else ""
+                            resource = (
+                                tool_input.get("file_path", "")
+                                if isinstance(tool_input, dict)
+                                else ""
+                            )
                         elif tool_name == "Bash":
                             resource = (tool_input.get("command", "")[:100] if isinstance(tool_input, dict) else "")
                         messages_out.append({
@@ -522,9 +529,8 @@ def create_app(
         entries_raw = []
         api_call_idx = -1
         pending_user_entries = []
-        collecting = False  # True when we're in the target range
 
-        with open(transcript_path, "r") as f:
+        with open(transcript_path) as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -558,7 +564,6 @@ def create_app(
                         # Include pending user entries + this assistant entry
                         entries_raw.extend(pending_user_entries)
                         entries_raw.append(entry)
-                        collecting = True
                     elif api_call_idx > last_call:
                         break  # Past the range
 
@@ -623,11 +628,19 @@ def create_app(
 
                     elif block_type == "tool_use":
                         tool_input = item.get("input", {})
-                        input_str = json.dumps(tool_input, indent=2) if isinstance(tool_input, dict) else str(tool_input)
+                        input_str = (
+                            json.dumps(tool_input, indent=2)
+                            if isinstance(tool_input, dict)
+                            else str(tool_input)
+                        )
                         tool_name = item.get("name", "unknown")
                         resource = ""
                         if tool_name in ("Read", "Edit", "Write"):
-                            resource = tool_input.get("file_path", "") if isinstance(tool_input, dict) else ""
+                            resource = (
+                                tool_input.get("file_path", "")
+                                if isinstance(tool_input, dict)
+                                else ""
+                            )
                         elif tool_name == "Bash":
                             resource = (tool_input.get("command", "")[:100] if isinstance(tool_input, dict) else "")
                         messages_out.append({
@@ -720,6 +733,7 @@ def create_app(
 def main() -> None:
     """Entry point: context-tracker dashboard."""
     import argparse
+
     import uvicorn
 
     parser = argparse.ArgumentParser(description="Context Analyzer Dashboard")

@@ -1,12 +1,12 @@
 """Tests for session health scoring and recommendations."""
 
+from context_tracker.analysis.config import HealthConfig
 from context_tracker.analysis.health import (
     HealthSignals,
-    compute_urgency,
-    compute_turn_cost,
     classify_recommendation,
+    compute_turn_cost,
+    compute_urgency,
 )
-from context_tracker.analysis.config import HealthConfig
 from context_tracker.analysis.models import ApiCall
 
 

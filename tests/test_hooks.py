@@ -2,16 +2,16 @@ import json
 
 from context_tracker.hooks import process_hook_input
 from context_tracker.models import (
+    InstructionsLoadedEvent,
+    PostCompactEvent,
     PostToolUseEvent,
     PostToolUseFailureEvent,
-    SessionStartEvent,
-    SessionEndEvent,
-    UserPromptEvent,
     PreCompactEvent,
-    PostCompactEvent,
+    SessionEndEvent,
+    SessionStartEvent,
     SubagentStartEvent,
     SubagentStopEvent,
-    InstructionsLoadedEvent,
+    UserPromptEvent,
 )
 
 

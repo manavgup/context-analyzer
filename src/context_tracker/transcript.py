@@ -29,7 +29,7 @@ def parse_transcript(transcript_path: Path) -> list[ApiTurnEvent]:
     events: list[ApiTurnEvent] = []
     turn_number = 0
 
-    with open(transcript_path, "r", encoding="utf-8") as f:
+    with open(transcript_path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:

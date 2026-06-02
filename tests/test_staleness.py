@@ -1,16 +1,16 @@
 """Tests for staleness detection engine."""
 
+from context_tracker.analysis.config import StalenessConfig
 from context_tracker.analysis.models import (
     BlockType,
     ContextBlock,
 )
 from context_tracker.analysis.staleness import (
-    detect_superseded,
-    compute_staleness,
-    label_staleness,
     base_decay,
+    compute_staleness,
+    detect_superseded,
+    label_staleness,
 )
-from context_tracker.analysis.config import StalenessConfig
 
 
 def _block(block_id: str, turn: int, resource: str | None = None,

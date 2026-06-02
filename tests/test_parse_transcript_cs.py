@@ -1,14 +1,9 @@
 """Tests for ccscope transcript parser (Context Scope format)."""
 
 import json
-import tempfile
-from pathlib import Path
-
-import pytest
 
 from context_tracker.ccscope.parse_transcript import parse_transcript_to_blocks
-from context_tracker.ccscope.tokens import estimate_tokens, char_count_of_block
-
+from context_tracker.ccscope.tokens import char_count_of_block, estimate_tokens
 
 # ---------------------------------------------------------------------------
 # Helpers to build synthetic transcript JSONL

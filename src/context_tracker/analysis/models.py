@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class BlockType(str, Enum):
+class BlockType(StrEnum):
     SYSTEM = "system"
     USER_PROMPT = "user_prompt"
     ASSISTANT_TEXT = "assistant_text"

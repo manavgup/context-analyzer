@@ -221,7 +221,11 @@ def should_clear(
     """Recommend whether to clear/start a new session."""
     summary = get_session_summary(session_id, trace_dir=trace_dir, transcript_dir=transcript_dir)
 
-    total_input = summary["total_input_tokens"] + summary["total_cache_read_tokens"] + summary["total_cache_creation_tokens"]
+    total_input = (
+        summary["total_input_tokens"]
+        + summary["total_cache_read_tokens"]
+        + summary["total_cache_creation_tokens"]
+    )
     context_pct = (total_input / 1_000_000 * 100) if total_input > 0 else 0
     cache_hit = summary["cache_hit_rate"] * 100
 
@@ -254,7 +258,10 @@ def should_clear(
 # --- MCP Tool Registrations ---
 
 
-@mcp.tool(description="Get summary statistics for a Claude Code session including tool calls, compactions, exact API token counts, and cache efficiency.")
+@mcp.tool(
+    description="Get summary statistics for a Claude Code session including "
+    "tool calls, compactions, exact API token counts, and cache efficiency."
+)
 def mcp_get_session_summary(session_id: str = "") -> str:
     """If session_id is empty, uses the most recent session."""
     if not session_id:
@@ -300,7 +307,10 @@ def mcp_get_session_history() -> str:
     return json.dumps(get_session_history(), indent=2)
 
 
-@mcp.tool(description="Find tool calls where context grew by more than a threshold (default 5000 chars). Returns events sorted by output size descending.")
+@mcp.tool(
+    description="Find tool calls where context grew by more than a threshold "
+    "(default 5000 chars). Returns events sorted by output size descending."
+)
 def mcp_get_bloat_events(session_id: str = "", threshold: int = 5000) -> str:
     if not session_id:
         sessions = list_sessions()
@@ -310,7 +320,10 @@ def mcp_get_bloat_events(session_id: str = "", threshold: int = 5000) -> str:
     return json.dumps(get_bloat_events(session_id, threshold=threshold), indent=2)
 
 
-@mcp.tool(description="Get a recommendation on whether to start a new Claude Code session based on context usage, cache efficiency, and compaction history.")
+@mcp.tool(
+    description="Get a recommendation on whether to start a new Claude Code "
+    "session based on context usage, cache efficiency, and compaction history."
+)
 def mcp_should_clear(session_id: str = "") -> str:
     if not session_id:
         sessions = list_sessions()
@@ -320,7 +333,10 @@ def mcp_should_clear(session_id: str = "") -> str:
     return json.dumps(should_clear(session_id), indent=2)
 
 
-@mcp.tool(description="Get staleness analysis for a session: per-block staleness scores, aggregate dead weight ratio, top stale blocks.")
+@mcp.tool(
+    description="Get staleness analysis for a session: per-block staleness "
+    "scores, aggregate dead weight ratio, top stale blocks."
+)
 def mcp_get_staleness_analysis(session_id: str = "", top_n: int = 10) -> str:
     if not session_id:
         sessions = list_sessions()
@@ -353,7 +369,11 @@ def mcp_get_staleness_analysis(session_id: str = "", top_n: int = 10) -> str:
     }, indent=2)
 
 
-@mcp.tool(description="Get session health signals: dead weight ratio, cache efficiency trend, attention loss indicators, and urgency score with recommendation.")
+@mcp.tool(
+    description="Get session health signals: dead weight ratio, cache "
+    "efficiency trend, attention loss indicators, and urgency score "
+    "with recommendation."
+)
 def mcp_get_session_health(session_id: str = "") -> str:
     if not session_id:
         sessions = list_sessions()
@@ -373,7 +393,6 @@ def mcp_get_session_health(session_id: str = "") -> str:
     dead_weight_ratio = round(stale_tokens / max(total_tokens, 1), 3)
 
     total_cache_read = sum(c["cache_read"] for c in churn)
-    total_input = sum(c["input"] for c in churn)
     total_cache_total = sum(
         c["cache_read"] + c["cache_creation"] + c["input"] for c in churn
     )
@@ -410,7 +429,10 @@ def mcp_get_session_health(session_id: str = "") -> str:
     }, indent=2)
 
 
-@mcp.tool(description="Get recommendation on whether to start a new session, with confidence level, reasons, and recoverable token count.")
+@mcp.tool(
+    description="Get recommendation on whether to start a new session, "
+    "with confidence level, reasons, and recoverable token count."
+)
 def mcp_get_new_session_recommendation(session_id: str = "") -> str:
     if not session_id:
         sessions = list_sessions()
@@ -424,7 +446,10 @@ def mcp_get_new_session_recommendation(session_id: str = "") -> str:
     return json.dumps(result, indent=2)
 
 
-@mcp.tool(description="Get block lifespans for context tape visualization: entry/exit turns, staleness labels, sizes, and resource identifiers.")
+@mcp.tool(
+    description="Get block lifespans for context tape visualization: "
+    "entry/exit turns, staleness labels, sizes, and resource identifiers."
+)
 def mcp_get_block_lifespans(session_id: str = "", top_n: int = 20) -> str:
     if not session_id:
         sessions = list_sessions()
@@ -464,7 +489,10 @@ def mcp_get_block_lifespans(session_id: str = "", top_n: int = 20) -> str:
     }, indent=2)
 
 
-@mcp.tool(description="Get cache-read churn analysis: total cache reads, new input, churn ratio, API call count. The real cost metric for Claude Code sessions.")
+@mcp.tool(
+    description="Get cache-read churn analysis: total cache reads, new input, "
+    "churn ratio, API call count. The real cost metric for Claude Code sessions."
+)
 def mcp_get_cache_churn(session_id: str = "") -> str:
     if not session_id:
         sessions = list_sessions()
@@ -505,7 +533,10 @@ def mcp_get_cache_churn(session_id: str = "") -> str:
         "subagent_count": len(subagents),
         "subagent_cache_read": sub_cache_read,
         "combined_cache_read": total_cache_read + sub_cache_read,
-        "headline": f"{ratio:,}x cache-read:input ratio across {len(churn)} API calls. Peak resident {peak_resident:,} tokens.",
+        "headline": (
+            f"{ratio:,}x cache-read:input ratio across {len(churn)} "
+            f"API calls. Peak resident {peak_resident:,} tokens."
+        ),
     }, indent=2)
 
 
@@ -531,8 +562,9 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "dashboard":
-        from context_tracker.dashboard import create_app
         import uvicorn
+
+        from context_tracker.dashboard import create_app
         app = create_app()
         uvicorn.run(app, host=args.dash_host, port=args.dash_port)
     else:
