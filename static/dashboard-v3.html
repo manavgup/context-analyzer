@@ -530,6 +530,36 @@ html, body {
   .scrubber { flex-wrap: wrap; }
 }
 
+/* Budget toggle buttons */
+.budget-buttons {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.budget-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.budget-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.budget-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -586,6 +616,12 @@ html, body {
       <div class="chart-panel-header">
         <h2>Context Growth</h2>
         <span class="hint" id="growth-hint">Stacked area: system prefix + working set</span>
+        <div class="budget-buttons">
+          <button class="budget-btn" data-budget="200000" onclick="setBudget(200000)">200K</button>
+          <button class="budget-btn" data-budget="500000" onclick="setBudget(500000)">500K</button>
+          <button class="budget-btn" data-budget="700000" onclick="setBudget(700000)">700K</button>
+          <button class="budget-btn active" data-budget="1000000" onclick="setBudget(1000000)">1M</button>
+        </div>
       </div>
       <div class="chart-wrap">
         <canvas id="growth-chart"></canvas>
@@ -668,7 +704,7 @@ html, body {
   'use strict';
 
   // ===== CONSTANTS =====
-  const BUDGET = 1_000_000;
+  let BUDGET = 1_000_000;
   const PRICING = {
     input: 15 / 1e6,
     output: 75 / 1e6,
@@ -846,7 +882,7 @@ html, body {
     const peakResident = Math.max(...residentData);
     const pctBudget = ((peakResident / BUDGET) * 100).toFixed(0);
     document.getElementById('sc-peak').textContent = fmt(peakResident);
-    document.getElementById('sc-peak-sub').textContent = pctBudget + '% of 1M';
+    document.getElementById('sc-peak-sub').textContent = pctBudget + '% of ' + fmt(BUDGET);
 
     const totalRead = cumulativeRead[cumulativeRead.length - 1] || 0;
     const totalInput = churn.reduce((s, c) => s + c.input, 0);
@@ -1003,12 +1039,36 @@ html, body {
                 borderDash: [6, 4],
                 label: {
                   display: true,
-                  content: '1M Budget',
+                  content: fmt(BUDGET) + ' Budget',
                   position: 'end',
                   font: { family: 'JetBrains Mono', size: 10 },
                   color: '#ef4444',
                   backgroundColor: 'rgba(239,68,68,0.08)',
                   padding: 3,
+                },
+              },
+              dangerBand: {
+                type: 'box',
+                yMin: BUDGET,
+                yMax: BUDGET * 1.1,
+                backgroundColor: 'rgba(239, 68, 68, 0.06)',
+                borderWidth: 0,
+              },
+              autocompactLine: {
+                type: 'line',
+                yMin: BUDGET - 33000,
+                yMax: BUDGET - 33000,
+                borderColor: 'rgba(249, 115, 22, 0.5)',
+                borderWidth: 1,
+                borderDash: [3, 3],
+                label: {
+                  display: true,
+                  content: 'Autocompact',
+                  position: 'end',
+                  font: { family: 'JetBrains Mono', size: 9 },
+                  color: '#f97316',
+                  backgroundColor: 'transparent',
+                  padding: 2,
                 },
               },
               turnMarker: {
@@ -1689,6 +1749,39 @@ html, body {
       startPlayback(); // restart with new speed
     }
   }
+
+  // ===== BUDGET TOGGLE =====
+  function setBudget(val) {
+    BUDGET = val;
+
+    // Update active button styling
+    document.querySelectorAll('.budget-btn').forEach(btn => {
+      if (parseInt(btn.dataset.budget, 10) === val) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+
+    // Rebuild growth chart with new budget annotations
+    if (growthChart) {
+      growthChart.destroy();
+      growthChart = null;
+    }
+    buildGrowthChart();
+
+    // Update turn marker to current position
+    growthChart.options.plugins.annotation.annotations.turnMarker.xMin = currentTurn;
+    growthChart.options.plugins.annotation.annotations.turnMarker.xMax = currentTurn;
+    growthChart.update('none');
+
+    // Recalculate health dot and peak context label
+    renderScorecards();
+
+    // Update composition bar (uses BUDGET as maxVal)
+    renderComposition();
+  }
+  window.setBudget = setBudget;
 
   // ===== WIRE EVERYTHING =====
   function wireControls() {
