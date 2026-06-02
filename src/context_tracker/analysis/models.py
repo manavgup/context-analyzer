@@ -106,8 +106,9 @@ class TurnSnapshot:
     output_tokens: int
     cache_read_tokens: int
     cache_creation_tokens: int
-    compaction_detected: bool
-    api_call_count: int
+    actual_context_tokens: int = 0  # From API: input + cache_read + cache_create (ground truth)
+    compaction_detected: bool = False
+    api_call_count: int = 0
 
 
 class ContentStore:

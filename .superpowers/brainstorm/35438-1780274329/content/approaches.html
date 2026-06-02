@@ -1,0 +1,149 @@
+<h2>Three Approaches for the Context Analyzer Dashboard</h2>
+<p class="subtitle">Each takes a different primary lens on staleness and context evolution</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#1a1a2e;padding:20px;min-height:220px;">
+      <!-- Timeline / Context Tape mockup -->
+      <div style="font-family:monospace;font-size:10px;color:#8892b0;margin-bottom:8px;">CONTEXT TAPE — Turn 47/314</div>
+      <div style="display:flex;flex-direction:column;gap:3px;">
+        <!-- System block -->
+        <div style="display:flex;align-items:center;gap:4px;">
+          <span style="font-size:9px;color:#64ffda;width:60px;text-align:right;font-family:monospace;">sys prompt</span>
+          <div style="height:14px;background:#64ffda;border-radius:2px;width:100%;opacity:0.9;"></div>
+        </div>
+        <!-- CLAUDE.md -->
+        <div style="display:flex;align-items:center;gap:4px;">
+          <span style="font-size:9px;color:#bb86fc;width:60px;text-align:right;font-family:monospace;">claude.md</span>
+          <div style="height:14px;background:#bb86fc;border-radius:2px;width:100%;opacity:0.9;"></div>
+        </div>
+        <!-- Active tool results -->
+        <div style="display:flex;align-items:center;gap:4px;">
+          <span style="font-size:9px;color:#4fc3f7;width:60px;text-align:right;font-family:monospace;">Read t12</span>
+          <div style="height:10px;border-radius:2px;width:70%;position:relative;">
+            <div style="position:absolute;left:20%;width:80%;height:100%;background:#4fc3f7;border-radius:2px;opacity:0.9;"></div>
+          </div>
+        </div>
+        <!-- Stale tool result -->
+        <div style="display:flex;align-items:center;gap:4px;">
+          <span style="font-size:9px;color:#ff6b6b;width:60px;text-align:right;font-family:monospace;">Bash t3</span>
+          <div style="height:10px;border-radius:2px;width:85%;">
+            <div style="width:100%;height:100%;background:repeating-linear-gradient(90deg,#ff6b6b33 0px,#ff6b6b33 4px,transparent 4px,transparent 8px);border:1px dashed #ff6b6b55;border-radius:2px;"></div>
+          </div>
+          <span style="font-size:8px;color:#ff6b6b;font-family:monospace;">STALE 44t</span>
+        </div>
+        <!-- Another stale -->
+        <div style="display:flex;align-items:center;gap:4px;">
+          <span style="font-size:9px;color:#ff6b6b;width:60px;text-align:right;font-family:monospace;">Grep t5</span>
+          <div style="height:8px;border-radius:2px;width:60%;">
+            <div style="width:100%;height:100%;background:repeating-linear-gradient(90deg,#ff6b6b33 0px,#ff6b6b33 4px,transparent 4px,transparent 8px);border:1px dashed #ff6b6b55;border-radius:2px;"></div>
+          </div>
+          <span style="font-size:8px;color:#ff6b6b;font-family:monospace;">STALE 42t</span>
+        </div>
+        <!-- Conversation -->
+        <div style="display:flex;align-items:center;gap:4px;">
+          <span style="font-size:9px;color:#ffd93d;width:60px;text-align:right;font-family:monospace;">conv t45</span>
+          <div style="height:12px;border-radius:2px;width:30%;margin-left:auto;">
+            <div style="width:100%;height:100%;background:#ffd93d;border-radius:2px;opacity:0.8;"></div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:12px;font-size:9px;font-family:monospace;">
+        <span style="color:#64ffda;">■ ACTIVE</span>
+        <span style="color:#ff6b6b;">□ STALE (no ref in 10+ turns)</span>
+        <span style="color:#ffd93d;">■ RECENT</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — The Context Tape</h3>
+      <p>Primary view: horizontal timeline of every block in the context window. Each bar shows a block's lifespan — when it entered, how big it is, and whether it's still being referenced. Stale blocks get dashed outlines and red highlights. Scrub through turns to watch blocks enter, age, and go stale.</p>
+      <div style="margin-top:12px;font-size:13px;">
+        <strong>Strengths:</strong> Most visceral — you SEE the dead weight accumulating. Tells a story over time. Individual block tracking is front and center.<br>
+        <strong>Weakness:</strong> Can get visually dense with 300+ turns and hundreds of blocks.
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#1a1a2e;padding:20px;min-height:220px;">
+      <!-- Sediment / Stacked Area mockup -->
+      <div style="font-family:monospace;font-size:10px;color:#8892b0;margin-bottom:8px;">CONTEXT SEDIMENT — 528K / 1M used</div>
+      <svg viewBox="0 0 300 140" style="width:100%;height:140px;">
+        <!-- Active area (bottom) -->
+        <path d="M0,130 Q30,128 60,125 Q90,120 120,110 Q150,95 180,85 Q210,75 240,70 Q270,68 300,65 L300,140 L0,140 Z" fill="#64ffda" opacity="0.7"/>
+        <!-- Stale area (middle, growing) -->
+        <path d="M0,130 Q30,128 60,125 Q90,120 120,110 Q150,95 180,85 Q210,75 240,70 Q270,68 300,65 L300,35 Q270,40 240,42 Q210,48 180,55 Q150,65 120,80 Q90,95 60,110 Q30,120 0,125 Z" fill="#ff6b6b" opacity="0.4"/>
+        <!-- System prompt (top, constant) -->
+        <path d="M0,125 Q30,120 60,110 Q90,95 120,80 Q150,65 180,55 Q210,48 240,42 Q270,40 300,35 L300,20 L0,20 Z" fill="#bb86fc" opacity="0.3"/>
+        <path d="M0,20 L300,20 L300,10 L0,10 Z" fill="#64ffda" opacity="0.4"/>
+        <!-- Labels -->
+        <text x="150" y="135" text-anchor="middle" fill="#64ffda" font-size="9" font-family="monospace">ACTIVE</text>
+        <text x="220" y="55" text-anchor="middle" fill="#ff6b6b" font-size="9" font-family="monospace">STALE (growing)</text>
+        <text x="150" y="17" text-anchor="middle" fill="#ccc" font-size="8" font-family="monospace">System + Skills</text>
+        <!-- Turn markers -->
+        <text x="0" y="8" fill="#666" font-size="7" font-family="monospace">T1</text>
+        <text x="145" y="8" fill="#666" font-size="7" font-family="monospace">T157</text>
+        <text x="285" y="8" fill="#666" font-size="7" font-family="monospace">T314</text>
+      </svg>
+      <div style="margin-top:8px;display:flex;justify-content:space-between;font-size:10px;font-family:monospace;">
+        <span style="color:#ff6b6b;">Dead weight: 31% (164K tokens)</span>
+        <span style="color:#64ffda;">Active: 42% (222K)</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — The Sediment View</h3>
+      <p>Primary view: stacked area chart where each layer is split into "active" and "stale" portions. You see the context growing like geological sediment — and the stale layer growing thicker over time. Gives an instant "30% of your context is dead weight" read.</p>
+      <div style="margin-top:12px;font-size:13px;">
+        <strong>Strengths:</strong> Best aggregate story — the growing red band is immediately alarming. Familiar chart type. Clean.<br>
+        <strong>Weakness:</strong> Doesn't show individual blocks as clearly. Drill-down needed for recommendations.
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#1a1a2e;padding:20px;min-height:220px;">
+      <!-- Health Report mockup -->
+      <div style="font-family:monospace;font-size:10px;color:#8892b0;margin-bottom:10px;">SESSION HEALTH REPORT</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+        <div style="background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px;text-align:center;">
+          <div style="font-size:20px;font-weight:bold;color:#ff6b6b;font-family:monospace;">31%</div>
+          <div style="font-size:8px;color:#8b949e;text-transform:uppercase;letter-spacing:1px;">Dead Weight</div>
+        </div>
+        <div style="background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px;text-align:center;">
+          <div style="font-size:20px;font-weight:bold;color:#ffd93d;font-family:monospace;">53%</div>
+          <div style="font-size:8px;color:#8b949e;text-transform:uppercase;letter-spacing:1px;">Context Used</div>
+        </div>
+        <div style="background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px;text-align:center;">
+          <div style="font-size:20px;font-weight:bold;color:#64ffda;font-family:monospace;">97%</div>
+          <div style="font-size:8px;color:#8b949e;text-transform:uppercase;letter-spacing:1px;">Cache Hit</div>
+        </div>
+      </div>
+      <div style="background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px;">
+        <div style="font-size:9px;color:#ff6b6b;font-family:monospace;margin-bottom:6px;">⚠ TOP STALE BLOCKS</div>
+        <div style="font-size:9px;font-family:monospace;color:#c9d1d9;line-height:1.6;">
+          Read server.py (t7) — 12.4K tok — stale 40 turns<br>
+          Bash npm test (t12) — 8.1K tok — stale 35 turns<br>
+          Grep imports (t15) — 4.2K tok — stale 32 turns
+        </div>
+      </div>
+      <div style="margin-top:8px;background:#0d1117;border:1px solid #ffd93d44;border-radius:6px;padding:6px 8px;">
+        <div style="font-size:9px;color:#ffd93d;font-family:monospace;">💡 24.7K tokens recoverable by clearing stale blocks</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — The Health Report</h3>
+      <p>Primary view: scorecards showing context health at a glance — dead weight %, utilization, cache efficiency. Supporting panels list the top stale blocks with sizes and recommendations. Less exploratory, more diagnostic.</p>
+      <div style="margin-top:12px;font-size:13px;">
+        <strong>Strengths:</strong> Most actionable — immediately tells you what to do. Clean, demo-friendly. Easy to scan.<br>
+        <strong>Weakness:</strong> Doesn't show the temporal story as well. Less "wow" factor for how context evolves.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="section" style="margin-top:24px;">
+  <h3>My Recommendation</h3>
+  <p>Combine <strong>A + B</strong> as the two main views with <strong>C's scorecards</strong> as the header. The sediment chart tells the aggregate story ("look how dead weight grows"), the context tape lets you drill into individual blocks, and the scorecards give the headline numbers. The recommendations from C go in a sidebar panel.</p>
+</div>

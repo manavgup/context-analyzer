@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Context Analyzer — Full Dashboard Mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #f8f9fb; color: #1a1a2e; line-height: 1.5; overflow-x: hidden;
+}
+.mono { font-family: 'JetBrains Mono', monospace; }
+.page { max-width: 1120px; margin: 0 auto; padding: 24px 32px 60px; }
+.label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: #6b7280; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.label::before { content: ''; display: block; width: 3px; height: 12px; background: #2563eb; border-radius: 2px; }
+.section { margin-top: 28px; }
+.card { background: #fff; border-radius: 12px; padding: 20px 24px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+
+/* ── Header ── */
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: 20px; border-bottom: 1px solid #e5e7eb;
+}
+.header-left { display: flex; align-items: center; gap: 12px; }
+.health-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #f59e0b; box-shadow: 0 0 8px rgba(245,158,11,0.4);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+.header-title { font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+.header-title span { color: #6b7280; font-weight: 400; font-size: 13px; margin-left: 8px; }
+.header-meta { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6b7280; }
+
+/* ── Scorecards ── */
+.scorecards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 20px; }
+.scorecard { background: #fff; border-radius: 10px; padding: 18px 20px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+.scorecard-value { font-family: 'JetBrains Mono', monospace; font-size: 32px; font-weight: 700; line-height: 1.1; }
+.scorecard-label { font-size: 11px; color: #6b7280; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+.scorecard-sub { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #9ca3af; margin-top: 2px; }
+.val-red { color: #dc2626; } .val-amber { color: #d97706; } .val-green { color: #059669; } .val-blue { color: #2563eb; }
+
+/* ── Turn Scrubber ── */
+.scrubber {
+  display: flex; align-items: center; gap: 14px; margin-top: 20px;
+  padding: 12px 20px; background: #fff; border-radius: 10px;
+  border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.scrubber-btn {
+  width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+  background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 8px;
+  cursor: pointer; font-size: 14px; color: #2563eb; flex-shrink: 0;
+}
+.scrubber-slider {
+  flex: 1; -webkit-appearance: none; appearance: none;
+  height: 4px; background: #e5e7eb; border-radius: 2px; outline: none;
+}
+.scrubber-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px;
+  background: #2563eb; border-radius: 50%; cursor: pointer;
+  box-shadow: 0 0 6px rgba(37,99,235,0.3);
+}
+.scrubber-label { font-family: 'JetBrains Mono', monospace; font-size: 12px; white-space: nowrap; min-width: 200px; text-align: right; }
+
+/* ── Sediment Chart ── */
+.chart-area { position: relative; height: 280px; background: #fafbfc; border-radius: 8px; border: 1px solid #f0f1f3; overflow: hidden; }
+.chart-legend { display: flex; gap: 20px; margin-top: 12px; font-size: 11px; color: #6b7280; }
+.chart-legend-item { display: flex; align-items: center; gap: 5px; }
+.chart-legend-dot { width: 12px; height: 12px; border-radius: 2px; }
+
+/* ── Context Tape ── */
+.two-col { display: grid; grid-template-columns: 1fr 340px; gap: 16px; }
+.tape-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid #f3f4f6; font-size: 12px; cursor: pointer; transition: background 0.1s; border-radius: 4px; }
+.tape-row:hover { background: #f9fafb; margin: 0 -8px; padding: 7px 8px; }
+.tape-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6b7280; width: 120px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tape-bar-track { flex: 1; height: 22px; background: #f3f4f6; border-radius: 4px; position: relative; overflow: hidden; }
+.tape-bar { position: absolute; top: 0; height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 8px; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(255,255,255,0.9); }
+.tape-bar.active { background: #2563eb; } .tape-bar.stale { background: #fecaca; border: 1.5px dashed #dc2626; color: #dc2626; } .tape-bar.system { background: #a78bfa; } .tape-bar.recent { background: #34d399; }
+.tape-size { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #9ca3af; width: 50px; text-align: right; flex-shrink: 0; }
+.tape-status { font-family: 'JetBrains Mono', monospace; font-size: 9px; width: 80px; text-align: right; flex-shrink: 0; }
+.tape-status.stale { color: #dc2626; } .tape-status.active { color: #059669; }
+
+/* ── Recommendations ── */
+.reco-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f3f4f6; font-size: 12px; cursor: pointer; transition: background 0.1s; border-radius: 4px; }
+.reco-item:hover { background: #fef7f7; margin: 0 -8px; padding: 10px 8px; }
+.reco-rank { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #dc2626; font-weight: 700; width: 20px; flex-shrink: 0; }
+.reco-info { flex: 1; }
+.reco-tool { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #1a1a2e; }
+.reco-detail { font-size: 11px; color: #6b7280; margin-top: 2px; }
+.reco-tokens { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: #dc2626; flex-shrink: 0; }
+.reco-banner { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; }
+
+/* ── Turn Details (compact, on main page) ── */
+.detail-msg { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f3f4f6; font-size: 12px; cursor: pointer; transition: background 0.1s; border-radius: 4px; }
+.detail-msg:hover { background: #f9fafb; margin: 0 -8px; padding: 6px 8px; }
+.detail-role { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; width: 55px; flex-shrink: 0; }
+.detail-role.user { color: #2563eb; } .detail-role.asst { color: #7c3aed; } .detail-role.tool { color: #059669; }
+.detail-content { flex: 1; color: #6b7280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-size { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #9ca3af; width: 45px; text-align: right; flex-shrink: 0; }
+.view-all { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #2563eb; cursor: pointer; letter-spacing: 0; text-transform: none; font-weight: 400; }
+
+/* ── Modal overlay ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(8px); z-index: 1000;
+  display: none; align-items: center; justify-content: center;
+  animation: fadeIn 0.15s ease;
+}
+.modal-overlay.active { display: flex; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.modal {
+  background: #fff; border-radius: 16px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.12); border: 1px solid #e5e7eb;
+  width: min(1080px, 95vw); max-height: 90vh; overflow-y: auto;
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 28px; border-bottom: 1px solid #e5e7eb; background: #fafbfc;
+  position: sticky; top: 0; z-index: 1;
+}
+.modal-header h2 { font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 700; }
+.modal-close {
+  width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+  background: #f3f4f6; border: none; border-radius: 8px; color: #6b7280; cursor: pointer; font-size: 18px;
+}
+.modal-body { padding: 24px 28px; }
+.summary-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+.summary-pill { font-family: 'JetBrains Mono', monospace; font-size: 11px; background: #f3f4f6; padding: 5px 12px; border-radius: 6px; color: #374151; }
+.summary-pill.warn { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+.summary-pill.good { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+.stat-panel { background: #fafbfc; border-radius: 10px; padding: 14px 16px; border: 1px solid #e5e7eb; }
+.comp-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 11px; }
+.comp-dot { width: 8px; height: 8px; border-radius: 3px; flex-shrink: 0; }
+.comp-name { color: #6b7280; width: 72px; flex-shrink: 0; font-size: 11px; }
+.comp-bar-track2 { flex: 1; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+.comp-bar2 { height: 100%; border-radius: 3px; }
+.comp-val { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #1a1a2e; width: 38px; text-align: right; flex-shrink: 0; font-weight: 500; }
+.delta-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 11px; }
+.delta-name { color: #6b7280; } .delta-val { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; }
+.delta-val.pos { color: #d97706; }
+.delta-row.total { border-top: 1px solid #e5e7eb; margin-top: 4px; padding-top: 5px; }
+.delta-row.total .delta-name { color: #1a1a2e; font-weight: 600; }
+.cache-bar-outer { height: 18px; background: #e5e7eb; border-radius: 5px; overflow: hidden; display: flex; margin-top: 6px; }
+.cache-bar-read { background: #34d399; height: 100%; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #fff; font-weight: 600; }
+.staleness-box2 { padding: 10px 12px; border-radius: 10px; background: #fef2f2; border: 1px solid #fecaca; height: 100%; }
+.staleness-title { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #dc2626; margin-bottom: 4px; }
+.staleness-stat { display: flex; justify-content: space-between; font-size: 11px; padding: 2px 0; }
+.staleness-stat .sl { color: #991b1b; } .staleness-stat .sv { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #dc2626; }
+.cost-box2 { padding: 10px 12px; border-radius: 10px; background: #fffbeb; border: 1px solid #fde68a; height: 100%; }
+.cost-row2 { display: flex; justify-content: space-between; font-size: 11px; padding: 2px 0; }
+.cost-l { color: #92400e; } .cost-v { font-family: 'JetBrains Mono', monospace; color: #d97706; font-weight: 500; }
+.cost-row2.total { border-top: 1px solid #fde68a; margin-top: 3px; padding-top: 4px; }
+.cost-row2.total .cost-l { font-weight: 600; } .cost-row2.total .cost-v { font-weight: 700; }
+.msg-block { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 18px; margin-bottom: 10px; border-left: 3px solid transparent; }
+.msg-block.user { border-left-color: #2563eb; } .msg-block.assistant { border-left-color: #7c3aed; }
+.msg-block.tool-use { border-left-color: #d97706; } .msg-block.tool-result { border-left-color: #059669; }
+.msg-block.stale-block { border-left-color: #dc2626; background: #fef7f7; }
+.msg-hdr { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.msg-role2 { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 2px 8px; border-radius: 4px; flex-shrink: 0; }
+.msg-role2.user { background: #dbeafe; color: #2563eb; } .msg-role2.assistant { background: #ede9fe; color: #7c3aed; }
+.msg-role2.tool-use { background: #fef3c7; color: #d97706; } .msg-role2.tool-result { background: #d1fae5; color: #059669; }
+.msg-tool { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: #1a1a2e; }
+.msg-sz { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.msg-sz-bar { width: 80px; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; }
+.msg-sz-fill { height: 100%; border-radius: 2px; }
+.msg-sz-txt { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #9ca3af; }
+.msg-cnt { font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1.7; color: #4b5563; background: #f9fafb; border: 1px solid #f0f1f3; border-radius: 6px; padding: 14px 16px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
+.tag-active { font-family: 'JetBrains Mono', monospace; font-size: 9px; background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; padding: 1px 6px; border-radius: 3px; }
+.tag-stale { font-family: 'JetBrains Mono', monospace; font-size: 9px; background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; padding: 1px 6px; border-radius: 3px; }
+.nav-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; padding-top: 16px; border-top: 1px solid #e5e7eb; }
+.nav-btn { font-family: 'JetBrains Mono', monospace; font-size: 11px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px 14px; cursor: pointer; color: #2563eb; }
+.nav-info { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6b7280; }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════ -->
+<!-- MAIN DASHBOARD PAGE                              -->
+<!-- ════════════════════════════════════════════════ -->
+<div class="page">
+
+  <!-- SECTION 1: Header -->
+  <div class="header">
+    <div class="header-left">
+      <div class="health-dot"></div>
+      <div class="header-title">CONTEXT ANALYZER <span>Session 81dc8a2f</span></div>
+    </div>
+    <div class="header-meta">claude-opus-4-6 &middot; 314 turns &middot; 6h 14m</div>
+  </div>
+
+  <!-- Scorecards -->
+  <div class="scorecards">
+    <div class="scorecard"><div class="scorecard-value val-red">31%</div><div class="scorecard-label">Dead Weight</div><div class="scorecard-sub">164K tokens stale</div></div>
+    <div class="scorecard"><div class="scorecard-value val-amber">528K</div><div class="scorecard-label">Context Used</div><div class="scorecard-sub">53% of 1M window</div></div>
+    <div class="scorecard"><div class="scorecard-value val-green">97.1%</div><div class="scorecard-label">Cache Hit Rate</div><div class="scorecard-sub">$4.82 session cost</div></div>
+    <div class="scorecard"><div class="scorecard-value val-blue">584</div><div class="scorecard-label">Tool Calls</div><div class="scorecard-sub">avg 3.2K output each</div></div>
+  </div>
+
+  <!-- Turn scrubber -->
+  <div class="scrubber">
+    <button class="scrubber-btn">&#9654;</button>
+    <input type="range" class="scrubber-slider" min="1" max="314" value="200" oninput="document.getElementById('scrub-label').textContent='Turn '+this.value+' / 314'">
+    <div class="scrubber-label" id="scrub-label">Turn 200 / 314 &middot; 19:42:15</div>
+  </div>
+
+  <!-- SECTION 2: Sediment Chart -->
+  <div class="section">
+    <div class="label">Context Sediment &mdash; Active vs Stale Over Time</div>
+    <div class="card">
+      <div class="chart-area">
+        <svg viewBox="0 0 1000 260" preserveAspectRatio="none" style="width:100%;height:100%;">
+          <text x="15" y="20" fill="#9ca3af" font-size="10" font-family="JetBrains Mono">500K</text>
+          <text x="15" y="85" fill="#9ca3af" font-size="10" font-family="JetBrains Mono">375K</text>
+          <text x="15" y="150" fill="#9ca3af" font-size="10" font-family="JetBrains Mono">250K</text>
+          <text x="15" y="215" fill="#9ca3af" font-size="10" font-family="JetBrains Mono">125K</text>
+          <line x1="55" y1="0" x2="55" y2="260" stroke="#f0f1f3" stroke-width="1"/>
+          <line x1="55" y1="65" x2="1000" y2="65" stroke="#f0f1f3" stroke-width="0.5"/>
+          <line x1="55" y1="130" x2="1000" y2="130" stroke="#f0f1f3" stroke-width="0.5"/>
+          <line x1="55" y1="195" x2="1000" y2="195" stroke="#f0f1f3" stroke-width="0.5"/>
+          <!-- System band -->
+          <path d="M55,260 L1000,260 L1000,242 L55,242 Z" fill="#a78bfa" opacity="0.3"/>
+          <text x="520" y="255" text-anchor="middle" fill="#7c3aed" font-size="8" font-family="JetBrains Mono" opacity="0.6">System + Skills (22K)</text>
+          <!-- Active -->
+          <path d="M55,242 Q150,240 250,235 Q350,225 450,200 Q550,170 650,148 Q750,128 850,110 Q925,98 1000,88 L1000,242 Z" fill="#34d399" opacity="0.5"/>
+          <!-- Stale (growing wedge) -->
+          <path d="M55,242 Q150,240 250,235 Q350,225 450,200 Q550,170 650,148 Q750,128 850,110 Q925,98 1000,88
+                   L1000,42 Q925,55 850,65 Q750,82 650,102 Q550,130 450,162 Q350,195 250,222 Q150,236 55,240 Z" fill="#fca5a5" opacity="0.5"/>
+          <!-- Labels -->
+          <text x="820" y="56" fill="#dc2626" font-size="11" font-family="JetBrains Mono" font-weight="600">STALE</text>
+          <text x="820" y="69" fill="#dc2626" font-size="9" font-family="JetBrains Mono">164K tokens (31%)</text>
+          <text x="820" y="210" fill="#059669" font-size="11" font-family="JetBrains Mono" font-weight="600">ACTIVE</text>
+          <text x="820" y="223" fill="#059669" font-size="9" font-family="JetBrains Mono">342K tokens (65%)</text>
+          <!-- Turn marker -->
+          <line x1="660" y1="0" x2="660" y2="260" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/>
+          <text x="664" y="14" fill="#2563eb" font-size="9" font-family="JetBrains Mono" font-weight="600">T200</text>
+          <!-- X-axis -->
+          <text x="55" y="258" fill="#9ca3af" font-size="9" font-family="JetBrains Mono">T1</text>
+          <text x="370" y="258" fill="#9ca3af" font-size="9" font-family="JetBrains Mono">T100</text>
+          <text x="700" y="258" fill="#9ca3af" font-size="9" font-family="JetBrains Mono">T200</text>
+          <text x="970" y="258" fill="#9ca3af" font-size="9" font-family="JetBrains Mono">T314</text>
+        </svg>
+      </div>
+      <div class="chart-legend">
+        <div class="chart-legend-item"><div class="chart-legend-dot" style="background:#a78bfa;opacity:0.5;"></div>System + Skills</div>
+        <div class="chart-legend-item"><div class="chart-legend-dot" style="background:#34d399;opacity:0.6;"></div>Active (referenced recently)</div>
+        <div class="chart-legend-item"><div class="chart-legend-dot" style="background:#fca5a5;opacity:0.6;"></div>Stale (no reference in 10+ turns)</div>
+        <div class="chart-legend-item"><div style="width:12px;height:3px;border-top:1.5px dashed #2563eb;margin-top:5px;"></div>Current turn</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 3: Context Tape + Recommendations -->
+  <div class="section">
+    <div class="label">Context Tape + Stale Block Recommendations</div>
+    <div class="two-col">
+      <!-- Tape -->
+      <div class="card">
+        <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#6b7280;margin-bottom:12px;">Block Lifespans at Turn 200</div>
+        <div class="tape-row"><div class="tape-label">System prompt</div><div class="tape-bar-track"><div class="tape-bar system" style="left:0%;width:100%;">T1 &rarr; now</div></div><div class="tape-size">6.3K</div><div class="tape-status active">PINNED</div></div>
+        <div class="tape-row"><div class="tape-label">CLAUDE.md + Skills</div><div class="tape-bar-track"><div class="tape-bar system" style="left:0%;width:100%;">T1 &rarr; now</div></div><div class="tape-size">15.5K</div><div class="tape-status active">PINNED</div></div>
+        <div class="tape-row" onclick="openModal()"><div class="tape-label">Read server.py</div><div class="tape-bar-track"><div class="tape-bar stale" style="left:2%;width:98%;">entered T7</div></div><div class="tape-size">12.4K</div><div class="tape-status stale">STALE 193t</div></div>
+        <div class="tape-row"><div class="tape-label">Bash npm test</div><div class="tape-bar-track"><div class="tape-bar stale" style="left:4%;width:96%;">entered T12</div></div><div class="tape-size">8.1K</div><div class="tape-status stale">STALE 188t</div></div>
+        <div class="tape-row"><div class="tape-label">Grep "import"</div><div class="tape-bar-track"><div class="tape-bar stale" style="left:5%;width:95%;">entered T15</div></div><div class="tape-size">4.2K</div><div class="tape-status stale">STALE 185t</div></div>
+        <div class="tape-row"><div class="tape-label">User prompt</div><div class="tape-bar-track"><div class="tape-bar stale" style="left:6%;width:94%;">entered T18</div></div><div class="tape-size">0.4K</div><div class="tape-status stale">STALE 182t</div></div>
+        <div class="tape-row"><div class="tape-label">Read models.py</div><div class="tape-bar-track"><div class="tape-bar active" style="left:30%;width:70%;">entered T95</div></div><div class="tape-size">6.8K</div><div class="tape-status active">ACTIVE</div></div>
+        <div class="tape-row"><div class="tape-label">Read hooks.py</div><div class="tape-bar-track"><div class="tape-bar active" style="left:45%;width:55%;">entered T142</div></div><div class="tape-size">5.2K</div><div class="tape-status active">ACTIVE</div></div>
+        <div class="tape-row"><div class="tape-label">Bash pytest</div><div class="tape-bar-track"><div class="tape-bar recent" style="left:60%;width:40%;">entered T190</div></div><div class="tape-size">3.1K</div><div class="tape-status active">RECENT</div></div>
+        <div class="tape-row"><div class="tape-label">User prompt</div><div class="tape-bar-track"><div class="tape-bar recent" style="left:63%;width:37%;">entered T198</div></div><div class="tape-size">0.2K</div><div class="tape-status active">RECENT</div></div>
+        <div style="margin-top:12px;display:flex;justify-content:space-between;font-size:10px;color:#6b7280;"><span>10 of 247 blocks &middot; sorted by entry turn</span><span style="color:#2563eb;cursor:pointer;">Show all &rarr;</span></div>
+      </div>
+
+      <!-- Recommendations -->
+      <div class="card">
+        <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#6b7280;margin-bottom:12px;">Stale Block Recommendations</div>
+        <div class="reco-banner">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:#dc2626;">164K tokens recoverable</div>
+          <div style="font-size:11px;color:#991b1b;margin-top:2px;">47 blocks unreferenced for 10+ turns</div>
+        </div>
+        <div class="reco-item" onclick="openModal()"><div class="reco-rank">#1</div><div class="reco-info"><div class="reco-tool">Read server.py</div><div class="reco-detail">Entered T7 &middot; Last ref T7 &middot; Stale 193 turns</div></div><div class="reco-tokens">12.4K</div></div>
+        <div class="reco-item"><div class="reco-rank">#2</div><div class="reco-info"><div class="reco-tool">Bash npm test</div><div class="reco-detail">Entered T12 &middot; Last ref T12 &middot; Stale 188 turns</div></div><div class="reco-tokens">8.1K</div></div>
+        <div class="reco-item"><div class="reco-rank">#3</div><div class="reco-info"><div class="reco-tool">Read README.md</div><div class="reco-detail">Entered T22 &middot; Last ref T30 &middot; Stale 170 turns</div></div><div class="reco-tokens">5.6K</div></div>
+        <div class="reco-item"><div class="reco-rank">#4</div><div class="reco-info"><div class="reco-tool">Grep "import"</div><div class="reco-detail">Entered T15 &middot; Last ref T15 &middot; Stale 185 turns</div></div><div class="reco-tokens">4.2K</div></div>
+        <div class="reco-item"><div class="reco-rank">#5</div><div class="reco-info"><div class="reco-tool">Bash git status</div><div class="reco-detail">Entered T25 &middot; Last ref T31 &middot; Stale 169 turns</div></div><div class="reco-tokens">3.8K</div></div>
+        <div style="margin-top:12px;font-size:10px;color:#6b7280;">Staleness threshold: no ref in <span class="mono" style="color:#1a1a2e;">10 turns</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 4: Turn Details (compact) -->
+  <div class="section">
+    <div class="label" style="justify-content:space-between;">
+      <span style="display:flex;align-items:center;gap:8px;"><span style="width:3px;height:12px;background:#2563eb;border-radius:2px;display:block;"></span>Turn 200 Details</span>
+      <span class="view-all" onclick="openModal()">Full drilldown &rarr;</span>
+    </div>
+    <div class="card">
+      <div style="display:flex;gap:16px;margin-bottom:14px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#6b7280;">
+        <span style="background:#f3f4f6;padding:3px 10px;border-radius:4px;">7 messages</span>
+        <span style="background:#fef2f2;padding:3px 10px;border-radius:4px;color:#dc2626;">+2,340 tokens</span>
+        <span style="background:#f3f4f6;padding:3px 10px;border-radius:4px;">cache read: 198K</span>
+        <span style="background:#f3f4f6;padding:3px 10px;border-radius:4px;">$0.018</span>
+      </div>
+      <div class="detail-msg" onclick="openModal()"><div class="detail-role user">USER</div><div class="detail-content">Can you fix the import error in hooks.py?</div><div class="detail-size">0.1K</div></div>
+      <div class="detail-msg" onclick="openModal()"><div class="detail-role asst">ASST</div><div class="detail-content">Let me read the file to understand the issue.</div><div class="detail-size">0.3K</div></div>
+      <div class="detail-msg" onclick="openModal()"><div class="detail-role tool">TOOL</div><div class="detail-content">Read hooks.py &rarr; """Hook processor: reads Claude Code HookInput from stdin...</div><div class="detail-size">1.2K</div></div>
+      <div class="detail-msg" onclick="openModal()"><div class="detail-role asst">ASST</div><div class="detail-content">I see the issue. Line 12 imports PostToolUseFailureEvent but the import path is wrong...</div><div class="detail-size">0.5K</div></div>
+      <div class="detail-msg" onclick="openModal()"><div class="detail-role tool">TOOL</div><div class="detail-content">Edit hooks.py &rarr; replaced import path</div><div class="detail-size">0.2K</div></div>
+      <div style="text-align:center;padding:8px 0;font-size:11px;"><span style="color:#2563eb;cursor:pointer;font-family:'JetBrains Mono',monospace;" onclick="openModal()">View full drilldown with content &rarr;</span></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ════════════════════════════════════════════════ -->
+<!-- TURN DRILLDOWN MODAL                             -->
+<!-- ════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Turn 200 &mdash; 19:42:15</h2>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="summary-bar">
+        <div class="summary-pill">7 messages</div>
+        <div class="summary-pill warn">+2,340 tokens</div>
+        <div class="summary-pill">context: 412K / 1M</div>
+        <div class="summary-pill good">cache: 99.4%</div>
+        <div class="summary-pill warn">3 stale blocks entered</div>
+        <div class="summary-pill">$0.018 this turn</div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-panel">
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#6b7280;margin-bottom:8px;">Composition</div>
+          <div class="comp-row"><div class="comp-dot" style="background:#a78bfa;"></div><div class="comp-name">System</div><div class="comp-bar-track2"><div class="comp-bar2" style="width:3%;background:#a78bfa;"></div></div><div class="comp-val">6.3K</div></div>
+          <div class="comp-row"><div class="comp-dot" style="background:#8b5cf6;"></div><div class="comp-name">CLAUDE.md</div><div class="comp-bar-track2"><div class="comp-bar2" style="width:8%;background:#8b5cf6;"></div></div><div class="comp-val">15.5K</div></div>
+          <div class="comp-row"><div class="comp-dot" style="background:#2563eb;"></div><div class="comp-name">Conv.</div><div class="comp-bar-track2"><div class="comp-bar2" style="width:45%;background:#2563eb;"></div></div><div class="comp-val">168K</div></div>
+          <div class="comp-row"><div class="comp-dot" style="background:#059669;"></div><div class="comp-name">Tool I/O</div><div class="comp-bar-track2"><div class="comp-bar2" style="width:100%;background:#059669;"></div></div><div class="comp-val">222K</div></div>
+        </div>
+        <div class="stat-panel">
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#6b7280;margin-bottom:8px;">This Turn</div>
+          <div class="delta-row"><span class="delta-name">Conversation</span><span class="delta-val pos">+840</span></div>
+          <div class="delta-row"><span class="delta-name">Tool I/O</span><span class="delta-val pos">+1,500</span></div>
+          <div class="delta-row total"><span class="delta-name">Total</span><span class="delta-val pos">+2,340</span></div>
+          <div style="margin-top:10px;"><div class="cache-bar-outer"><div class="cache-bar-read" style="width:99.3%;">99.3% cache</div></div></div>
+        </div>
+        <div class="stat-panel" style="padding:0;"><div class="staleness-box2"><div class="staleness-title">Staleness at T200</div><div class="staleness-stat"><span class="sl">Stale blocks</span><span class="sv">47 / 198</span></div><div class="staleness-stat"><span class="sl">Dead weight</span><span class="sv">164K (31%)</span></div><div class="staleness-stat"><span class="sl">Oldest stale</span><span class="sv">193 turns</span></div><div class="staleness-stat"><span class="sl">Recoverable</span><span class="sv">164K tokens</span></div></div></div>
+        <div class="stat-panel" style="padding:0;"><div class="cost-box2"><div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#92400e;margin-bottom:8px;">Cost</div><div class="cost-row2"><span class="cost-l">Cache read</span><span class="cost-v">$0.012</span></div><div class="cost-row2"><span class="cost-l">Cache create</span><span class="cost-v">$0.004</span></div><div class="cost-row2"><span class="cost-l">Output</span><span class="cost-v">$0.002</span></div><div class="cost-row2 total"><span class="cost-l">This turn</span><span class="cost-v">$0.018</span></div><div class="cost-row2 total" style="border-top:none;margin-top:0;padding-top:0;"><span class="cost-l">Session</span><span class="cost-v" style="font-size:14px;">$4.82</span></div></div></div>
+      </div>
+
+      <!-- Messages single column -->
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#6b7280;margin-bottom:12px;">Messages in Turn 200</div>
+      <div class="msg-block user"><div class="msg-hdr"><span class="msg-role2 user">USER</span><span class="tag-active">ACTIVE</span><div class="msg-sz"><div class="msg-sz-bar"><div class="msg-sz-fill" style="width:5%;background:#2563eb;"></div></div><span class="msg-sz-txt">0.1K</span></div></div><div class="msg-cnt">Can you fix the import error in hooks.py?</div></div>
+      <div class="msg-block assistant"><div class="msg-hdr"><span class="msg-role2 assistant">ASSISTANT</span><span class="tag-active">ACTIVE</span><div class="msg-sz"><div class="msg-sz-bar"><div class="msg-sz-fill" style="width:15%;background:#7c3aed;"></div></div><span class="msg-sz-txt">0.3K</span></div></div><div class="msg-cnt">Let me read the file to understand the issue. I'll check the imports at the top of hooks.py and see what's wrong with the import path.</div></div>
+      <div class="msg-block tool-use"><div class="msg-hdr"><span class="msg-role2 tool-use">TOOL USE</span><span class="msg-tool">Read</span><div class="msg-sz"><div class="msg-sz-bar"><div class="msg-sz-fill" style="width:8%;background:#d97706;"></div></div><span class="msg-sz-txt">0.2K</span></div></div><div class="msg-cnt">{"file_path": "/Users/mg/project/src/context_tracker/hooks.py"}</div></div>
+      <div class="msg-block tool-result"><div class="msg-hdr"><span class="msg-role2 tool-result">TOOL RESULT</span><span class="msg-tool">Read &rarr; hooks.py</span><span class="tag-active">ACTIVE</span><div class="msg-sz"><div class="msg-sz-bar"><div class="msg-sz-fill" style="width:60%;background:#059669;"></div></div><span class="msg-sz-txt">1.2K</span></div></div><div class="msg-cnt">"""Hook processor: reads Claude Code HookInput from stdin, writes JSONL events."""
+
+from __future__ import annotations
+
+import json
+import logging
+import sys
+
+from context_tracker.models import (
+    BaseEvent,
+    InstructionsLoadedEvent,
+    PostCompactEvent,
+    PostToolUseEvent,
+    PostToolUseFailureEvent,
+    PreCompactEvent,
+    SessionEndEvent,
+    SessionStartEvent,
+    SubagentStartEvent,
+    SubagentStopEvent,
+    UserPromptEvent,
+)
+from context_tracker.storage import append_event
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_len(value: object) -> int:
+    """Get string length of a value."""
+    if value is None:
+        return 0
+    if isinstance(value, str):
+        return len(value)
+    if isinstance(value, (dict, list)):
+        return len(json.dumps(value))
+    return len(str(value))</div></div>
+      <div class="msg-block assistant"><div class="msg-hdr"><span class="msg-role2 assistant">ASSISTANT</span><span class="tag-active">ACTIVE</span><div class="msg-sz"><div class="msg-sz-bar"><div class="msg-sz-fill" style="width:25%;background:#7c3aed;"></div></div><span class="msg-sz-txt">0.5K</span></div></div><div class="msg-cnt">I see the issue. Line 12 imports `PostToolUseFailureEvent` but the import path is wrong. It should be:
+
+from context_tracker.models import PostToolUseFailureEvent
+
+The current code uses a relative import that doesn't resolve correctly. Let me fix that.</div></div>
+      <div class="msg-block tool-use"><div class="msg-hdr"><span class="msg-role2 tool-use">TOOL USE</span><span class="msg-tool">Edit</span><div class="msg-sz"><div class="msg-sz-bar"><div class="msg-sz-fill" style="width:10%;background:#d97706;"></div></div><span class="msg-sz-txt">0.2K</span></div></div><div class="msg-cnt">{"file_path": "src/context_tracker/hooks.py", "old_string": "from models import PostToolUseFailureEvent", "new_string": "from context_tracker.models import PostToolUseFailureEvent"}</div></div>
+      <div class="msg-block tool-result"><div class="msg-hdr"><span class="msg-role2 tool-result">TOOL RESULT</span><span class="msg-tool">Edit &rarr; hooks.py</span><span class="tag-active">ACTIVE</span><div class="msg-sz"><div class="msg-sz-bar"><div class="msg-sz-fill" style="width:3%;background:#059669;"></div></div><span class="msg-sz-txt">0.1K</span></div></div><div class="msg-cnt">Successfully edited src/context_tracker/hooks.py — 1 replacement made.</div></div>
+
+      <!-- Stale blocks -->
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid #e5e7eb;">
+        <div style="display:flex;align-items:center;justify-content:space-between;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#6b7280;margin-bottom:12px;"><span>Stale Blocks Still in Context</span><span style="color:#dc2626;letter-spacing:0;text-transform:none;font-weight:400;">47 blocks &middot; 164K tokens</span></div>
+        <div class="msg-block stale-block"><div class="msg-hdr"><span class="msg-role2 tool-result">TOOL RESULT</span><span class="msg-tool">Read &rarr; server.py</span><span class="tag-stale">STALE 193 turns &middot; entered T7</span><div class="msg-sz"><span class="msg-sz-txt" style="color:#dc2626;font-weight:600;">12.4K</span></div></div><div class="msg-cnt" style="max-height:100px;color:#9ca3af;">"""FastMCP server exposing context usage query tools."""
+
+from __future__ import annotations
+import argparse
+from collections import defaultdict
+from pathlib import Path
+...</div></div>
+        <div class="msg-block stale-block"><div class="msg-hdr"><span class="msg-role2 tool-result">TOOL RESULT</span><span class="msg-tool">Bash &rarr; npm test</span><span class="tag-stale">STALE 188 turns &middot; entered T12</span><div class="msg-sz"><span class="msg-sz-txt" style="color:#dc2626;font-weight:600;">8.1K</span></div></div><div class="msg-cnt" style="max-height:100px;color:#9ca3af;">PASS tests/test_models.py (0.342s)
+  ✓ test_post_tool_use_roundtrip
+  ✓ test_session_start_roundtrip
+PASS tests/test_storage.py (0.156s)
+...</div></div>
+        <div style="text-align:center;padding:12px 0;font-size:11px;"><span style="color:#2563eb;cursor:pointer;font-family:'JetBrains Mono',monospace;">Show 45 more stale blocks &darr;</span></div>
+      </div>
+
+      <div class="nav-bar">
+        <button class="nav-btn">&larr; Turn 199</button>
+        <div class="nav-info">Turn 200 of 314</div>
+        <button class="nav-btn">Turn 201 &rarr;</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function openModal() { document.getElementById('modal-overlay').classList.add('active'); }
+function closeModal() { document.getElementById('modal-overlay').classList.remove('active'); }
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
+</script>
+</body>
+</html>

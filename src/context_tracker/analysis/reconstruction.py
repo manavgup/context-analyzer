@@ -29,6 +29,10 @@ logger = logging.getLogger(__name__)
 # Tokens per char rough estimate (English text, ~4 chars/token)
 _CHARS_PER_TOKEN = 4
 
+# If cache_creation_input_tokens > this fraction of total input tokens,
+# it indicates a compaction event (cached prefix was rebuilt).
+COMPACTION_CACHE_CREATE_THRESHOLD = 0.5
+
 # Prefixes stripped before extracting the primary program
 _CD_PREFIX_RE = re.compile(r"^cd\s+\S+\s*&&\s*")
 _ENV_PREFIX_RE = re.compile(r"^env\s+\S+=\S+\s+")
@@ -190,6 +194,41 @@ def _block_type_for_content_block(
     if entry_type == "assistant":
         return BlockType.ASSISTANT_TEXT
     return BlockType.ASSISTANT_TEXT
+
+
+def _detect_compactions_from_api(
+    turns: list[ConversationTurn],
+) -> list[int]:
+    """Detect compaction events from cache_creation spikes.
+
+    Returns list of turn numbers where compaction was detected.
+    A compaction is detected when cache_creation_input_tokens > 50% of
+    total input tokens (after the first API call), indicating the cached
+    prefix was rebuilt.
+    """
+    compaction_turns: list[int] = []
+    first_call_seen = False
+
+    for turn in turns:
+        for api_call in turn.api_calls:
+            total_in = (
+                api_call.input_tokens
+                + api_call.cache_read_tokens
+                + api_call.cache_creation_tokens
+            )
+            if total_in == 0:
+                continue
+
+            if not first_call_seen:
+                first_call_seen = True
+                continue  # Skip first API call (always 100% cache_create)
+
+            cache_create_ratio = api_call.cache_creation_tokens / total_in
+            if cache_create_ratio > COMPACTION_CACHE_CREATE_THRESHOLD:
+                compaction_turns.append(turn.turn_number)
+                break  # Only count once per turn
+
+    return compaction_turns
 
 
 def reconstruct_session(
@@ -397,53 +436,132 @@ def reconstruct_session(
                         "[CLAUDE.md + Skills — estimated from cache data]",
                     )
 
-    # Build per-turn snapshots
-    # Walk through turns and accumulate blocks entered per turn
-    blocks_by_turn: dict[int, list[str]] = {}
-    for bid, block in all_blocks.items():
-        tn = block.turn_entered
-        if tn not in blocks_by_turn:
-            blocks_by_turn[tn] = []
-        blocks_by_turn[tn].append(bid)
+    # ---- Detect compaction events ----
+    # Primary: detect from API cache-creation spikes (works without hook events)
+    api_compaction_turn_numbers = set(_detect_compactions_from_api(turns))
+
+    # Secondary: also detect from hook events (PostCompactEvent)
+    hook_compaction_events = list(compaction_events)  # copy, will consume
+
+    # ---- Build per-turn snapshots with epoch-based block inclusion ----
+    epoch_number = 0
+    current_epoch_start_turn = 1
+    compaction_summary_block_id: str | None = None
 
     previous_block_ids: set[str] = set()
 
     for turn in turns:
         tn = turn.turn_number
 
-        # Check for compaction events before this turn
-        compaction_detected = False
-        # (Simple heuristic: check if any compaction event timestamp falls
-        #  between previous turn and this turn)
-        # For now, just mark as no compaction unless we find a matching event
-        for ce in compaction_events:
-            # If we have timestamps, try to match
-            if turn.timestamp and ce.timestamp:
-                if ce.timestamp <= turn.timestamp:
-                    # Compaction happened before or at this turn
-                    compaction_detected = True
-                    # Create new epoch
-                    current_epoch = ContextEpoch(
-                        epoch_number=len(epochs),
-                        started_at_turn=tn,
-                        compaction_summary_size=ce.compact_summary_length,
-                        blocks_before_compaction=len(previous_block_ids),
-                    )
-                    epochs.append(current_epoch)
-                    turn.epoch = current_epoch.epoch_number
-                    # Remove the matched event so we don't re-trigger
-                    compaction_events.remove(ce)
-                    break
+        # Check if compaction happened at this turn
+        compaction_detected = tn in api_compaction_turn_numbers
 
-        # Blocks in context at this turn: all blocks up to and including this turn
+        # Also check hook events (timestamp-based)
+        hook_compaction_size: int | None = None
+        for ce in hook_compaction_events:
+            if turn.timestamp and ce.timestamp and ce.timestamp <= turn.timestamp:
+                compaction_detected = True
+                hook_compaction_size = ce.compact_summary_length
+                hook_compaction_events.remove(ce)
+                break
+
+        if compaction_detected and tn > 1:
+            # Count blocks from previous epochs that are being compacted out
+            blocks_before = len([
+                bid for bid in all_block_ids
+                if all_blocks[bid].turn_entered < tn and not all_blocks[bid].is_pinned
+            ])
+
+            epoch_number += 1
+            current_epoch_start_turn = tn
+
+            # Estimate compaction summary size from API data or hook event
+            summary_size: int | None = hook_compaction_size
+            if summary_size is None:
+                # Estimate: after compaction the entire context is rebuilt into cache.
+                # The compaction summary replaces old content, so estimate from
+                # the difference between actual context and new-epoch blocks.
+                last_api = turn.api_calls[-1] if turn.api_calls else None
+                if last_api:
+                    actual_total = (
+                        last_api.input_tokens
+                        + last_api.cache_read_tokens
+                        + last_api.cache_creation_tokens
+                    )
+                    # New-epoch blocks (pinned + just entered) token estimate
+                    new_blocks_est = sum(
+                        all_blocks[bid].size_tokens_est
+                        for bid in all_block_ids
+                        if all_blocks[bid].is_pinned
+                        or all_blocks[bid].turn_entered >= tn
+                    )
+                    summary_size = max(0, actual_total - new_blocks_est)
+
+            current_epoch = ContextEpoch(
+                epoch_number=epoch_number,
+                started_at_turn=tn,
+                compaction_summary_size=summary_size,
+                blocks_before_compaction=blocks_before,
+            )
+            epochs.append(current_epoch)
+
+            # Create a synthetic compaction summary block
+            block_counter += 1
+            compaction_summary_block_id = f"b{block_counter:06d}"
+            est_summary_tokens = summary_size if summary_size else 0
+            summary_block = ContextBlock(
+                block_id=compaction_summary_block_id,
+                turn_entered=tn,
+                api_call_entered=api_call_global_index,
+                epoch_entered=epoch_number,
+                block_type=BlockType.COMPACTION_SUMMARY,
+                size_chars=est_summary_tokens * _CHARS_PER_TOKEN,
+                size_tokens_est=est_summary_tokens,
+                content_hash=_content_hash(f"__compaction_summary_epoch_{epoch_number}__"),
+                is_pinned=False,
+                timestamp=turn.timestamp,
+            )
+            all_blocks[compaction_summary_block_id] = summary_block
+            all_block_ids.append(compaction_summary_block_id)
+            content_store.add(
+                compaction_summary_block_id,
+                f"[Compaction summary — epoch {epoch_number}, "
+                f"~{est_summary_tokens} tokens, "
+                f"replaced {blocks_before} blocks]",
+            )
+
+        turn.epoch = epoch_number
+
+        # ---- Determine blocks in context at this turn ----
+        # Blocks in context = pinned blocks + blocks entered in CURRENT epoch
+        # + compaction summary block (if past epoch 0)
         current_block_ids: list[str] = []
+
         for bid in all_block_ids:
-            if all_blocks[bid].turn_entered <= tn:
+            block = all_blocks[bid]
+            if block.is_pinned:
                 current_block_ids.append(bid)
+            elif (
+                block.turn_entered >= current_epoch_start_turn
+                and block.turn_entered <= tn
+                and block.block_type != BlockType.COMPACTION_SUMMARY
+            ):
+                current_block_ids.append(bid)
+
+        # Add compaction summary block at the front (after pinned) if past epoch 0
+        if epoch_number > 0 and compaction_summary_block_id:
+            # Insert after pinned blocks
+            insert_pos = 0
+            for i, bid in enumerate(current_block_ids):
+                if all_blocks[bid].is_pinned:
+                    insert_pos = i + 1
+                else:
+                    break
+            current_block_ids.insert(insert_pos, compaction_summary_block_id)
 
         current_set = set(current_block_ids)
         entered = current_set - previous_block_ids
-        exited = previous_block_ids - current_set  # Normally empty unless compaction
+        exited = previous_block_ids - current_set
 
         # Aggregate token counts from API calls in this turn
         total_input = sum(ac.input_tokens for ac in turn.api_calls)
@@ -451,17 +569,27 @@ def reconstruct_session(
         total_cache_read = sum(ac.cache_read_tokens for ac in turn.api_calls)
         total_cache_create = sum(ac.cache_creation_tokens for ac in turn.api_calls)
 
-        # Estimate total tokens in context
+        # Estimate total tokens from block sizes
         total_tokens_est = sum(
             all_blocks[bid].size_tokens_est for bid in current_block_ids
         )
+
+        # REAL context size from the last API call in this turn (ground truth)
+        actual_context_tokens = 0
+        if turn.api_calls:
+            last_api = turn.api_calls[-1]
+            actual_context_tokens = (
+                last_api.input_tokens
+                + last_api.cache_read_tokens
+                + last_api.cache_creation_tokens
+            )
 
         snapshot = TurnSnapshot(
             turn_number=tn,
             timestamp=turn.timestamp,
             epoch=turn.epoch,
             block_ids=current_block_ids,
-            block_states=[],  # Populated by staleness detection (Task 6)
+            block_states=[],  # Populated by staleness detection
             blocks_entered_ids=sorted(entered),
             blocks_exited_ids=sorted(exited),
             total_tokens_est=total_tokens_est,
@@ -469,6 +597,7 @@ def reconstruct_session(
             output_tokens=total_output,
             cache_read_tokens=total_cache_read,
             cache_creation_tokens=total_cache_create,
+            actual_context_tokens=actual_context_tokens,
             compaction_detected=compaction_detected,
             api_call_count=len(turn.api_calls),
         )

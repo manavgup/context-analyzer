@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Turn Drilldown v2 — Two-Row Layout</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: rgba(0,0,0,0.03);
+  color: #1a1a2e;
+  padding: 32px;
+  line-height: 1.5;
+}
+.mono { font-family: 'JetBrains Mono', monospace; }
+.page { max-width: 1120px; margin: 0 auto; }
+.label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: #6b7280; margin-bottom: 10px; }
+
+/* Modal */
+.modal {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.12);
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 28px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fafbfc;
+}
+.modal-header h2 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px; font-weight: 700; letter-spacing: 0.5px;
+}
+.modal-close {
+  width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+  background: #f3f4f6; border: none; border-radius: 8px; color: #6b7280;
+  cursor: pointer; font-size: 18px;
+}
+.modal-body { padding: 24px 28px; }
+
+/* Summary pills */
+.summary-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+.summary-pill {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  background: #f3f4f6; padding: 5px 12px; border-radius: 6px; color: #374151;
+}
+.summary-pill.warn { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+.summary-pill.good { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
+
+/* ── ROW 1: Stats panels (4-up) ── */
+.stats-row {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+  margin-bottom: 20px;
+}
+.stat-panel {
+  background: #fafbfc; border-radius: 10px; padding: 14px 16px;
+  border: 1px solid #e5e7eb;
+}
+
+/* Composition */
+.comp-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 11px; }
+.comp-dot { width: 8px; height: 8px; border-radius: 3px; flex-shrink: 0; }
+.comp-name { color: #6b7280; width: 72px; flex-shrink: 0; font-size: 11px; }
+.comp-bar-track { flex: 1; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+.comp-bar { height: 100%; border-radius: 3px; }
+.comp-val { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #1a1a2e; width: 38px; text-align: right; flex-shrink: 0; font-weight: 500; }
+
+/* Delta */
+.delta-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 11px; }
+.delta-name { color: #6b7280; }
+.delta-val { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; }
+.delta-val.pos { color: #d97706; }
+.delta-row.total { border-top: 1px solid #e5e7eb; margin-top: 4px; padding-top: 5px; }
+.delta-row.total .delta-name { color: #1a1a2e; font-weight: 600; }
+
+/* Token rows */
+.token-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 11px; border-bottom: 1px solid #f3f4f6; }
+.token-label { color: #6b7280; }
+.token-value { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: #1a1a2e; }
+
+/* Cache bar */
+.cache-bar-outer { height: 18px; background: #e5e7eb; border-radius: 5px; overflow: hidden; display: flex; margin-top: 6px; }
+.cache-bar-read { background: #34d399; height: 100%; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #fff; font-weight: 600; }
+.cache-bar-create { background: #fbbf24; height: 100%; }
+
+/* Staleness box */
+.staleness-box { padding: 10px 12px; border-radius: 8px; background: #fef2f2; border: 1px solid #fecaca; }
+.staleness-title { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #dc2626; margin-bottom: 4px; }
+.staleness-stat { display: flex; justify-content: space-between; font-size: 11px; padding: 2px 0; }
+.staleness-stat .sl { color: #991b1b; }
+.staleness-stat .sv { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #dc2626; }
+
+/* Cost box */
+.cost-box { padding: 10px 12px; border-radius: 8px; background: #fffbeb; border: 1px solid #fde68a; }
+.cost-row { display: flex; justify-content: space-between; font-size: 11px; padding: 2px 0; }
+.cost-label { color: #92400e; }
+.cost-value { font-family: 'JetBrains Mono', monospace; color: #d97706; font-weight: 500; }
+.cost-row.total { border-top: 1px solid #fde68a; margin-top: 3px; padding-top: 4px; }
+.cost-row.total .cost-label { font-weight: 600; }
+.cost-row.total .cost-value { font-weight: 700; }
+
+/* ── ROW 2: Messages (full width) ── */
+.messages-section { margin-top: 4px; }
+.messages-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+.msg-block {
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
+  padding: 14px 16px; border-left: 3px solid transparent;
+}
+.msg-block.user { border-left-color: #2563eb; }
+.msg-block.assistant { border-left-color: #7c3aed; }
+.msg-block.tool-use { border-left-color: #d97706; }
+.msg-block.tool-result { border-left-color: #059669; }
+.msg-block.stale-block { border-left-color: #dc2626; background: #fef7f7; }
+
+.msg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.msg-role {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 1px;
+  padding: 2px 8px; border-radius: 4px; flex-shrink: 0;
+}
+.msg-role.user { background: #dbeafe; color: #2563eb; }
+.msg-role.assistant { background: #ede9fe; color: #7c3aed; }
+.msg-role.tool-use { background: #fef3c7; color: #d97706; }
+.msg-role.tool-result { background: #d1fae5; color: #059669; }
+.msg-tool-name { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: #1a1a2e; }
+.msg-size-info { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.msg-size-bar-wrap { width: 60px; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; }
+.msg-size-bar { height: 100%; border-radius: 2px; }
+.msg-size-text { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #9ca3af; }
+.msg-content {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1.65;
+  color: #4b5563; background: #f9fafb; border: 1px solid #f0f1f3;
+  border-radius: 6px; padding: 12px 14px;
+  max-height: 180px; overflow-y: auto;
+  white-space: pre-wrap; word-break: break-word;
+}
+.msg-staleness-tag {
+  font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  background: #fef2f2; color: #dc2626; border: 1px solid #fecaca;
+  padding: 1px 6px; border-radius: 3px;
+}
+.msg-active-tag {
+  font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0;
+  padding: 1px 6px; border-radius: 3px;
+}
+
+/* Stale section */
+.stale-section {
+  margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb;
+}
+
+/* Nav bar */
+.nav-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 20px; padding-top: 16px; border-top: 1px solid #e5e7eb;
+}
+.nav-btn {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px;
+  padding: 6px 14px; cursor: pointer; color: #2563eb;
+}
+.nav-turn-info { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6b7280; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div style="margin-bottom:16px;">
+    <span class="label">Turn Drilldown v2 — stats on top, full-width messages below</span>
+  </div>
+
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Turn 200 &mdash; 19:42:15</h2>
+      <button class="modal-close">&times;</button>
+    </div>
+
+    <div class="modal-body">
+      <!-- Summary pills -->
+      <div class="summary-bar">
+        <div class="summary-pill">7 messages</div>
+        <div class="summary-pill warn">+2,340 tokens</div>
+        <div class="summary-pill">context: 412K / 1M</div>
+        <div class="summary-pill good">cache: 99.4%</div>
+        <div class="summary-pill warn">3 stale blocks entered</div>
+        <div class="summary-pill">$0.018 this turn</div>
+      </div>
+
+      <!-- ═══ ROW 1: Four compact stat panels ═══ -->
+      <div class="stats-row">
+
+        <!-- Panel 1: Composition -->
+        <div class="stat-panel">
+          <div class="label">Composition</div>
+          <div class="comp-row">
+            <div class="comp-dot" style="background:#a78bfa;"></div>
+            <div class="comp-name">System</div>
+            <div class="comp-bar-track"><div class="comp-bar" style="width:3%;background:#a78bfa;"></div></div>
+            <div class="comp-val">6.3K</div>
+          </div>
+          <div class="comp-row">
+            <div class="comp-dot" style="background:#8b5cf6;"></div>
+            <div class="comp-name">CLAUDE.md</div>
+            <div class="comp-bar-track"><div class="comp-bar" style="width:8%;background:#8b5cf6;"></div></div>
+            <div class="comp-val">15.5K</div>
+          </div>
+          <div class="comp-row">
+            <div class="comp-dot" style="background:#2563eb;"></div>
+            <div class="comp-name">Conv.</div>
+            <div class="comp-bar-track"><div class="comp-bar" style="width:45%;background:#2563eb;"></div></div>
+            <div class="comp-val">168K</div>
+          </div>
+          <div class="comp-row">
+            <div class="comp-dot" style="background:#059669;"></div>
+            <div class="comp-name">Tool I/O</div>
+            <div class="comp-bar-track"><div class="comp-bar" style="width:100%;background:#059669;"></div></div>
+            <div class="comp-val">222K</div>
+          </div>
+        </div>
+
+        <!-- Panel 2: This Turn's Growth -->
+        <div class="stat-panel">
+          <div class="label">This Turn</div>
+          <div class="delta-row">
+            <span class="delta-name">Conversation</span>
+            <span class="delta-val pos">+840</span>
+          </div>
+          <div class="delta-row">
+            <span class="delta-name">Tool I/O</span>
+            <span class="delta-val pos">+1,500</span>
+          </div>
+          <div class="delta-row total">
+            <span class="delta-name">Total</span>
+            <span class="delta-val pos">+2,340</span>
+          </div>
+          <div style="margin-top:10px;">
+            <div class="cache-bar-outer">
+              <div class="cache-bar-read" style="width:99.3%;">99.3% cache</div>
+              <div class="cache-bar-create" style="width:0.7%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 3: Staleness -->
+        <div class="stat-panel" style="padding:0;">
+          <div class="staleness-box" style="border:none;border-radius:10px;height:100%;">
+            <div class="staleness-title">Staleness at T200</div>
+            <div class="staleness-stat">
+              <span class="sl">Stale blocks</span>
+              <span class="sv">47 / 198</span>
+            </div>
+            <div class="staleness-stat">
+              <span class="sl">Dead weight</span>
+              <span class="sv">164K (31%)</span>
+            </div>
+            <div class="staleness-stat">
+              <span class="sl">Oldest stale</span>
+              <span class="sv">193 turns</span>
+            </div>
+            <div class="staleness-stat">
+              <span class="sl">Recoverable</span>
+              <span class="sv">164K tokens</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 4: Cost -->
+        <div class="stat-panel" style="padding:0;">
+          <div class="cost-box" style="border:none;border-radius:10px;height:100%;">
+            <div class="label" style="color:#92400e;">Cost</div>
+            <div class="cost-row">
+              <span class="cost-label">Cache read</span>
+              <span class="cost-value">$0.012</span>
+            </div>
+            <div class="cost-row">
+              <span class="cost-label">Cache create</span>
+              <span class="cost-value">$0.004</span>
+            </div>
+            <div class="cost-row">
+              <span class="cost-label">Output</span>
+              <span class="cost-value">$0.002</span>
+            </div>
+            <div class="cost-row total">
+              <span class="cost-label">This turn</span>
+              <span class="cost-value">$0.018</span>
+            </div>
+            <div class="cost-row total" style="border-top:none;margin-top:0;padding-top:0;">
+              <span class="cost-label">Session</span>
+              <span class="cost-value" style="font-size:14px;">$4.82</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ═══ ROW 2: Messages (full width, two-column grid) ═══ -->
+      <div class="messages-section">
+        <div class="label">Messages in Turn 200</div>
+        <div class="messages-grid">
+
+          <!-- Message 1 -->
+          <div class="msg-block user">
+            <div class="msg-header">
+              <span class="msg-role user">USER</span>
+              <span class="msg-active-tag">ACTIVE</span>
+              <div class="msg-size-info">
+                <div class="msg-size-bar-wrap"><div class="msg-size-bar" style="width:5%;background:#2563eb;"></div></div>
+                <span class="msg-size-text">0.1K</span>
+              </div>
+            </div>
+            <div class="msg-content">Can you fix the import error in hooks.py?</div>
+          </div>
+
+          <!-- Message 2 -->
+          <div class="msg-block assistant">
+            <div class="msg-header">
+              <span class="msg-role assistant">ASSISTANT</span>
+              <span class="msg-active-tag">ACTIVE</span>
+              <div class="msg-size-info">
+                <div class="msg-size-bar-wrap"><div class="msg-size-bar" style="width:15%;background:#7c3aed;"></div></div>
+                <span class="msg-size-text">0.3K</span>
+              </div>
+            </div>
+            <div class="msg-content">Let me read the file to understand the issue.
+
+I'll check the imports at the top of hooks.py and see what's wrong with the import path.</div>
+          </div>
+
+          <!-- Message 3: Tool Use -->
+          <div class="msg-block tool-use">
+            <div class="msg-header">
+              <span class="msg-role tool-use">TOOL USE</span>
+              <span class="msg-tool-name">Read</span>
+              <div class="msg-size-info">
+                <div class="msg-size-bar-wrap"><div class="msg-size-bar" style="width:8%;background:#d97706;"></div></div>
+                <span class="msg-size-text">0.2K</span>
+              </div>
+            </div>
+            <div class="msg-content">{
+  "file_path": "/Users/mg/project/src/context_tracker/hooks.py"
+}</div>
+          </div>
+
+          <!-- Message 4: Tool Result (large) -->
+          <div class="msg-block tool-result">
+            <div class="msg-header">
+              <span class="msg-role tool-result">TOOL RESULT</span>
+              <span class="msg-tool-name">Read &rarr; hooks.py</span>
+              <span class="msg-active-tag">ACTIVE</span>
+              <div class="msg-size-info">
+                <div class="msg-size-bar-wrap"><div class="msg-size-bar" style="width:60%;background:#059669;"></div></div>
+                <span class="msg-size-text">1.2K</span>
+              </div>
+            </div>
+            <div class="msg-content">"""Hook processor: reads Claude Code HookInput from stdin, writes JSONL events."""
+
+from __future__ import annotations
+
+import json
+import logging
+import sys
+
+from context_tracker.models import (
+    BaseEvent,
+    InstructionsLoadedEvent,
+    PostCompactEvent,
+    PostToolUseEvent,
+    PostToolUseFailureEvent,
+    PreCompactEvent,
+    SessionEndEvent,
+    SessionStartEvent,
+    SubagentStartEvent,
+    SubagentStopEvent,
+    UserPromptEvent,
+)
+from context_tracker.storage import append_event
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_len(value: object) -> int:
+    """Get string length of a value."""
+    if value is None:
+        return 0
+    if isinstance(value, str):
+        return len(value)
+    if isinstance(value, (dict, list)):
+        return len(json.dumps(value))
+    return len(str(value))</div>
+          </div>
+
+          <!-- Message 5: Assistant response -->
+          <div class="msg-block assistant">
+            <div class="msg-header">
+              <span class="msg-role assistant">ASSISTANT</span>
+              <span class="msg-active-tag">ACTIVE</span>
+              <div class="msg-size-info">
+                <div class="msg-size-bar-wrap"><div class="msg-size-bar" style="width:25%;background:#7c3aed;"></div></div>
+                <span class="msg-size-text">0.5K</span>
+              </div>
+            </div>
+            <div class="msg-content">I see the issue. Line 12 imports `PostToolUseFailureEvent` but the import path is wrong. It should be:
+
+```python
+from context_tracker.models import PostToolUseFailureEvent
+```
+
+The current code uses a relative import that doesn't resolve correctly. Let me fix that.</div>
+          </div>
+
+          <!-- Message 6: Tool Use (Edit) -->
+          <div class="msg-block tool-use">
+            <div class="msg-header">
+              <span class="msg-role tool-use">TOOL USE</span>
+              <span class="msg-tool-name">Edit</span>
+              <div class="msg-size-info">
+                <div class="msg-size-bar-wrap"><div class="msg-size-bar" style="width:10%;background:#d97706;"></div></div>
+                <span class="msg-size-text">0.2K</span>
+              </div>
+            </div>
+            <div class="msg-content">{
+  "file_path": "src/context_tracker/hooks.py",
+  "old_string": "from models import PostToolUseFailureEvent",
+  "new_string": "from context_tracker.models import PostToolUseFailureEvent"
+}</div>
+          </div>
+
+          <!-- Message 7: Tool Result (small) -->
+          <div class="msg-block tool-result">
+            <div class="msg-header">
+              <span class="msg-role tool-result">TOOL RESULT</span>
+              <span class="msg-tool-name">Edit &rarr; hooks.py</span>
+              <span class="msg-active-tag">ACTIVE</span>
+              <div class="msg-size-info">
+                <div class="msg-size-bar-wrap"><div class="msg-size-bar" style="width:3%;background:#059669;"></div></div>
+                <span class="msg-size-text">0.1K</span>
+              </div>
+            </div>
+            <div class="msg-content">Successfully edited src/context_tracker/hooks.py
+1 replacement made.</div>
+          </div>
+
+        </div>
+
+        <!-- Stale blocks -->
+        <div class="stale-section">
+          <div class="label" style="display:flex;align-items:center;justify-content:space-between;">
+            <span>Stale Blocks Still in Context</span>
+            <span style="font-size:10px;color:#dc2626;letter-spacing:0;text-transform:none;font-weight:400;">47 blocks &middot; 164K tokens dead weight</span>
+          </div>
+          <div class="messages-grid">
+            <div class="msg-block stale-block">
+              <div class="msg-header">
+                <span class="msg-role tool-result">TOOL RESULT</span>
+                <span class="msg-tool-name">Read &rarr; server.py</span>
+                <span class="msg-staleness-tag">STALE 193 turns</span>
+                <div class="msg-size-info">
+                  <span class="msg-size-text" style="color:#dc2626;font-weight:600;">12.4K</span>
+                </div>
+              </div>
+              <div class="msg-content" style="max-height:80px;color:#9ca3af;">"""FastMCP server exposing context usage query tools."""
+
+from __future__ import annotations
+import argparse
+from collections import defaultdict
+from pathlib import Path
+...</div>
+            </div>
+
+            <div class="msg-block stale-block">
+              <div class="msg-header">
+                <span class="msg-role tool-result">TOOL RESULT</span>
+                <span class="msg-tool-name">Bash &rarr; npm test</span>
+                <span class="msg-staleness-tag">STALE 188 turns</span>
+                <div class="msg-size-info">
+                  <span class="msg-size-text" style="color:#dc2626;font-weight:600;">8.1K</span>
+                </div>
+              </div>
+              <div class="msg-content" style="max-height:80px;color:#9ca3af;">PASS tests/test_models.py (0.342s)
+  ✓ test_post_tool_use_roundtrip
+  ✓ test_session_start_roundtrip
+  ✓ test_api_turn_roundtrip
+PASS tests/test_storage.py (0.156s)
+  ✓ test_append_and_read_roundtrip
+...</div>
+            </div>
+
+            <div class="msg-block stale-block">
+              <div class="msg-header">
+                <span class="msg-role tool-result">TOOL RESULT</span>
+                <span class="msg-tool-name">Read &rarr; README.md</span>
+                <span class="msg-staleness-tag">STALE 170 turns</span>
+                <div class="msg-size-info">
+                  <span class="msg-size-text" style="color:#dc2626;font-weight:600;">5.6K</span>
+                </div>
+              </div>
+              <div class="msg-content" style="max-height:80px;color:#9ca3af;"># Context Analyzer
+
+Context window usage analyzer for Claude Code. An external MCP server that tracks how context is consumed across tools, compaction, skills, and user interactions.
+...</div>
+            </div>
+
+            <div class="msg-block stale-block">
+              <div class="msg-header">
+                <span class="msg-role tool-result">TOOL RESULT</span>
+                <span class="msg-tool-name">Grep &rarr; "import"</span>
+                <span class="msg-staleness-tag">STALE 185 turns</span>
+                <div class="msg-size-info">
+                  <span class="msg-size-text" style="color:#dc2626;font-weight:600;">4.2K</span>
+                </div>
+              </div>
+              <div class="msg-content" style="max-height:80px;color:#9ca3af;">src/context_tracker/models.py:from pydantic import BaseModel, Field
+src/context_tracker/hooks.py:from context_tracker.models import (
+src/context_tracker/server.py:from context_tracker.models import (
+...</div>
+            </div>
+          </div>
+
+          <div style="text-align:center;padding:12px 0;font-size:11px;">
+            <span style="color:#2563eb;cursor:pointer;font-family:'JetBrains Mono',monospace;">Show 43 more stale blocks &darr;</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Nav -->
+      <div class="nav-bar">
+        <button class="nav-btn">&larr; Turn 199</button>
+        <div class="nav-turn-info">Turn 200 of 314</div>
+        <button class="nav-btn">Turn 201 &rarr;</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:24px;text-align:center;font-size:11px;color:#9ca3af;font-family:'JetBrains Mono',monospace;">
+    MOCKUP &mdash; Turn Drilldown v2 (stats top, full-width messages bottom)
+  </div>
+
+</div>
+</body>
+</html>

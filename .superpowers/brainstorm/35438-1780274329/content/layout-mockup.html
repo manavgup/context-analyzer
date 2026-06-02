@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Layout Mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #f8f9fb;
+  color: #1a1a2e;
+  padding: 32px;
+  line-height: 1.5;
+}
+.mono { font-family: 'JetBrains Mono', monospace; }
+.page { max-width: 1120px; margin: 0 auto; }
+.label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: #6b7280; margin-bottom: 10px; }
+
+/* ── Section 1: Header ── */
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: 20px; border-bottom: 1px solid #e5e7eb;
+}
+.header-left { display: flex; align-items: center; gap: 12px; }
+.health-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #f59e0b; box-shadow: 0 0 8px rgba(245,158,11,0.4);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+.header-title { font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+.header-title span { color: #6b7280; font-weight: 400; font-size: 13px; margin-left: 8px; }
+.header-meta { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6b7280; }
+
+/* ── Scorecards ── */
+.scorecards {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+  margin-top: 20px;
+}
+.scorecard {
+  background: #fff; border-radius: 10px; padding: 18px 20px;
+  border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.scorecard-value {
+  font-family: 'JetBrains Mono', monospace; font-size: 32px; font-weight: 700;
+  line-height: 1.1;
+}
+.scorecard-label { font-size: 11px; color: #6b7280; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+.scorecard-sub { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #9ca3af; margin-top: 2px; }
+.val-red { color: #dc2626; }
+.val-amber { color: #d97706; }
+.val-green { color: #059669; }
+.val-blue { color: #2563eb; }
+
+/* ── Turn Scrubber ── */
+.scrubber {
+  display: flex; align-items: center; gap: 14px;
+  margin-top: 20px; padding: 12px 20px;
+  background: #fff; border-radius: 10px;
+  border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.scrubber-slider {
+  flex: 1; -webkit-appearance: none; appearance: none;
+  height: 4px; background: #e5e7eb; border-radius: 2px; outline: none;
+}
+.scrubber-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px;
+  background: #2563eb; border-radius: 50%; cursor: pointer;
+  box-shadow: 0 0 6px rgba(37,99,235,0.3);
+}
+.scrubber-label { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #1a1a2e; white-space: nowrap; min-width: 180px; text-align: right; }
+.scrubber-btn {
+  width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+  background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 8px;
+  cursor: pointer; font-size: 14px; color: #2563eb; flex-shrink: 0;
+}
+
+/* ── Section 2: Sediment Chart ── */
+.section { margin-top: 24px; }
+.chart-card {
+  background: #fff; border-radius: 12px; padding: 24px;
+  border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.chart-area {
+  position: relative; height: 260px; background: #fafbfc; border-radius: 8px;
+  border: 1px solid #f0f1f3; overflow: hidden;
+}
+
+/* ── Section 3: Context Tape + Recommendations ── */
+.two-col { display: grid; grid-template-columns: 1fr 340px; gap: 16px; }
+.tape-area { position: relative; min-height: 300px; }
+.reco-card { background: #fff; border-radius: 12px; padding: 20px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+
+/* ── Section 4: Turn Details ── */
+.details-card { background: #fff; border-radius: 12px; padding: 20px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+
+/* ── Mockup placeholders ── */
+.placeholder-chart {
+  width: 100%; height: 100%; display: flex; flex-direction: column;
+  justify-content: flex-end; padding: 16px; position: relative;
+}
+
+/* Sediment layers */
+.sediment-layer {
+  width: 100%; position: relative;
+}
+
+/* Tape blocks */
+.tape-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 0;
+  border-bottom: 1px solid #f3f4f6; font-size: 12px;
+}
+.tape-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6b7280; width: 110px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tape-bar-track { flex: 1; height: 20px; background: #f3f4f6; border-radius: 4px; position: relative; overflow: hidden; }
+.tape-bar {
+  position: absolute; top: 0; height: 100%; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(255,255,255,0.8);
+}
+.tape-bar.active { background: #2563eb; }
+.tape-bar.stale { background: #fecaca; border: 1.5px dashed #dc2626; color: #dc2626; }
+.tape-bar.system { background: #a78bfa; }
+.tape-bar.recent { background: #34d399; }
+.tape-size { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #9ca3af; width: 50px; text-align: right; flex-shrink: 0; }
+.tape-status { font-family: 'JetBrains Mono', monospace; font-size: 9px; width: 70px; text-align: right; flex-shrink: 0; }
+.tape-status.stale { color: #dc2626; }
+.tape-status.active { color: #059669; }
+
+/* Recommendation items */
+.reco-item {
+  display: flex; align-items: flex-start; gap: 10px; padding: 10px 0;
+  border-bottom: 1px solid #f3f4f6; font-size: 12px;
+}
+.reco-rank { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #dc2626; font-weight: 700; width: 20px; flex-shrink: 0; }
+.reco-info { flex: 1; }
+.reco-tool { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #1a1a2e; }
+.reco-detail { font-size: 11px; color: #6b7280; margin-top: 2px; }
+.reco-tokens { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: #dc2626; flex-shrink: 0; }
+
+/* Detail items */
+.detail-msg {
+  display: flex; align-items: center; gap: 8px; padding: 5px 0;
+  border-bottom: 1px solid #f3f4f6; font-size: 12px;
+}
+.detail-role {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.5px; width: 55px; flex-shrink: 0;
+}
+.detail-role.user { color: #2563eb; }
+.detail-role.asst { color: #7c3aed; }
+.detail-role.tool { color: #059669; }
+.detail-content { flex: 1; color: #6b7280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-size { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #9ca3af; width: 45px; text-align: right; flex-shrink: 0; }
+
+/* Section annotation */
+.section-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%; background: #2563eb; color: #fff;
+  font-size: 11px; font-weight: 700; margin-right: 6px; flex-shrink: 0;
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ═══ SECTION 1: Header + Scorecards ═══ -->
+  <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+    <span class="section-num">1</span>
+    <span class="label" style="margin-bottom:0;">Header + Health Scorecards</span>
+  </div>
+  <div class="header">
+    <div class="header-left">
+      <div class="health-dot"></div>
+      <div class="header-title">CONTEXT ANALYZER <span>Session 81dc8a2f</span></div>
+    </div>
+    <div class="header-meta">claude-opus-4-6 &middot; 314 turns &middot; 6h 14m</div>
+  </div>
+  <div class="scorecards">
+    <div class="scorecard">
+      <div class="scorecard-value val-red">31%</div>
+      <div class="scorecard-label">Dead Weight</div>
+      <div class="scorecard-sub">164K tokens stale</div>
+    </div>
+    <div class="scorecard">
+      <div class="scorecard-value val-amber">528K</div>
+      <div class="scorecard-label">Context Used</div>
+      <div class="scorecard-sub">53% of 1M window</div>
+    </div>
+    <div class="scorecard">
+      <div class="scorecard-value val-green">97.1%</div>
+      <div class="scorecard-label">Cache Hit Rate</div>
+      <div class="scorecard-sub">$4.82 session cost</div>
+    </div>
+    <div class="scorecard">
+      <div class="scorecard-value val-blue">584</div>
+      <div class="scorecard-label">Tool Calls</div>
+      <div class="scorecard-sub">avg 3.2K output each</div>
+    </div>
+  </div>
+
+  <!-- Turn scrubber -->
+  <div class="scrubber">
+    <button class="scrubber-btn">&#9654;</button>
+    <input type="range" class="scrubber-slider" min="1" max="314" value="200">
+    <div class="scrubber-label mono">Turn 200 / 314 &middot; 19:42:15</div>
+  </div>
+
+  <!-- ═══ SECTION 2: Sediment Chart ═══ -->
+  <div class="section">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+      <span class="section-num">2</span>
+      <span class="label" style="margin-bottom:0;">Context Sediment &mdash; Active vs Stale Over Time</span>
+    </div>
+    <div class="chart-card">
+      <div class="chart-area">
+        <svg viewBox="0 0 1000 240" preserveAspectRatio="none" style="width:100%;height:100%;">
+          <!-- Y-axis labels -->
+          <text x="15" y="20" fill="#9ca3af" font-size="10" font-family="JetBrains Mono">500K</text>
+          <text x="15" y="80" fill="#9ca3af" font-size="10" font-family="JetBrains Mono">375K</text>
+          <text x="15" y="140" fill="#9ca3af" font-size="10" font-family="JetBrains Mono">250K</text>
+          <text x="15" y="200" fill="#9ca3af" font-size="10" font-family="JetBrains Mono">125K</text>
+          <line x1="50" y1="0" x2="50" y2="240" stroke="#f0f1f3" stroke-width="1"/>
+          <line x1="50" y1="60" x2="1000" y2="60" stroke="#f0f1f3" stroke-width="0.5"/>
+          <line x1="50" y1="120" x2="1000" y2="120" stroke="#f0f1f3" stroke-width="0.5"/>
+          <line x1="50" y1="180" x2="1000" y2="180" stroke="#f0f1f3" stroke-width="0.5"/>
+
+          <!-- System + Skills (constant band at bottom) -->
+          <path d="M50,240 L1000,240 L1000,220 L50,220 Z" fill="#a78bfa" opacity="0.3"/>
+          <text x="520" y="233" text-anchor="middle" fill="#7c3aed" font-size="9" font-family="JetBrains Mono" opacity="0.7">System + Skills (22K)</text>
+
+          <!-- Active context (green, on top of system) -->
+          <path d="M50,220 Q150,218 200,215 Q300,205 400,185 Q500,160 600,140 Q700,120 800,100 Q900,85 1000,75
+                   L1000,220 L50,220 Z" fill="#34d399" opacity="0.5"/>
+
+          <!-- Stale context (red, growing wedge on top of active) -->
+          <path d="M50,220 Q150,218 200,215 Q300,205 400,185 Q500,160 600,140 Q700,120 800,100 Q900,85 1000,75
+                   L1000,35 Q900,50 800,62 Q700,78 600,100 Q500,125 400,155 Q300,185 200,205 Q150,213 50,218 Z" fill="#fca5a5" opacity="0.5"/>
+
+          <!-- Stale label -->
+          <text x="780" y="55" fill="#dc2626" font-size="11" font-family="JetBrains Mono" font-weight="600">STALE</text>
+          <text x="780" y="67" fill="#dc2626" font-size="9" font-family="JetBrains Mono">164K tokens (31%)</text>
+
+          <!-- Active label -->
+          <text x="780" y="195" fill="#059669" font-size="11" font-family="JetBrains Mono" font-weight="600">ACTIVE</text>
+          <text x="780" y="207" fill="#059669" font-size="9" font-family="JetBrains Mono">342K tokens (65%)</text>
+
+          <!-- Turn marker (vertical line at current turn) -->
+          <line x1="640" y1="0" x2="640" y2="240" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/>
+          <text x="644" y="14" fill="#2563eb" font-size="9" font-family="JetBrains Mono" font-weight="600">T200</text>
+
+          <!-- X-axis labels -->
+          <text x="50" y="238" fill="#9ca3af" font-size="9" font-family="JetBrains Mono">T1</text>
+          <text x="350" y="238" fill="#9ca3af" font-size="9" font-family="JetBrains Mono">T100</text>
+          <text x="680" y="238" fill="#9ca3af" font-size="9" font-family="JetBrains Mono">T200</text>
+          <text x="970" y="238" fill="#9ca3af" font-size="9" font-family="JetBrains Mono">T314</text>
+        </svg>
+      </div>
+      <!-- Legend -->
+      <div style="display:flex;gap:20px;margin-top:12px;font-size:11px;color:#6b7280;">
+        <div style="display:flex;align-items:center;gap:5px;"><div style="width:12px;height:12px;background:#a78bfa;border-radius:2px;opacity:0.5;"></div>System + Skills</div>
+        <div style="display:flex;align-items:center;gap:5px;"><div style="width:12px;height:12px;background:#34d399;border-radius:2px;opacity:0.6;"></div>Active (referenced recently)</div>
+        <div style="display:flex;align-items:center;gap:5px;"><div style="width:12px;height:12px;background:#fca5a5;border-radius:2px;opacity:0.6;"></div>Stale (no reference in 10+ turns)</div>
+        <div style="display:flex;align-items:center;gap:5px;"><div style="width:12px;height:3px;border-top:1.5px dashed #2563eb;"></div>Current turn</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SECTION 3: Context Tape + Recommendations ═══ -->
+  <div class="section">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+      <span class="section-num">3</span>
+      <span class="label" style="margin-bottom:0;">Context Tape + Stale Block Recommendations</span>
+    </div>
+    <div class="two-col">
+      <!-- Context Tape -->
+      <div class="chart-card">
+        <div class="label" style="font-size:10px;">Block Lifespans at Turn 200</div>
+        <div class="tape-area">
+          <div class="tape-row">
+            <div class="tape-label">System prompt</div>
+            <div class="tape-bar-track"><div class="tape-bar system" style="left:0%;width:100%;">T1 &rarr; now</div></div>
+            <div class="tape-size">6.3K</div>
+            <div class="tape-status active">PINNED</div>
+          </div>
+          <div class="tape-row">
+            <div class="tape-label">CLAUDE.md + Skills</div>
+            <div class="tape-bar-track"><div class="tape-bar system" style="left:0%;width:100%;">T1 &rarr; now</div></div>
+            <div class="tape-size">15.5K</div>
+            <div class="tape-status active">PINNED</div>
+          </div>
+          <div class="tape-row">
+            <div class="tape-label">Read server.py</div>
+            <div class="tape-bar-track"><div class="tape-bar stale" style="left:2%;width:98%;">entered T7</div></div>
+            <div class="tape-size">12.4K</div>
+            <div class="tape-status stale">STALE 193t</div>
+          </div>
+          <div class="tape-row">
+            <div class="tape-label">Bash npm test</div>
+            <div class="tape-bar-track"><div class="tape-bar stale" style="left:4%;width:96%;">entered T12</div></div>
+            <div class="tape-size">8.1K</div>
+            <div class="tape-status stale">STALE 188t</div>
+          </div>
+          <div class="tape-row">
+            <div class="tape-label">Grep "import"</div>
+            <div class="tape-bar-track"><div class="tape-bar stale" style="left:5%;width:95%;">entered T15</div></div>
+            <div class="tape-size">4.2K</div>
+            <div class="tape-status stale">STALE 185t</div>
+          </div>
+          <div class="tape-row">
+            <div class="tape-label">User prompt</div>
+            <div class="tape-bar-track"><div class="tape-bar stale" style="left:6%;width:94%;">entered T18</div></div>
+            <div class="tape-size">0.4K</div>
+            <div class="tape-status stale">STALE 182t</div>
+          </div>
+          <div class="tape-row">
+            <div class="tape-label">Read models.py</div>
+            <div class="tape-bar-track"><div class="tape-bar active" style="left:30%;width:70%;">entered T95</div></div>
+            <div class="tape-size">6.8K</div>
+            <div class="tape-status active">ACTIVE</div>
+          </div>
+          <div class="tape-row">
+            <div class="tape-label">Read hooks.py</div>
+            <div class="tape-bar-track"><div class="tape-bar active" style="left:45%;width:55%;">entered T142</div></div>
+            <div class="tape-size">5.2K</div>
+            <div class="tape-status active">ACTIVE</div>
+          </div>
+          <div class="tape-row">
+            <div class="tape-label">Bash pytest</div>
+            <div class="tape-bar-track"><div class="tape-bar recent" style="left:60%;width:40%;">entered T190</div></div>
+            <div class="tape-size">3.1K</div>
+            <div class="tape-status active">RECENT</div>
+          </div>
+          <div class="tape-row">
+            <div class="tape-label">User prompt</div>
+            <div class="tape-bar-track"><div class="tape-bar recent" style="left:63%;width:37%;">entered T198</div></div>
+            <div class="tape-size">0.2K</div>
+            <div class="tape-status active">RECENT</div>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:16px;font-size:10px;color:#6b7280;">
+            <span>Showing 10 of 247 blocks &middot; sorted by entry turn</span>
+            <span style="margin-left:auto;color:#2563eb;cursor:pointer;">Show all &rarr;</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recommendations -->
+      <div class="reco-card">
+        <div class="label">Stale Block Recommendations</div>
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px 14px;margin-bottom:16px;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:#dc2626;">164K tokens recoverable</div>
+          <div style="font-size:11px;color:#991b1b;margin-top:2px;">47 blocks unreferenced for 10+ turns</div>
+        </div>
+
+        <div class="reco-item">
+          <div class="reco-rank">#1</div>
+          <div class="reco-info">
+            <div class="reco-tool">Read server.py</div>
+            <div class="reco-detail">Entered turn 7 &middot; Last referenced turn 7 &middot; Stale 193 turns</div>
+          </div>
+          <div class="reco-tokens">12.4K</div>
+        </div>
+        <div class="reco-item">
+          <div class="reco-rank">#2</div>
+          <div class="reco-info">
+            <div class="reco-tool">Bash npm test</div>
+            <div class="reco-detail">Entered turn 12 &middot; Last referenced turn 12 &middot; Stale 188 turns</div>
+          </div>
+          <div class="reco-tokens">8.1K</div>
+        </div>
+        <div class="reco-item">
+          <div class="reco-rank">#3</div>
+          <div class="reco-info">
+            <div class="reco-tool">Read README.md</div>
+            <div class="reco-detail">Entered turn 22 &middot; Last referenced turn 30 &middot; Stale 170 turns</div>
+          </div>
+          <div class="reco-tokens">5.6K</div>
+        </div>
+        <div class="reco-item">
+          <div class="reco-rank">#4</div>
+          <div class="reco-info">
+            <div class="reco-tool">Grep "import"</div>
+            <div class="reco-detail">Entered turn 15 &middot; Last referenced turn 15 &middot; Stale 185 turns</div>
+          </div>
+          <div class="reco-tokens">4.2K</div>
+        </div>
+        <div class="reco-item">
+          <div class="reco-rank">#5</div>
+          <div class="reco-info">
+            <div class="reco-tool">Bash git status</div>
+            <div class="reco-detail">Entered turn 25 &middot; Last referenced turn 31 &middot; Stale 169 turns</div>
+          </div>
+          <div class="reco-tokens">3.8K</div>
+        </div>
+
+        <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:11px;color:#6b7280;">
+          Staleness threshold: no reference in <span class="mono" style="color:#1a1a2e;">10 turns</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SECTION 4: Turn Details ═══ -->
+  <div class="section">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+      <span class="section-num">4</span>
+      <span class="label" style="margin-bottom:0;">Turn Details &mdash; Turn 200</span>
+    </div>
+    <div class="details-card">
+      <div style="display:flex;gap:20px;margin-bottom:14px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#6b7280;">
+        <span style="background:#f3f4f6;padding:3px 10px;border-radius:4px;">5 messages</span>
+        <span style="background:#f3f4f6;padding:3px 10px;border-radius:4px;">+2,340 tokens this turn</span>
+        <span style="background:#f3f4f6;padding:3px 10px;border-radius:4px;">cache read: 198K</span>
+        <span style="background:#f3f4f6;padding:3px 10px;border-radius:4px;">cache create: 1.2K</span>
+      </div>
+      <div class="detail-msg">
+        <div class="detail-role user">USER</div>
+        <div class="detail-content">Can you fix the import error in hooks.py?</div>
+        <div class="detail-size">0.1K</div>
+      </div>
+      <div class="detail-msg">
+        <div class="detail-role asst">ASST</div>
+        <div class="detail-content">Let me read the file to understand the issue.</div>
+        <div class="detail-size">0.3K</div>
+      </div>
+      <div class="detail-msg">
+        <div class="detail-role tool">TOOL</div>
+        <div class="detail-content">Read hooks.py &rarr; 142 lines of Python code...</div>
+        <div class="detail-size">1.2K</div>
+      </div>
+      <div class="detail-msg">
+        <div class="detail-role asst">ASST</div>
+        <div class="detail-content">I see the issue. The import should be from context_tracker.models...</div>
+        <div class="detail-size">0.5K</div>
+      </div>
+      <div class="detail-msg">
+        <div class="detail-role tool">TOOL</div>
+        <div class="detail-content">Edit hooks.py &rarr; replaced line 12</div>
+        <div class="detail-size">0.2K</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:32px;text-align:center;font-size:11px;color:#9ca3af;font-family:'JetBrains Mono',monospace;">
+    MOCKUP &mdash; Context Analyzer Dashboard v3 Layout
+  </div>
+
+</div>
+</body>
+</html>
