@@ -817,6 +817,14 @@ def create_app(
             "usage": total_usage,
         }
 
+    @app.get("/sessions")
+    def serve_sessions_page():
+        """Cross-session overview page."""
+        sessions_html = static_dir / "sessions.html"
+        if sessions_html.exists():
+            return FileResponse(str(sessions_html))
+        return HTMLResponse("<h1>Sessions</h1><p>sessions.html not found</p>")
+
     @app.get("/")
     def serve_dashboard():
         # Prefer v3 dashboard, fall back to v2
