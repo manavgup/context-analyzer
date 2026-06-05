@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Context Analyzer — Sessions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f8f9fb;
+  --card: #ffffff;
+  --border: #e5e7eb;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --text: #1a1d23;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --accent: #6366f1;
+  --accent-bg: rgba(99,102,241,0.08);
+  --green: #34d399;
+  --green-bg: rgba(52,211,153,0.08);
+  --danger: #ef4444;
+  --danger-bg: rgba(239,68,68,0.08);
+  --yellow: #fbbf24;
+  --yellow-bg: rgba(251,191,36,0.08);
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.container {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 24px 24px 80px;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.header h1 {
+  font-size: 18px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.header-right {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Summary cards */
+.summary-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.summary-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: var(--shadow);
+}
+
+.summary-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.summary-value {
+  font-family: var(--mono);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.summary-sub {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Session table */
+.table-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.table-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.table-header h2 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+thead th {
+  text-align: left;
+  padding: 10px 16px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+thead th:hover {
+  color: var(--accent);
+}
+
+thead th.sorted-asc::after { content: ' \u25b2'; font-size: 9px; }
+thead th.sorted-desc::after { content: ' \u25bc'; font-size: 9px; }
+
+tbody td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+tbody tr:hover {
+  background: var(--accent-bg);
+}
+
+tbody tr {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.session-id {
+  color: var(--accent);
+  font-weight: 500;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cost-cell { text-align: right; }
+.num-cell { text-align: right; }
+
+/* Sparkbar */
+.sparkbar {
+  display: inline-block;
+  height: 14px;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+
+.sparkbar.context { background: rgba(52,211,153,0.4); }
+.sparkbar.cache { background: rgba(217,164,65,0.4); }
+.sparkbar.cost { background: rgba(99,102,241,0.4); }
+
+/* Loading */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  font-family: var(--mono);
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 10px;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 768px) {
+  .summary-row { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Context Analyzer</h1>
+    <div class="header-right" id="header-info">Loading...</div>
+  </div>
+
+  <div class="summary-row" id="summary-row">
+    <div class="summary-card">
+      <div class="summary-label">Sessions</div>
+      <div class="summary-value" id="sm-sessions">--</div>
+      <div class="summary-sub" id="sm-sessions-sub">&nbsp;</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Total API Calls</div>
+      <div class="summary-value" id="sm-calls">--</div>
+      <div class="summary-sub" id="sm-calls-sub">&nbsp;</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Total Cache Read</div>
+      <div class="summary-value" id="sm-cache">--</div>
+      <div class="summary-sub" id="sm-cache-sub">&nbsp;</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Total Cost</div>
+      <div class="summary-value" id="sm-cost">--</div>
+      <div class="summary-sub" id="sm-cost-sub">&nbsp;</div>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="table-header">
+      <h2>All Sessions</h2>
+    </div>
+    <div id="table-loading" class="loading">
+      <div class="loading-spinner"></div>
+      Loading sessions...
+    </div>
+    <table id="sessions-table" style="display:none">
+      <thead>
+        <tr>
+          <th data-key="session_id">Session</th>
+          <th data-key="total_turns" class="num-cell">Turns</th>
+          <th data-key="total_api_calls" class="num-cell">API Calls</th>
+          <th data-key="peak_context_tokens" class="num-cell">Peak Context</th>
+          <th data-key="total_cache_read" class="num-cell">Cache Read</th>
+          <th data-key="total_output_tokens" class="num-cell">Output</th>
+          <th data-key="total_cost_usd" class="cost-cell">Cost</th>
+        </tr>
+      </thead>
+      <tbody id="sessions-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  function fmt(n) {
+    if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K';
+    return String(n);
+  }
+
+  function fmtCost(n) {
+    if (n >= 1000) return '$' + (n / 1000).toFixed(1) + 'K';
+    if (n >= 1) return '$' + n.toFixed(2);
+    return '$' + n.toFixed(4);
+  }
+
+  function fmtExact(n) { return n.toLocaleString(); }
+
+  let sessions = [];
+  let sortKey = 'source_mtime';
+  let sortDir = 'desc';
+
+  async function loadTrends() {
+    const resp = await fetch('/api/sessions/trends');
+    if (!resp.ok) return null;
+    return await resp.json();
+  }
+
+  async function loadSessions() {
+    const resp = await fetch('/api/sessions');
+    if (!resp.ok) return [];
+    return await resp.json();
+  }
+
+  function renderSummary(trends) {
+    document.getElementById('sm-sessions').textContent = trends.session_count;
+    document.getElementById('sm-calls').textContent = fmt(trends.total_api_calls);
+    document.getElementById('sm-calls-sub').textContent = fmtExact(trends.total_api_calls) + ' total';
+    document.getElementById('sm-cache').textContent = fmt(trends.total_cache_read);
+    document.getElementById('sm-cache-sub').textContent = fmtExact(trends.total_cache_read) + ' tokens';
+    document.getElementById('sm-cost').textContent = fmtCost(trends.total_cost);
+    document.getElementById('sm-cost-sub').textContent =
+      'avg ' + fmtCost(trends.total_cost / Math.max(trends.session_count, 1)) + '/session';
+    document.getElementById('header-info').textContent =
+      trends.session_count + ' sessions tracked';
+  }
+
+  function renderTable(data) {
+    const tbody = document.getElementById('sessions-tbody');
+    const maxPeak = Math.max(...data.map(s => s.peak_context_tokens || 0), 1);
+    const maxCache = Math.max(...data.map(s => s.total_cache_read || 0), 1);
+    const maxCost = Math.max(...data.map(s => s.total_cost_usd || 0), 0.01);
+
+    tbody.innerHTML = data.map(s => {
+      const peakPct = ((s.peak_context_tokens || 0) / maxPeak * 100).toFixed(0);
+      const cachePct = ((s.total_cache_read || 0) / maxCache * 100).toFixed(0);
+      const costPct = ((s.total_cost_usd || 0) / maxCost * 100).toFixed(0);
+      const shortId = (s.session_id || '').substring(0, 8);
+
+      return `<tr data-sid="${s.session_id}">
+        <td class="session-id" title="${s.session_id}">${shortId}...</td>
+        <td class="num-cell">${s.total_turns || 0}</td>
+        <td class="num-cell">${s.total_api_calls || 0}</td>
+        <td class="num-cell">
+          <span class="sparkbar context" style="width:${peakPct}%"></span>
+          ${fmt(s.peak_context_tokens || 0)}
+        </td>
+        <td class="num-cell">
+          <span class="sparkbar cache" style="width:${cachePct}%"></span>
+          ${fmt(s.total_cache_read || 0)}
+        </td>
+        <td class="num-cell">${fmt(s.total_output_tokens || 0)}</td>
+        <td class="cost-cell">
+          <span class="sparkbar cost" style="width:${costPct}%"></span>
+          ${fmtCost(s.total_cost_usd || 0)}
+        </td>
+      </tr>`;
+    }).join('');
+
+    // Click to open session (placeholder — will need ccscope build or dynamic loading)
+    tbody.querySelectorAll('tr').forEach(tr => {
+      tr.addEventListener('click', () => {
+        const sid = tr.getAttribute('data-sid');
+        alert('Session: ' + sid + '\n\nTo view this session, run:\n  ccscope build ' + sid + '\n  make dev');
+      });
+    });
+  }
+
+  function sortSessions(key) {
+    if (sortKey === key) {
+      sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortKey = key;
+      sortDir = key === 'session_id' ? 'asc' : 'desc';
+    }
+
+    sessions.sort((a, b) => {
+      let va = a[key] || 0;
+      let vb = b[key] || 0;
+      if (typeof va === 'string') va = va.toLowerCase();
+      if (typeof vb === 'string') vb = vb.toLowerCase();
+      if (va < vb) return sortDir === 'asc' ? -1 : 1;
+      if (va > vb) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    renderTable(sessions);
+
+    // Update header styles
+    document.querySelectorAll('thead th').forEach(th => {
+      th.classList.remove('sorted-asc', 'sorted-desc');
+      if (th.getAttribute('data-key') === key) {
+        th.classList.add(sortDir === 'asc' ? 'sorted-asc' : 'sorted-desc');
+      }
+    });
+  }
+
+  async function init() {
+    const [trends, sessionsData] = await Promise.all([
+      loadTrends(),
+      loadSessions(),
+    ]);
+
+    if (trends) renderSummary(trends);
+
+    sessions = sessionsData;
+
+    document.getElementById('table-loading').style.display = 'none';
+    document.getElementById('sessions-table').style.display = 'table';
+
+    renderTable(sessions);
+
+    // Wire up sortable headers
+    document.querySelectorAll('thead th').forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.getAttribute('data-key');
+        if (key) sortSessions(key);
+      });
+    });
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
