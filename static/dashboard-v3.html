@@ -560,6 +560,36 @@ html, body {
   color: white;
 }
 
+/* Session picker */
+.session-picker {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin-left: 14px;
+  max-width: 200px;
+  appearance: auto;
+}
+
+.session-picker:hover {
+  border-color: var(--accent);
+}
+
+.session-picker:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(99,102,241,0.15);
+}
+
+.session-picker.loading {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -583,6 +613,9 @@ html, body {
       <div class="header-left">
         <div class="health-dot" id="health-dot"></div>
         <h1>Context Analyzer</h1>
+        <select id="session-picker" class="session-picker">
+          <option value="">Loading sessions...</option>
+        </select>
       </div>
       <div class="header-right" id="header-model"></div>
     </div>
@@ -776,6 +809,7 @@ html, body {
 
   // ===== DATA LOADING =====
   async function loadData() {
+    // Try static files first (backward compatible with ccscope build)
     const [blocksResp, churnResp, metaResp, turnMapResp] = await Promise.all([
       fetch('./blocks.json'),
       fetch('./churn.json'),
@@ -784,9 +818,8 @@ html, body {
     ]);
 
     if (!blocksResp.ok || !churnResp.ok) {
-      document.getElementById('loading').innerHTML =
-        '<span style="color:var(--danger)">Failed to load data. Run <code>ccscope build</code> first.</span>';
-      return false;
+      // No static files — try loading most recent session via API
+      return await loadSessionFromApi();
     }
 
     blocks = await blocksResp.json();
@@ -798,6 +831,121 @@ html, body {
       try { turnMap = await turnMapResp.json(); } catch(e) { turnMap = []; }
     }
     return true;
+  }
+
+  async function loadSessionFromApi(sessionId) {
+    // If no sessionId, pick the first available
+    if (!sessionId) {
+      try {
+        const listResp = await fetch('/api/sessions');
+        if (listResp.ok) {
+          const sessions = await listResp.json();
+          if (sessions.length > 0) {
+            sessionId = sessions[0].session_id || sessions[0];
+          }
+        }
+      } catch(e) { /* ignore */ }
+    }
+
+    if (!sessionId) {
+      document.getElementById('loading').innerHTML =
+        '<span style="color:var(--danger)">No sessions found. Start a Claude Code session with hooks installed.</span>';
+      return false;
+    }
+
+    try {
+      const resp = await fetch('/api/session/' + encodeURIComponent(sessionId) + '/data');
+      if (!resp.ok) {
+        document.getElementById('loading').innerHTML =
+          '<span style="color:var(--danger)">Failed to load session ' + sessionId.substring(0, 8) + '...</span>';
+        return false;
+      }
+      const data = await resp.json();
+      blocks = data.blocks || [];
+      churn = data.churn || [];
+      meta = data.meta || { session_id: sessionId };
+      turnMap = data.turn_map || [];
+      return true;
+    } catch(e) {
+      document.getElementById('loading').innerHTML =
+        '<span style="color:var(--danger)">Error loading session data.</span>';
+      return false;
+    }
+  }
+
+  async function switchSession(sessionId) {
+    if (!sessionId) return;
+
+    // Show loading state
+    const picker = document.getElementById('session-picker');
+    picker.classList.add('loading');
+
+    // Clear caches
+    callContentCache = {};
+    convTurnContentCache = {};
+
+    // Destroy existing charts
+    if (growthChart) { growthChart.destroy(); growthChart = null; }
+    if (churnChart) { churnChart.destroy(); churnChart = null; }
+
+    const ok = await loadSessionFromApi(sessionId);
+    if (!ok) {
+      picker.classList.remove('loading');
+      return;
+    }
+
+    // Reset state
+    currentTurn = 0;
+    playing = false;
+    if (playTimer) { clearInterval(playTimer); playTimer = null; }
+
+    // Recompute and re-render everything
+    computeDerived();
+    computeTopGrowth();
+    renderScorecards();
+    renderChurnStats();
+    buildGrowthChart();
+    buildChurnChart();
+    updateScrubberLabel();
+    renderTurnDetails();
+
+    // Update scrubber range
+    const scrubber = document.getElementById('scrubber-range');
+    scrubber.max = maxTurn;
+    scrubber.value = 0;
+
+    // Update hints
+    document.getElementById('growth-hint').textContent =
+      'Prefix ' + fmt(pinnedTokens) + ' tok \u00b7 ' + churn.length + ' calls';
+    document.getElementById('churn-hint').textContent = 'Total re-read: ' + fmt(cumulativeRead[cumulativeRead.length - 1] || 0);
+
+    // Update header model
+    document.getElementById('header-model').textContent = meta.model || '';
+
+    // Update picker selection
+    picker.value = sessionId;
+    picker.classList.remove('loading');
+  }
+
+  async function populateSessionPicker() {
+    const picker = document.getElementById('session-picker');
+    try {
+      const resp = await fetch('/api/sessions');
+      if (!resp.ok) return;
+      const sessions = await resp.json();
+      picker.innerHTML = sessions.map(s => {
+        const sid = s.session_id || s;
+        const short = sid.substring(0, 8);
+        const calls = s.total_api_calls ? ' \u00b7 ' + s.total_api_calls + ' calls' : '';
+        const cost = s.total_cost_usd ? ' \u00b7 $' + s.total_cost_usd.toFixed(0) : '';
+        return '<option value="' + sid + '">' + short + '...' + calls + cost + '</option>';
+      }).join('');
+
+      // Select current session if we have one
+      if (meta.session_id) picker.value = meta.session_id;
+
+      picker.addEventListener('change', () => switchSession(picker.value));
+    } catch(e) { /* ignore */ }
   }
 
   // Fetch real content for an API call from the server
@@ -1859,6 +2007,9 @@ html, body {
       'Prefix ' + fmt(pinnedTokens) + ' tok \u00b7 ' + churn.length + ' calls';
     document.getElementById('churn-hint').textContent =
       'Total re-read: ' + fmt(cumulativeRead[cumulativeRead.length - 1] || 0);
+
+    // Populate session picker (async, non-blocking)
+    populateSessionPicker();
   }
 
   init();

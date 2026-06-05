@@ -202,6 +202,39 @@ def create_app(
             "sessions": trends,
         }
 
+    @app.get("/api/session/{session_id}/data")
+    def get_session_data(session_id: str):
+        """Full session data (blocks + churn + meta + turn_map) for the dashboard.
+
+        This replaces the need for `ccscope build` — returns all the data
+        the v3 dashboard needs to render charts and inspector.
+        """
+        _validate_session_id(session_id)
+
+        from context_tracker.ccscope.parse_transcript import build_turn_map
+        from context_tracker.ccscope.reconcile import find_session_paths as find_paths
+        from context_tracker.ccscope.reconcile import reconcile
+
+        try:
+            blocks, churn, subagents = reconcile(
+                session_id, projects_dir=transcript_dir, trace_dir=trace_dir,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Session transcript not found") from exc
+
+        # Build turn map
+        paths = find_paths(session_id, projects_dir=transcript_dir, trace_dir=trace_dir)
+        turn_map = []
+        if paths.get("transcript"):
+            turn_map = build_turn_map(Path(paths["transcript"]))
+
+        return {
+            "blocks": blocks,
+            "churn": churn,
+            "meta": {"session_id": session_id},
+            "turn_map": turn_map,
+        }
+
     @app.get("/api/session/{session_id}/turns")
     def get_session_turns(session_id: str):
         """Per-turn summary data for sediment chart and scorecards."""
