@@ -560,6 +560,39 @@ html, body {
   color: white;
 }
 
+/* Message content blocks */
+.msg-pre {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 400px;
+  overflow-y: auto;
+  background: #f9fafb;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.msg-expand-btn {
+  display: inline-block;
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.msg-expand-btn:hover {
+  text-decoration: underline;
+}
+
 /* Session picker */
 .session-picker {
   font-family: var(--mono);
@@ -571,7 +604,7 @@ html, body {
   color: var(--text-secondary);
   cursor: pointer;
   margin-left: 14px;
-  max-width: 200px;
+  max-width: 420px;
   appearance: auto;
 }
 
@@ -927,6 +960,28 @@ html, body {
     picker.classList.remove('loading');
   }
 
+  function sessionLabel(s) {
+    const sid = s.session_id || s;
+    // Date from source_mtime
+    let dateStr = '';
+    if (s.source_mtime) {
+      const d = new Date(s.source_mtime * 1000);
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      dateStr = months[d.getMonth()] + ' ' + d.getDate();
+    }
+    // First prompt as label (clean up command noise)
+    let label = (s.first_prompt || '').replace(/^<[^>]+>.*$/s, '').trim();
+    label = label.replace(/\n/g, ' ').substring(0, 40);
+    if (!label || label.startsWith('Base directory')) label = sid.substring(0, 8) + '...';
+
+    const turns = s.total_turns ? s.total_turns + 't' : '';
+    const calls = s.total_api_calls ? s.total_api_calls + 'c' : '';
+    const cost = s.total_cost_usd ? '$' + s.total_cost_usd.toFixed(0) : '';
+    const stats = [turns, calls, cost].filter(Boolean).join(' \u00b7 ');
+
+    return (dateStr ? dateStr + ' \u00b7 ' : '') + label + (stats ? ' (' + stats + ')' : '');
+  }
+
   async function populateSessionPicker() {
     const picker = document.getElementById('session-picker');
     try {
@@ -935,10 +990,7 @@ html, body {
       const sessions = await resp.json();
       picker.innerHTML = sessions.map(s => {
         const sid = s.session_id || s;
-        const short = sid.substring(0, 8);
-        const calls = s.total_api_calls ? ' \u00b7 ' + s.total_api_calls + ' calls' : '';
-        const cost = s.total_cost_usd ? ' \u00b7 $' + s.total_cost_usd.toFixed(0) : '';
-        return '<option value="' + sid + '">' + short + '...' + calls + cost + '</option>';
+        return '<option value="' + sid + '">' + sessionLabel(s) + '</option>';
       }).join('');
 
       // Select current session if we have one
@@ -1731,19 +1783,7 @@ html, body {
       }
 
       let html = '';
-      for (const msg of data.messages) {
-        const type = msg.type || msg.role || 'unknown';
-        const badgeCls = getBadgeClass(type);
-        const toolInfo = msg.tool_name ? ' <b>' + escapeHtml(msg.tool_name) + '</b>' + (msg.resource ? ' \u2192 ' + escapeHtml(msg.resource) : '') : '';
-        const sizeInfo = msg.size_chars ? ' <span style="color:var(--text-muted)">(' + fmt(Math.round(msg.size_chars / 4)) + ' tok)</span>' : '';
-        const truncNote = msg.is_truncated ? ' <span style="color:var(--danger)">[truncated]</span>' : '';
-        const errorNote = msg.is_error ? ' <span style="color:var(--danger)">[ERROR]</span>' : '';
-
-        html += '<div style="margin-bottom:12px;border-left:3px solid ' + getBadgeColor(type) + ';padding-left:10px;">';
-        html += '<div style="margin-bottom:4px;"><span class="block-badge ' + badgeCls + '">' + escapeHtml(type) + '</span>' + toolInfo + sizeInfo + truncNote + errorNote + '</div>';
-        html += '<pre style="margin:0;font-size:11px;line-height:1.5;color:var(--text-secondary);white-space:pre-wrap;word-break:break-word;max-height:300px;overflow-y:auto;background:#f9fafb;border:1px solid var(--border);border-radius:6px;padding:8px;">' + escapeHtml(msg.content || '') + '</pre>';
-        html += '</div>';
-      }
+      for (const msg of data.messages) html += renderMessageBlock(msg);
 
       // Usage info
       if (data.usage && (data.usage.input_tokens || data.usage.cache_read)) {
@@ -1796,19 +1836,7 @@ html, body {
         'API calls ' + data.first_call + ' \u2013 ' + data.last_call + ' (' + data.api_call_count + ' calls, ' + data.messages.length + ' messages)' +
         '</div>';
 
-      for (const msg of data.messages) {
-        const type = msg.type || msg.role || 'unknown';
-        const badgeCls = getBadgeClass(type);
-        const toolInfo = msg.tool_name ? ' <b>' + escapeHtml(msg.tool_name) + '</b>' + (msg.resource ? ' \u2192 ' + escapeHtml(msg.resource) : '') : '';
-        const sizeInfo = msg.size_chars ? ' <span style="color:var(--text-muted)">(' + fmt(Math.round(msg.size_chars / 4)) + ' tok)</span>' : '';
-        const truncNote = msg.is_truncated ? ' <span style="color:var(--danger)">[truncated]</span>' : '';
-        const errorNote = msg.is_error ? ' <span style="color:var(--danger)">[ERROR]</span>' : '';
-
-        html += '<div style="margin-bottom:12px;border-left:3px solid ' + getBadgeColor(type) + ';padding-left:10px;">';
-        html += '<div style="margin-bottom:4px;"><span class="block-badge ' + badgeCls + '">' + escapeHtml(type) + '</span>' + toolInfo + sizeInfo + truncNote + errorNote + '</div>';
-        html += '<pre style="margin:0;font-size:11px;line-height:1.5;color:var(--text-secondary);white-space:pre-wrap;word-break:break-word;max-height:300px;overflow-y:auto;background:#f9fafb;border:1px solid var(--border);border-radius:6px;padding:8px;">' + escapeHtml(msg.content || '') + '</pre>';
-        html += '</div>';
-      }
+      for (const msg of data.messages) html += renderMessageBlock(msg);
 
       if (data.usage && (data.usage.input_tokens || data.usage.cache_read)) {
         const u = data.usage;
@@ -1829,6 +1857,54 @@ html, body {
       tool_use: '#f59e0b', tool_call: '#f59e0b', tool_result: '#ef4444',
     };
     return colors[type] || '#6b7280';
+  }
+
+  const COLLAPSE_LINES = 8;
+  let _collapseId = 0;
+
+  function renderMessageBlock(msg) {
+    const type = msg.type || msg.role || 'unknown';
+    const badgeCls = getBadgeClass(type);
+    const toolInfo = msg.tool_name
+      ? ' <b>' + escapeHtml(msg.tool_name) + '</b>' + (msg.resource ? ' \u2192 ' + escapeHtml(msg.resource) : '')
+      : '';
+    const sizeInfo = msg.size_chars
+      ? ' <span style="color:var(--text-muted)">(' + fmt(Math.round(msg.size_chars / 4)) + ' tok)</span>'
+      : '';
+    const truncNote = msg.is_truncated ? ' <span style="color:var(--danger)">[truncated]</span>' : '';
+    const errorNote = msg.is_error ? ' <span style="color:var(--danger)">[ERROR]</span>' : '';
+
+    const content = msg.content || '';
+    const lines = content.split('\n');
+    const isLong = lines.length > COLLAPSE_LINES;
+
+    // For user messages and short assistant text, show fully
+    // For tool_use, tool_result, thinking, and long content — collapse
+    const shouldCollapse = isLong && (type !== 'user' && type !== 'user_text');
+
+    let contentHtml;
+    if (shouldCollapse) {
+      const cid = 'collapse-' + (++_collapseId);
+      const preview = lines.slice(0, COLLAPSE_LINES).join('\n');
+      const remaining = lines.length - COLLAPSE_LINES;
+      contentHtml =
+        '<pre class="msg-pre">' + escapeHtml(preview) + '</pre>' +
+        '<pre class="msg-pre msg-collapsed" id="' + cid + '" style="display:none">' + escapeHtml(content) + '</pre>' +
+        '<button class="msg-expand-btn" onclick="' +
+          "var full=document.getElementById('" + cid + "');" +
+          "var prev=full.previousElementSibling.previousElementSibling;" +
+          "if(full.style.display==='none'){full.style.display='block';prev.style.display='none';this.textContent='Collapse'}" +
+          "else{full.style.display='none';prev.style.display='block';this.textContent='Show ' + " + remaining + " + ' more lines'}" +
+        '">' + 'Show ' + remaining + ' more lines</button>';
+    } else {
+      contentHtml = '<pre class="msg-pre">' + escapeHtml(content) + '</pre>';
+    }
+
+    return '<div style="margin-bottom:12px;border-left:3px solid ' + getBadgeColor(type) + ';padding-left:10px;">' +
+      '<div style="margin-bottom:4px;"><span class="block-badge ' + badgeCls + '">' + escapeHtml(type) + '</span>' +
+      toolInfo + sizeInfo + truncNote + errorNote + '</div>' +
+      contentHtml +
+      '</div>';
   }
 
   // ===== RENDER ALL BOTTOM COLUMNS =====

@@ -24,6 +24,7 @@ from context_tracker.db import (
     HookEventRecord,
     SessionRecord,
     SubagentRecord,
+    TurnRecord,
     get_engine,
     get_session_factory,
 )
@@ -107,6 +108,16 @@ def create_app(
                     if not rec:
                         results.append({"session_id": sid})
                         continue
+                # Get first turn prompt for session label
+                first_turn = (
+                    db.query(TurnRecord)
+                    .filter_by(session_id=sid, turn_number=0)
+                    .first()
+                )
+                first_prompt = ""
+                if first_turn and first_turn.prompt_preview:
+                    first_prompt = first_turn.prompt_preview[:80]
+
                 results.append({
                     "session_id": rec.session_id,
                     "model": rec.model,
@@ -118,6 +129,8 @@ def create_app(
                     "total_output_tokens": rec.total_output_tokens,
                     "total_cache_read": rec.total_cache_read,
                     "total_cost_usd": rec.total_cost_usd,
+                    "source_mtime": rec.source_mtime,
+                    "first_prompt": first_prompt,
                 })
         return results
 
