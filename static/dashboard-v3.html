@@ -842,6 +842,13 @@ html, body {
 
   // ===== DATA LOADING =====
   async function loadData() {
+    // Check for ?session= query param (from sessions page click)
+    const urlParams = new URLSearchParams(window.location.search);
+    const requestedSession = urlParams.get('session');
+    if (requestedSession) {
+      return await loadSessionFromApi(requestedSession);
+    }
+
     // Try static files first (backward compatible with ccscope build)
     const [blocksResp, churnResp, metaResp, turnMapResp] = await Promise.all([
       fetch('./blocks.json'),

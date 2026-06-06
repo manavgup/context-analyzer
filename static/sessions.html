@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4"></script>
 <style>
 :root {
   --bg: #f8f9fb;
@@ -39,189 +40,75 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-.container {
-  max-width: 1240px;
-  margin: 0 auto;
-  padding: 24px 24px 80px;
-}
+.container { max-width: 1240px; margin: 0 auto; padding: 24px 24px 80px; }
 
-/* Header */
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 24px;
-}
-
-.header h1 {
-  font-size: 18px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.header-right {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text-muted);
-}
+.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.header h1 { font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.header-right { font-family: var(--mono); font-size: 12px; color: var(--text-muted); }
 
 /* Summary cards */
-.summary-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
-}
+.summary-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
+.summary-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; box-shadow: var(--shadow); }
+.summary-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 6px; }
+.summary-value { font-family: var(--mono); font-size: 26px; font-weight: 700; color: var(--text); }
+.summary-sub { font-family: var(--mono); font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
-.summary-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px 20px;
-  box-shadow: var(--shadow);
-}
+/* Charts row */
+.charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+.chart-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow); }
+.chart-card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-secondary); margin-bottom: 14px; }
+.chart-wrap { position: relative; height: 220px; }
+.chart-wrap canvas { width: 100% !important; height: 100% !important; }
 
-.summary-label {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  margin-bottom: 6px;
-}
-
-.summary-value {
-  font-family: var(--mono);
-  font-size: 26px;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.summary-sub {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-top: 2px;
-}
+/* Insights panel */
+.insights-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow); margin-bottom: 24px; }
+.insights-card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-secondary); margin-bottom: 14px; }
+.insight { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; font-size: 13px; color: var(--text-secondary); }
+.insight + .insight { border-top: 1px solid var(--border); }
+.insight-icon { flex-shrink: 0; width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; margin-top: 1px; }
+.insight-icon.cost { background: var(--accent-bg); color: var(--accent); }
+.insight-icon.perf { background: var(--green-bg); color: var(--green); }
+.insight-icon.warn { background: var(--danger-bg); color: var(--danger); }
+.insight-icon.info { background: var(--yellow-bg); color: var(--yellow); }
 
 /* Session table */
-.table-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--shadow);
-  overflow: hidden;
-}
+.table-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+.table-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.table-header h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-secondary); }
 
-.table-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
+table { width: 100%; border-collapse: collapse; }
+thead th { text-align: left; padding: 10px 14px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); background: var(--bg); border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; white-space: nowrap; }
+thead th:hover { color: var(--accent); }
+thead th.sorted-asc::after { content: ' \25b2'; font-size: 9px; }
+thead th.sorted-desc::after { content: ' \25bc'; font-size: 9px; }
 
-.table-header h2 {
-  font-size: 13px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-secondary);
-}
+tbody td { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--text-secondary); }
+tbody tr:hover { background: var(--accent-bg); }
+tbody tr { cursor: pointer; transition: background 0.1s; }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
+.session-label { max-width: 260px; }
+.session-date { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+.session-prompt { font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 240px; }
+.num-cell { text-align: right; font-family: var(--mono); font-size: 12px; }
+.cost-cell { text-align: right; font-family: var(--mono); font-size: 12px; }
 
-thead th {
-  text-align: left;
-  padding: 10px 16px;
-  font-size: 10.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
-  user-select: none;
-  white-space: nowrap;
-}
-
-thead th:hover {
-  color: var(--accent);
-}
-
-thead th.sorted-asc::after { content: ' \u25b2'; font-size: 9px; }
-thead th.sorted-desc::after { content: ' \u25bc'; font-size: 9px; }
-
-tbody td {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-tbody tr:hover {
-  background: var(--accent-bg);
-}
-
-tbody tr {
-  cursor: pointer;
-  transition: background 0.1s;
-}
-
-.session-id {
-  color: var(--accent);
-  font-weight: 500;
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cost-cell { text-align: right; }
-.num-cell { text-align: right; }
-
-/* Sparkbar */
-.sparkbar {
-  display: inline-block;
-  height: 14px;
-  border-radius: 2px;
-  vertical-align: middle;
-}
-
+.sparkbar { display: inline-block; height: 14px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
 .sparkbar.context { background: rgba(52,211,153,0.4); }
 .sparkbar.cache { background: rgba(217,164,65,0.4); }
 .sparkbar.cost { background: rgba(99,102,241,0.4); }
 
-/* Loading */
-.loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-  font-family: var(--mono);
-  color: var(--text-muted);
-  font-size: 14px;
-}
+.cost-per-call { font-family: var(--mono); font-size: 11px; }
+.cost-low { color: var(--green); }
+.cost-mid { color: var(--yellow); }
+.cost-high { color: var(--danger); }
 
-.loading-spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin-right: 10px;
-}
-
+.loading { display: flex; align-items: center; justify-content: center; min-height: 200px; font-family: var(--mono); color: var(--text-muted); font-size: 14px; }
+.loading-spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 10px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .summary-row { grid-template-columns: repeat(2, 1fr); }
+  .charts-row { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -253,26 +140,47 @@ tbody tr {
       <div class="summary-value" id="sm-cost">--</div>
       <div class="summary-sub" id="sm-cost-sub">&nbsp;</div>
     </div>
+    <div class="summary-card">
+      <div class="summary-label">Avg $/Call</div>
+      <div class="summary-value" id="sm-avg-cost">--</div>
+      <div class="summary-sub" id="sm-avg-cost-sub">&nbsp;</div>
+    </div>
   </div>
 
-  <div class="table-card">
-    <div class="table-header">
-      <h2>All Sessions</h2>
+  <!-- Charts -->
+  <div class="charts-row">
+    <div class="chart-card">
+      <h2>Cost/Call vs Peak Context</h2>
+      <div class="chart-wrap"><canvas id="scatter-chart"></canvas></div>
     </div>
+    <div class="chart-card">
+      <h2>Session Comparison</h2>
+      <div class="chart-wrap"><canvas id="bar-chart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Insights -->
+  <div class="insights-card" id="insights-panel">
+    <h2>Insights</h2>
+    <div id="insights-body"></div>
+  </div>
+
+  <!-- Session table -->
+  <div class="table-card">
+    <div class="table-header"><h2>All Sessions</h2></div>
     <div id="table-loading" class="loading">
-      <div class="loading-spinner"></div>
-      Loading sessions...
+      <div class="loading-spinner"></div>Loading sessions...
     </div>
     <table id="sessions-table" style="display:none">
       <thead>
         <tr>
-          <th data-key="session_id">Session</th>
+          <th data-key="source_mtime">Session</th>
           <th data-key="total_turns" class="num-cell">Turns</th>
-          <th data-key="total_api_calls" class="num-cell">API Calls</th>
+          <th data-key="total_api_calls" class="num-cell">Calls</th>
           <th data-key="peak_context_tokens" class="num-cell">Peak Context</th>
           <th data-key="total_cache_read" class="num-cell">Cache Read</th>
-          <th data-key="total_output_tokens" class="num-cell">Output</th>
-          <th data-key="total_cost_usd" class="cost-cell">Cost</th>
+          <th data-key="cost_per_call" class="num-cell">$/Call</th>
+          <th data-key="total_cost_usd" class="cost-cell">Total Cost</th>
         </tr>
       </thead>
       <tbody id="sessions-tbody"></tbody>
@@ -284,38 +192,36 @@ tbody tr {
 (function() {
   'use strict';
 
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
   function fmt(n) {
     if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
     if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
     if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K';
     return String(n);
   }
-
   function fmtCost(n) {
     if (n >= 1000) return '$' + (n / 1000).toFixed(1) + 'K';
     if (n >= 1) return '$' + n.toFixed(2);
     return '$' + n.toFixed(4);
   }
-
   function fmtExact(n) { return n.toLocaleString(); }
+  function fmtDate(mtime) {
+    if (!mtime) return '';
+    const d = new Date(mtime * 1000);
+    return MONTHS[d.getMonth()] + ' ' + d.getDate();
+  }
+  function sessionShortLabel(s) {
+    let label = (s.first_prompt || '').replace(/^<[^>]+>.*$/s, '').replace(/\n/g, ' ').trim().substring(0, 35);
+    if (!label || label.startsWith('Base directory')) label = (s.session_id || '').substring(0, 8) + '...';
+    return label;
+  }
 
   let sessions = [];
   let sortKey = 'source_mtime';
   let sortDir = 'desc';
 
-  async function loadTrends() {
-    const resp = await fetch('/api/sessions/trends');
-    if (!resp.ok) return null;
-    return await resp.json();
-  }
-
-  async function loadSessions() {
-    const resp = await fetch('/api/sessions');
-    if (!resp.ok) return [];
-    return await resp.json();
-  }
-
-  function renderSummary(trends) {
+  function renderSummary(trends, sessions) {
     document.getElementById('sm-sessions').textContent = trends.session_count;
     document.getElementById('sm-calls').textContent = fmt(trends.total_api_calls);
     document.getElementById('sm-calls-sub').textContent = fmtExact(trends.total_api_calls) + ' total';
@@ -324,8 +230,172 @@ tbody tr {
     document.getElementById('sm-cost').textContent = fmtCost(trends.total_cost);
     document.getElementById('sm-cost-sub').textContent =
       'avg ' + fmtCost(trends.total_cost / Math.max(trends.session_count, 1)) + '/session';
+
+    const avgCostPerCall = trends.total_cost / Math.max(trends.total_api_calls, 1);
+    document.getElementById('sm-avg-cost').textContent = '$' + avgCostPerCall.toFixed(2);
+    document.getElementById('sm-avg-cost-sub').textContent = 'across all sessions';
+
     document.getElementById('header-info').textContent =
-      trends.session_count + ' sessions tracked';
+      trends.session_count + ' sessions \u00b7 ' + fmtCost(trends.total_cost) + ' total';
+  }
+
+  function buildScatterChart(data) {
+    const ctx = document.getElementById('scatter-chart').getContext('2d');
+    const points = data.map(s => ({
+      x: (s.peak_context_tokens || 0) / 1000,
+      y: (s.total_cost_usd || 0) / Math.max(s.total_api_calls || 1, 1),
+      label: sessionShortLabel(s),
+    }));
+
+    new Chart(ctx, {
+      type: 'scatter',
+      data: {
+        datasets: [{
+          data: points,
+          backgroundColor: 'rgba(99,102,241,0.7)',
+          borderColor: 'rgba(99,102,241,1)',
+          borderWidth: 1.5,
+          pointRadius: 7,
+          pointHoverRadius: 10,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#1a1d23',
+            titleFont: { family: 'JetBrains Mono', size: 11 },
+            bodyFont: { family: 'JetBrains Mono', size: 11 },
+            callbacks: {
+              title: items => items[0].raw.label,
+              label: item => 'Peak: ' + item.raw.x.toFixed(0) + 'K tokens  |  $' + item.raw.y.toFixed(2) + '/call',
+            },
+          },
+        },
+        scales: {
+          x: {
+            title: { display: true, text: 'Peak Context (K tokens)', font: { family: 'Inter', size: 11 }, color: '#9ca3af' },
+            ticks: { font: { family: 'JetBrains Mono', size: 10 }, color: '#9ca3af' },
+            grid: { color: 'rgba(0,0,0,0.04)' },
+          },
+          y: {
+            title: { display: true, text: '$/Call', font: { family: 'Inter', size: 11 }, color: '#9ca3af' },
+            ticks: { font: { family: 'JetBrains Mono', size: 10 }, color: '#9ca3af', callback: v => '$' + v.toFixed(2) },
+            grid: { color: 'rgba(0,0,0,0.04)' },
+          },
+        },
+      },
+    });
+  }
+
+  function buildBarChart(data) {
+    const ctx = document.getElementById('bar-chart').getContext('2d');
+    const labels = data.map(s => fmtDate(s.source_mtime) || sessionShortLabel(s));
+
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'Peak Context (K)',
+            data: data.map(s => (s.peak_context_tokens || 0) / 1000),
+            backgroundColor: 'rgba(52,211,153,0.5)',
+            borderColor: 'rgba(52,211,153,0.8)',
+            borderWidth: 1,
+          },
+          {
+            label: 'Cost ($)',
+            data: data.map(s => s.total_cost_usd || 0),
+            backgroundColor: 'rgba(99,102,241,0.5)',
+            borderColor: 'rgba(99,102,241,0.8)',
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'top', align: 'end',
+            labels: { usePointStyle: true, pointStyle: 'circle', font: { family: 'Inter', size: 11 }, color: '#6b7280', padding: 14 },
+          },
+          tooltip: { backgroundColor: '#1a1d23', titleFont: { family: 'JetBrains Mono', size: 11 }, bodyFont: { family: 'JetBrains Mono', size: 11 } },
+        },
+        scales: {
+          x: { ticks: { font: { family: 'JetBrains Mono', size: 10 }, color: '#9ca3af' }, grid: { display: false } },
+          y: { ticks: { font: { family: 'JetBrains Mono', size: 10 }, color: '#9ca3af' }, grid: { color: 'rgba(0,0,0,0.04)' } },
+        },
+      },
+    });
+  }
+
+  function renderInsights(data) {
+    const body = document.getElementById('insights-body');
+    const insights = [];
+
+    // Cost scaling insight
+    const sorted = [...data].sort((a, b) => (a.peak_context_tokens || 0) - (b.peak_context_tokens || 0));
+    if (sorted.length >= 2) {
+      const smallest = sorted[0];
+      const largest = sorted[sorted.length - 1];
+      const smallCpc = (smallest.total_cost_usd || 0) / Math.max(smallest.total_api_calls || 1, 1);
+      const largeCpc = (largest.total_cost_usd || 0) / Math.max(largest.total_api_calls || 1, 1);
+      const multiplier = largeCpc / Math.max(smallCpc, 0.01);
+      if (multiplier > 1.5) {
+        insights.push({
+          icon: 'cost', text: 'Cost scales <b>' + multiplier.toFixed(1) + 'x</b> from your smallest session (' +
+            fmt(smallest.peak_context_tokens) + ' peak, $' + smallCpc.toFixed(2) + '/call) to your largest (' +
+            fmt(largest.peak_context_tokens) + ' peak, $' + largeCpc.toFixed(2) + '/call). Smaller context = cheaper calls.'
+        });
+      }
+    }
+
+    // Most expensive session
+    const mostExpensive = [...data].sort((a, b) => (b.total_cost_usd || 0) - (a.total_cost_usd || 0))[0];
+    if (mostExpensive) {
+      const pct = ((mostExpensive.total_cost_usd || 0) / Math.max(data.reduce((s, d) => s + (d.total_cost_usd || 0), 0), 0.01) * 100);
+      if (pct > 25) {
+        insights.push({
+          icon: 'warn', text: '<b>' + sessionShortLabel(mostExpensive) + '</b> accounts for ' +
+            pct.toFixed(0) + '% of total cost ($' + (mostExpensive.total_cost_usd || 0).toFixed(0) + '). ' +
+            'Peak context was ' + fmt(mostExpensive.peak_context_tokens) + ' tokens.'
+        });
+      }
+    }
+
+    // Calls per turn efficiency
+    const callsPerTurn = data.map(s => ({
+      label: sessionShortLabel(s),
+      cpt: (s.total_api_calls || 0) / Math.max(s.total_turns || 1, 1),
+    })).sort((a, b) => b.cpt - a.cpt);
+    if (callsPerTurn.length > 0 && callsPerTurn[0].cpt > 8) {
+      insights.push({
+        icon: 'info', text: '<b>' + callsPerTurn[0].label + '</b> averaged ' +
+          callsPerTurn[0].cpt.toFixed(1) + ' API calls per turn \u2014 heavy tool use or subagent activity. ' +
+          'Fewer calls/turn = less cache re-reading.'
+      });
+    }
+
+    // Context threshold insight
+    const over50pct = data.filter(s => (s.peak_context_tokens || 0) > 500000);
+    if (over50pct.length > 0) {
+      insights.push({
+        icon: 'perf', text: over50pct.length + ' of ' + data.length + ' sessions exceeded 50% of the 1M context window. ' +
+          'Consider clearing sessions earlier to keep costs down.'
+      });
+    }
+
+    if (insights.length === 0) {
+      insights.push({ icon: 'info', text: 'Not enough sessions yet to identify patterns. Keep using Claude Code and check back.' });
+    }
+
+    body.innerHTML = insights.map(ins =>
+      '<div class="insight"><div class="insight-icon ' + ins.icon + '">\u2022</div><div>' + ins.text + '</div></div>'
+    ).join('');
   }
 
   function renderTable(data) {
@@ -338,10 +408,19 @@ tbody tr {
       const peakPct = ((s.peak_context_tokens || 0) / maxPeak * 100).toFixed(0);
       const cachePct = ((s.total_cache_read || 0) / maxCache * 100).toFixed(0);
       const costPct = ((s.total_cost_usd || 0) / maxCost * 100).toFixed(0);
-      const shortId = (s.session_id || '').substring(0, 8);
+      const date = fmtDate(s.source_mtime);
+      const label = sessionShortLabel(s);
+      const cpc = (s.total_cost_usd || 0) / Math.max(s.total_api_calls || 1, 1);
+      const cpcClass = cpc > 0.7 ? 'cost-high' : cpc > 0.4 ? 'cost-mid' : 'cost-low';
+
+      // Store computed cost_per_call for sorting
+      s.cost_per_call = cpc;
 
       return `<tr data-sid="${s.session_id}">
-        <td class="session-id" title="${s.session_id}">${shortId}...</td>
+        <td class="session-label">
+          <div class="session-date">${date}</div>
+          <div class="session-prompt" title="${(s.first_prompt || '').replace(/"/g, '&quot;')}">${label}</div>
+        </td>
         <td class="num-cell">${s.total_turns || 0}</td>
         <td class="num-cell">${s.total_api_calls || 0}</td>
         <td class="num-cell">
@@ -352,7 +431,7 @@ tbody tr {
           <span class="sparkbar cache" style="width:${cachePct}%"></span>
           ${fmt(s.total_cache_read || 0)}
         </td>
-        <td class="num-cell">${fmt(s.total_output_tokens || 0)}</td>
+        <td class="num-cell"><span class="cost-per-call ${cpcClass}">$${cpc.toFixed(2)}</span></td>
         <td class="cost-cell">
           <span class="sparkbar cost" style="width:${costPct}%"></span>
           ${fmtCost(s.total_cost_usd || 0)}
@@ -360,11 +439,11 @@ tbody tr {
       </tr>`;
     }).join('');
 
-    // Click to open session (placeholder — will need ccscope build or dynamic loading)
+    // Click to navigate to single-session dashboard
     tbody.querySelectorAll('tr').forEach(tr => {
       tr.addEventListener('click', () => {
         const sid = tr.getAttribute('data-sid');
-        alert('Session: ' + sid + '\n\nTo view this session, run:\n  ccscope build ' + sid + '\n  make dev');
+        window.location.href = '/?session=' + encodeURIComponent(sid);
       });
     });
   }
@@ -374,14 +453,13 @@ tbody tr {
       sortDir = sortDir === 'asc' ? 'desc' : 'asc';
     } else {
       sortKey = key;
-      sortDir = key === 'session_id' ? 'asc' : 'desc';
+      sortDir = key === 'session_id' || key === 'source_mtime' ? 'desc' : 'desc';
     }
 
     sessions.sort((a, b) => {
       let va = a[key] || 0;
       let vb = b[key] || 0;
-      if (typeof va === 'string') va = va.toLowerCase();
-      if (typeof vb === 'string') vb = vb.toLowerCase();
+      if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
       if (va < vb) return sortDir === 'asc' ? -1 : 1;
       if (va > vb) return sortDir === 'asc' ? 1 : -1;
       return 0;
@@ -389,7 +467,6 @@ tbody tr {
 
     renderTable(sessions);
 
-    // Update header styles
     document.querySelectorAll('thead th').forEach(th => {
       th.classList.remove('sorted-asc', 'sorted-desc');
       if (th.getAttribute('data-key') === key) {
@@ -400,20 +477,25 @@ tbody tr {
 
   async function init() {
     const [trends, sessionsData] = await Promise.all([
-      loadTrends(),
-      loadSessions(),
+      fetch('/api/sessions/trends').then(r => r.ok ? r.json() : null),
+      fetch('/api/sessions').then(r => r.ok ? r.json() : []),
     ]);
 
-    if (trends) renderSummary(trends);
-
     sessions = sessionsData;
+
+    if (trends) renderSummary(trends, sessions);
 
     document.getElementById('table-loading').style.display = 'none';
     document.getElementById('sessions-table').style.display = 'table';
 
-    renderTable(sessions);
+    // Sort by date descending by default
+    sessions.sort((a, b) => (b.source_mtime || 0) - (a.source_mtime || 0));
 
-    // Wire up sortable headers
+    renderTable(sessions);
+    buildScatterChart(sessions);
+    buildBarChart(sessions);
+    renderInsights(sessions);
+
     document.querySelectorAll('thead th').forEach(th => {
       th.addEventListener('click', () => {
         const key = th.getAttribute('data-key');
