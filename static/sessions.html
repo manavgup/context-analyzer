@@ -44,7 +44,10 @@ html, body {
 
 .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
 .header h1 { font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
-.header-right { font-family: var(--mono); font-size: 12px; color: var(--text-muted); }
+.header-left { display: flex; align-items: center; gap: 10px; }
+.header-right { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 12px; color: var(--text-muted); }
+.nav-link { font-family: var(--mono); font-size: 11px; color: var(--accent); text-decoration: none; padding: 4px 10px; border: 1px solid var(--accent); border-radius: 4px; transition: all 0.15s ease; }
+.nav-link:hover { background: var(--accent); color: white; }
 
 /* Summary cards */
 .summary-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
@@ -115,7 +118,10 @@ tbody tr { cursor: pointer; transition: background 0.1s; }
 <body>
 <div class="container">
   <div class="header">
-    <h1>Context Analyzer</h1>
+    <div class="header-left">
+      <h1>Context Analyzer</h1>
+      <a href="/" class="nav-link">Session View</a>
+    </div>
     <div class="header-right" id="header-info">Loading...</div>
   </div>
 

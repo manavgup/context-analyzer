@@ -623,6 +623,113 @@ html, body {
   pointer-events: none;
 }
 
+/* Nav links */
+.nav-link {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  text-decoration: none;
+  padding: 4px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  margin-left: 10px;
+  transition: all 0.15s ease;
+}
+
+.nav-link:hover {
+  background: var(--accent);
+  color: white;
+}
+
+/* Info button */
+.info-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 10px;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.info-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Info modal */
+.info-modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.info-modal {
+  background: var(--card);
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+  max-width: 560px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 28px 32px;
+}
+
+.info-modal h3 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.info-modal p {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.info-modal ul {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  padding-left: 20px;
+  margin-bottom: 12px;
+}
+
+.info-modal li { margin-bottom: 4px; }
+
+.info-modal code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--bg);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.info-modal-close {
+  float: right;
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.info-modal-close:hover { color: var(--text); }
+
 /* Custom scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -650,7 +757,11 @@ html, body {
           <option value="">Loading sessions...</option>
         </select>
       </div>
-      <div class="header-right" id="header-model"></div>
+      <div class="header-right">
+        <a href="/sessions" class="nav-link">All Sessions</a>
+        <button class="info-btn" id="info-btn" title="What is this?">?</button>
+        <span id="header-model" style="margin-left:10px;font-family:var(--mono);font-size:12px;color:var(--text-muted)"></span>
+      </div>
     </div>
 
     <div class="scorecards">
@@ -2015,7 +2126,49 @@ html, body {
   window.setBudget = setBudget;
 
   // ===== WIRE EVERYTHING =====
+  function wireInfoButton() {
+    document.getElementById('info-btn').addEventListener('click', () => {
+      const overlay = document.createElement('div');
+      overlay.className = 'info-modal-overlay';
+      overlay.innerHTML =
+        '<div class="info-modal">' +
+          '<button class="info-modal-close" id="info-close">&times;</button>' +
+          '<h3>Context Analyzer</h3>' +
+          '<p>This dashboard visualizes how your Claude Code sessions consume the context window. ' +
+          'It helps you understand where tokens go and when to start a new session.</p>' +
+          '<p><b>Charts</b></p>' +
+          '<ul>' +
+            '<li><b>Context Growth</b> \u2014 stacked area showing system prefix + working set over time. ' +
+            'The budget line and danger band show your target threshold.</li>' +
+            '<li><b>Cache-Read Churn</b> \u2014 how many tokens are re-read from cache per API call. ' +
+            'This is the real cost driver \u2014 larger context means more re-reading.</li>' +
+          '</ul>' +
+          '<p><b>Controls</b></p>' +
+          '<ul>' +
+            '<li><b>Budget buttons</b> (200K\u20131M) \u2014 set your target context limit</li>' +
+            '<li><b>Session dropdown</b> \u2014 switch between sessions without restarting</li>' +
+            '<li><b>Scrubber</b> \u2014 step through API calls. Space to play, arrows to step.</li>' +
+            '<li><b>Click a message</b> in the bottom-right to see full content</li>' +
+          '</ul>' +
+          '<p><b>Key metrics</b></p>' +
+          '<ul>' +
+            '<li><b>Peak Resident</b> \u2014 maximum tokens in the context window</li>' +
+            '<li><b>Cache-Read Churn</b> \u2014 total tokens re-read across all calls (the cost multiplier)</li>' +
+            '<li><b>$/Call</b> \u2014 average cost per API call (lower = more efficient)</li>' +
+          '</ul>' +
+          '<p style="color:var(--text-muted);font-size:12px;margin-top:16px;">' +
+            'Visit <a href="/sessions" style="color:var(--accent)">/sessions</a> for cross-session analytics and trends.</p>' +
+        '</div>';
+      document.body.appendChild(overlay);
+      overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+      document.getElementById('info-close').addEventListener('click', () => overlay.remove());
+      document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', esc); } });
+    });
+  }
+
   function wireControls() {
+    wireInfoButton();
+
     const range = document.getElementById('scrubber-range');
     range.min = 0;
     range.max = maxTurn;
