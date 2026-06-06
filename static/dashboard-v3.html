@@ -353,7 +353,7 @@ html, body {
 .comp-name { color: var(--text-secondary); width: 85px; flex-shrink: 0; }
 .comp-bar-track { flex: 1; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
 .comp-bar { height: 100%; border-radius: 3px; }
-.comp-val { font-family: var(--mono); font-size: 11px; color: var(--text); width: 65px; text-align: right; flex-shrink: 0; }
+.comp-val { font-family: var(--mono); font-size: 11px; color: var(--text); text-align: right; flex-shrink: 0; white-space: nowrap; padding-left: 6px; }
 
 /* Delta section (below composition) */
 .delta-section { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
@@ -1556,32 +1556,27 @@ html, body {
     // Working set = resident - pinned prefix
     const workingSet = Math.max(0, resident - pinnedTokens);
 
-    // Parse working set block to split conversation vs tool I/O
+    // Count conversation vs tool I/O from blocks present at this turn
     let convTokens = 0;
     let toolTokens = 0;
     let convCount = 0;
     let toolCount = 0;
-    const wsBlock = blocks.find(b => b.enter === c.turn && b.exit !== null && b.exit !== undefined);
-    if (wsBlock) {
-      const content = wsBlock.content || '';
-      const lines = content.split('\n').filter(l => l.trim());
-      for (const line of lines.slice(1)) {
-        const match = line.match(/^(\w+):\s+(.+?)\s*\(([0-9,]+)\s*tok\)\s*$/);
-        if (match) {
-          const type = match[1];
-          const tokens = parseInt(match[3].replace(/,/g, ''), 10);
-          if (type === 'user' || type === 'assistant' || type === 'assistant_text' || type === 'user_text' || type === 'thinking') {
-            convTokens += tokens;
-            convCount++;
-          } else {
-            toolTokens += tokens;
-            toolCount++;
-          }
-        }
+    const convTypes = new Set(['user', 'assistant', 'assistant_text', 'user_text', 'thinking']);
+    const toolTypes = new Set(['tool_call', 'tool_result', 'tool_use']);
+    for (const b of blocks) {
+      if (b.cached) continue;  // skip pinned prefix blocks
+      if (b.enter > currentTurn) continue;  // hasn't entered yet
+      if (b.exit !== null && b.exit !== undefined && b.exit <= currentTurn) continue;  // already exited
+      if (convTypes.has(b.type)) {
+        convTokens += b.tokens;
+        convCount++;
+      } else if (toolTypes.has(b.type)) {
+        toolTokens += b.tokens;
+        toolCount++;
       }
     }
 
-    // If no parse, attribute working set proportionally
+    // Fallback: if no blocks match, attribute working set as conversation
     if (convTokens === 0 && toolTokens === 0 && workingSet > 0) {
       convTokens = workingSet;
     }
