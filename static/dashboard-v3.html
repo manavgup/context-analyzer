@@ -414,12 +414,12 @@ html, body {
   white-space: nowrap;
   flex-shrink: 0;
 }
-.badge-system { background: var(--system-bg); color: #7c3aed; }
+.badge-system { background: rgba(249,115,22,0.1); color: #ea580c; }
 .badge-skill { background: rgba(236,72,153,0.1); color: #db2777; }
-.badge-tool_result { background: rgba(249,115,22,0.1); color: #ea580c; }
-.badge-tool_call { background: rgba(99,102,241,0.1); color: #6366f1; }
+.badge-tool_result { background: rgba(239,68,68,0.1); color: #dc2626; }
+.badge-tool_call { background: rgba(245,158,11,0.1); color: #d97706; }
 .badge-user { background: rgba(59,130,246,0.1); color: #2563eb; }
-.badge-assistant { background: var(--working-bg); color: #059669; }
+.badge-assistant { background: rgba(16,185,129,0.1); color: #059669; }
 .badge-default { background: #f3f4f6; color: #6b7280; }
 
 /* Content modal (for View All) */
@@ -1635,10 +1635,10 @@ html, body {
     const maxVal = BUDGET;
 
     const categories = [
-      { name: 'System', tokens: systemTokens, color: '#f97316' },
-      { name: 'CLAUDE.md', tokens: skillTokens, color: '#ec4899' },
-      { name: 'Conversation', tokens: convTokens, color: '#3b82f6', count: convCount },
-      { name: 'Tool I/O', tokens: toolTokens, color: '#10b981', count: toolCount },
+      { name: 'System', tokens: systemTokens, color: TYPE_COLORS.system },
+      { name: 'CLAUDE.md', tokens: skillTokens, color: TYPE_COLORS.skill },
+      { name: 'Conversation', tokens: convTokens, color: TYPE_COLORS.user, count: convCount },
+      { name: 'Tool I/O', tokens: toolTokens, color: TYPE_COLORS.tool_result, count: toolCount },
       { name: 'Buffer', tokens: buffer, color: '#d1d5db' },
     ];
 
@@ -1739,10 +1739,10 @@ html, body {
     }
 
     const entries = [
-      { name: 'Tool I/O', color: '#ef4444', tokens: toolActual },
-      { name: 'Conversation', color: '#3b82f6', tokens: convActual },
-      { name: 'CLAUDE.md + Skills', color: '#ec4899', tokens: skillTokens },
-      { name: 'System Prompt', color: '#f97316', tokens: systemTokens },
+      { name: 'Tool I/O', color: TYPE_COLORS.tool_result, tokens: toolActual },
+      { name: 'Conversation', color: TYPE_COLORS.user, tokens: convActual },
+      { name: 'CLAUDE.md + Skills', color: TYPE_COLORS.skill, tokens: skillTokens },
+      { name: 'System Prompt', color: TYPE_COLORS.system, tokens: systemTokens },
     ].filter(e => e.tokens > 0);
 
     entries.sort((a, b) => b.tokens - a.tokens);
@@ -2116,13 +2116,22 @@ html, body {
     });
   }
 
+  // Unified color palette — used by badges, composition bars, donut, and message borders
+  const TYPE_COLORS = {
+    system: '#f97316',       // orange
+    skill: '#ec4899',        // pink
+    user: '#3b82f6',         // blue
+    user_text: '#3b82f6',
+    assistant: '#10b981',    // green
+    assistant_text: '#10b981',
+    thinking: '#8b5cf6',     // purple
+    tool_use: '#f59e0b',     // amber
+    tool_call: '#f59e0b',
+    tool_result: '#ef4444',  // red
+  };
+
   function getBadgeColor(type) {
-    const colors = {
-      system: 'var(--system)', skill: '#ec4899', user: '#3b82f6', user_text: '#3b82f6',
-      assistant: '#10b981', assistant_text: '#10b981', thinking: '#8b5cf6',
-      tool_use: '#f59e0b', tool_call: '#f59e0b', tool_result: '#ef4444',
-    };
-    return colors[type] || '#6b7280';
+    return TYPE_COLORS[type] || '#6b7280';
   }
 
   const COLLAPSE_LINES = 8;
