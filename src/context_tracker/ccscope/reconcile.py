@@ -29,7 +29,7 @@ def find_session_paths(
     if trace_dir is None:
         trace_dir = DEFAULT_TRACE_DIR
 
-    result = {
+    result: dict[str, Path | None] = {
         "transcript": None,
         "hook_events": None,
         "tool_results": None,

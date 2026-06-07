@@ -153,7 +153,7 @@ def _read_meta(subagents_dir: Path, agent_id: str) -> tuple[str, str]:
 
 def _load_entries(path: Path) -> list[dict]:
     """Load all JSONL entries from a transcript file."""
-    entries = []
+    entries: list[dict] = []
     if not path.exists():
         return entries
     with open(path) as f:

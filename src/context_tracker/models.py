@@ -140,7 +140,8 @@ def parse_event(line: str) -> TrackerEvent | None:
         return None
 
     try:
-        return model_class.model_validate(raw)
+        result = model_class.model_validate(raw)
+        return result  # type: ignore[return-value]
     except Exception:
         logger.warning("Failed to parse event: %s", line[:80])
         return None

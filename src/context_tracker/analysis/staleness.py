@@ -28,7 +28,7 @@ from context_tracker.analysis.config import StalenessConfig
 from context_tracker.analysis.models import BlockType, ContextBlock, ConversationTurn
 
 # Common identifiers that produce false-positive reference matches
-_FALSE_POSITIVE_IDENTIFIERS: set[str] = frozenset(
+_FALSE_POSITIVE_IDENTIFIERS: frozenset[str] = frozenset(
     {
         "self",
         "cls",

@@ -14,6 +14,7 @@ from context_tracker.analysis.config import (
 from context_tracker.analysis.models import (
     ApiCall,
     BlockType,
+    ContentStore,
     ContextBlock,
     ConversationTurn,
     TurnSnapshot,
@@ -104,7 +105,7 @@ def build_health_signals(
     turns: list[ConversationTurn],
     snapshots: list[TurnSnapshot],
     block_registry: dict[str, ContextBlock],
-    content_store: object,
+    content_store: ContentStore,
     model: str,
     config: HealthConfig | None = None,
     staleness_config: StalenessConfig | None = None,
@@ -164,11 +165,11 @@ def build_health_signals(
 
     for snap in snapshots:
         for bid in snap.blocks_entered_ids:
-            block = block_registry.get(bid)
-            if block:
-                blocks_seen.append(block)
-                if block.resource:
-                    resource_last_used[block.resource] = snap.turn_number
+            blk: ContextBlock | None = block_registry.get(bid)
+            if blk:
+                blocks_seen.append(blk)
+                if blk.resource:
+                    resource_last_used[blk.resource] = snap.turn_number
 
     superseded = detect_superseded(blocks_seen)
 
@@ -179,9 +180,10 @@ def build_health_signals(
 
     if final_snap:
         for bid in final_snap.block_ids:
-            block = block_registry.get(bid)
-            if not block:
+            block_or_none: ContextBlock | None = block_registry.get(bid)
+            if not block_or_none:
                 continue
+            block = block_or_none
             messages_since: list[str] = []
             for t in range(block.turn_entered + 1, last_turn + 1):
                 messages_since.extend(assistant_texts_by_turn.get(t, []))
@@ -238,14 +240,14 @@ def build_health_signals(
     resource_read_counts: dict[str, int] = defaultdict(int)
     for snap in recent_snaps:
         for bid in snap.blocks_entered_ids:
-            block = block_registry.get(bid)
+            read_blk: ContextBlock | None = block_registry.get(bid)
             if (
-                block
-                and block.block_type == BlockType.TOOL_RESULT
-                and block.resource
-                and block.tool_name in ("Read", "Glob", "Grep", None)
+                read_blk
+                and read_blk.block_type == BlockType.TOOL_RESULT
+                and read_blk.resource
+                and read_blk.tool_name in ("Read", "Glob", "Grep", None)
             ):
-                resource_read_counts[block.resource] += 1
+                resource_read_counts[read_blk.resource] += 1
     repeated_reads = {r: c for r, c in resource_read_counts.items() if c >= 2}
 
     # --- Error rate ---
@@ -295,9 +297,9 @@ def build_health_signals(
     edit_snap_start = max(0, len(snapshots) - edit_window)
     for snap in snapshots[edit_snap_start:]:
         for bid in snap.blocks_entered_ids:
-            block = block_registry.get(bid)
-            if block and block.tool_name in ("Edit", "Write") and block.resource:
-                recent_edits[block.resource] += 1
+            edit_blk: ContextBlock | None = block_registry.get(bid)
+            if edit_blk and edit_blk.tool_name in ("Edit", "Write") and edit_blk.resource:
+                recent_edits[edit_blk.resource] += 1
     edit_churn = [r for r, c in recent_edits.items() if c >= 3]
 
     # --- Compaction count ---
@@ -386,7 +388,7 @@ def generate_recommendations(
     # REPEATED_READS
     heavy_reads = {r: c for r, c in signals.repeated_reads.items() if c >= config.repeated_read_warning}
     if heavy_reads:
-        top_resource = max(heavy_reads, key=heavy_reads.get)
+        top_resource = max(heavy_reads, key=lambda r: heavy_reads[r])
         top_count = heavy_reads[top_resource]
         priority = "critical" if top_count >= config.repeated_read_critical else "warning"
         # Estimate recoverable: size of the superseded copies

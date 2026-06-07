@@ -45,17 +45,17 @@ _SKIP_TYPES = frozenset(
 def _tool_resource(name: str, inp: dict) -> str:
     """Extract a human-readable resource string from a tool_use input."""
     if name in ("Read", "Edit", "Write"):
-        fp = inp.get("file_path", "")
+        fp = str(inp.get("file_path", ""))
         return os.path.basename(fp) if fp else ""
     if name == "Bash":
-        cmd = inp.get("command", "")
+        cmd = str(inp.get("command", ""))
         # First meaningful word of the command
         first = cmd.strip().split()[0] if cmd.strip() else ""
         return first
     if name == "Grep":
-        return inp.get("pattern", "")[:40]
+        return str(inp.get("pattern", ""))[:40]
     if name == "Glob":
-        return inp.get("pattern", "")[:40]
+        return str(inp.get("pattern", ""))[:40]
     # Fallback: tool name only
     return ""
 
@@ -86,10 +86,11 @@ def _tool_result_label(tool_use_id: str, tool_use_map: dict[str, dict]) -> str:
 
 def _block_content_str(block: dict, block_type: str) -> str:
     """Extract the text content of a block, truncated to MAX_CONTENT_CHARS."""
+    raw: str
     if block_type in ("text", "assistant"):
-        raw = block.get("text", "")
+        raw = str(block.get("text", ""))
     elif block_type == "thinking":
-        raw = block.get("thinking", "")
+        raw = str(block.get("thinking", ""))
     elif block_type in ("tool_use", "tool_call"):
         name = block.get("name", "")
         inp = block.get("input", {})
@@ -337,14 +338,15 @@ def _is_completed_assistant(msg: dict) -> bool:
     return True
 
 
-def _find_first_completed_usage(entries: list[dict]) -> dict | None:
+def _find_first_completed_usage(entries: list[dict]) -> dict[str, Any] | None:
     """Find the usage dict from the first completed assistant message."""
     for entry in entries:
         if entry.get("type") != "assistant":
             continue
         msg = entry.get("message", {})
         if _is_completed_assistant(msg):
-            return msg.get("usage", {})
+            usage = msg.get("usage", {})
+            return dict(usage) if isinstance(usage, dict) else {}
     return None
 
 
@@ -642,7 +644,7 @@ def _extract_user_prompt(content: str | list) -> str:
     if isinstance(content, list):
         for block in content:
             if isinstance(block, dict) and block.get("type") == "text":
-                text = block.get("text", "")
+                text = str(block.get("text", ""))
                 if text.strip():
                     return text[:200]
     return ""

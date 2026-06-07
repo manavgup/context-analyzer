@@ -20,7 +20,7 @@ DEFAULT_PROJECTS_DIR = Path.home() / ".claude" / "projects"
 DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "static"
 
 
-def cmd_list(args):
+def cmd_list(args: argparse.Namespace) -> int:
     """List available sessions."""
     projects_dir = Path(args.projects_dir) if args.projects_dir else DEFAULT_PROJECTS_DIR
 
@@ -63,13 +63,13 @@ def cmd_list(args):
     sessions.sort(reverse=True)  # newest first
     print(f"{'SESSION ID':<44} {'SIZE':>7} {'DATE':<20} {'PROJECT':<40} SOURCES")
     print("-" * 130)
-    for mtime, sid, size, extras, project in sessions:
-        print(f"{sid:<44} {size:6.1f}M {mtime.strftime('%Y-%m-%d %H:%M'):<20} {project[:40]:<40}{extras}")
+    for mtime, sid, size, extra_str, project in sessions:
+        print(f"{sid:<44} {size:6.1f}M {mtime.strftime('%Y-%m-%d %H:%M'):<20} {project[:40]:<40}{extra_str}")
 
     return 0
 
 
-def cmd_build(args):
+def cmd_build(args: argparse.Namespace) -> int:
     """Build blocks.json + churn.json for a session."""
     session_id = args.session
     if not session_id:
@@ -125,7 +125,7 @@ def cmd_build(args):
     return 0
 
 
-def cmd_open(args):
+def cmd_open(args: argparse.Namespace) -> int:
     """Build + serve + open browser."""
     session_id = args.session
     if not session_id:
@@ -155,7 +155,7 @@ def cmd_open(args):
     return 0
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         prog="ccscope",
         description="Context Scope — context window forensics for Claude Code sessions",

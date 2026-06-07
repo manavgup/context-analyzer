@@ -8,7 +8,7 @@ import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -116,7 +116,7 @@ def _ensure_ingested(
     engine = get_engine(db_path)
     factory = get_session_factory(engine)
     with factory() as db:
-        existing = db.get(SessionRecord, session_id)
+        existing: SessionRecord | None = db.get(SessionRecord, session_id)
         if existing:
             return existing
     # Not in DB — try to ingest
@@ -423,11 +423,11 @@ def create_app(
     app = FastAPI(title="Context Analyzer", version="0.4.0")
 
     @app.get("/api/health")
-    def health_check():
+    def health_check() -> dict:
         return {"status": "ok"}
 
     @app.get("/api/sessions")
-    def get_sessions():
+    def get_sessions() -> list:
         """List all sessions with summary stats from SQLite."""
         session_ids = list_sessions(trace_dir=trace_dir)
         results = []
@@ -472,7 +472,7 @@ def create_app(
         return results
 
     @app.get("/api/session/{session_id}/summary")
-    def get_session_summary(session_id: str):
+    def get_session_summary(session_id: str) -> dict:
         """Full session summary from SQLite."""
         _validate_session_id(session_id)
         rec = _ensure_ingested(session_id, trace_dir, db_path, transcript_dir)
@@ -486,11 +486,11 @@ def create_app(
             if not rec:
                 raise HTTPException(status_code=404, detail="Session not found")
 
-            block_types = {}
+            block_types: dict[str, int] = {}
             for b in db.query(BlockRecord).filter_by(session_id=session_id):
                 block_types[b.block_type] = block_types.get(b.block_type, 0) + 1
 
-            hook_types = {}
+            hook_types: dict[str, int] = {}
             for h in db.query(HookEventRecord).filter_by(session_id=session_id):
                 hook_types[h.event_type] = hook_types.get(h.event_type, 0) + 1
 
@@ -515,7 +515,7 @@ def create_app(
             }
 
     @app.get("/api/sessions/trends")
-    def get_session_trends():
+    def get_session_trends() -> dict:
         """Cross-session aggregation for trend analysis."""
         session_ids = list_sessions(trace_dir=trace_dir)
         engine = get_engine(db_path)
@@ -555,7 +555,7 @@ def create_app(
         }
 
     @app.get("/api/session/{session_id}/data")
-    def get_session_data(session_id: str):
+    def get_session_data(session_id: str) -> dict:
         """Full session data (blocks + churn + meta + turn_map) for the dashboard.
 
         This replaces the need for `ccscope build` — returns all the data
@@ -593,7 +593,7 @@ def create_app(
     # Tool Intelligence endpoint
     # ------------------------------------------------------------------
     @app.get("/api/session/{session_id}/tool-intelligence")
-    def get_tool_intelligence(session_id: str):
+    def get_tool_intelligence(session_id: str) -> dict:
         """Classified tool breakdown for composition donut and tools tab."""
         _validate_session_id(session_id)
         transcript_path = _find_transcript(session_id, transcript_dir)
@@ -631,7 +631,7 @@ def create_app(
                 try:
                     parsed = json.loads(raw)
                     if isinstance(parsed, dict):
-                        return parsed.get("skill", "unknown")
+                        return str(parsed.get("skill", "unknown"))
                 except (json.JSONDecodeError, TypeError):
                     pass
             return "unknown"
@@ -811,7 +811,7 @@ def create_app(
     # Subagents endpoint
     # ------------------------------------------------------------------
     @app.get("/api/session/{session_id}/subagents")
-    def get_subagents(session_id: str):
+    def get_subagents(session_id: str) -> dict:
         """Expose SubagentRecord + SubagentApiCallRecord data from DB."""
         _validate_session_id(session_id)
 
@@ -870,7 +870,7 @@ def create_app(
         }
 
     @app.get("/api/session/{session_id}/turns")
-    def get_session_turns(session_id: str):
+    def get_session_turns(session_id: str) -> dict:
         """Per-turn summary data for sediment chart and scorecards."""
         _validate_session_id(session_id)
         transcript_path = _find_transcript(session_id, transcript_dir)
@@ -908,12 +908,12 @@ def create_app(
         for snap in snapshots:
             # Update resource_last_used for blocks entering this turn
             for bid in snap.blocks_entered_ids:
-                block = block_registry.get(bid)
-                if block and block.resource:
-                    resource_last_used[block.resource] = snap.turn_number
+                entered_blk: ContextBlock | None = block_registry.get(bid)
+                if entered_blk and entered_blk.resource:
+                    resource_last_used[entered_blk.resource] = snap.turn_number
                 # P2-2: Accumulate blocks for incremental superseded map
-                if block:
-                    blocks_seen_so_far.append(block)
+                if entered_blk:
+                    blocks_seen_so_far.append(entered_blk)
 
             # P2-2: Compute superseded only from blocks seen up to this turn
             superseded = detect_superseded(blocks_seen_so_far)
@@ -928,9 +928,10 @@ def create_app(
             dead_count = 0
 
             for bid in snap.block_ids:
-                block = block_registry.get(bid)
-                if not block:
+                maybe_block: ContextBlock | None = block_registry.get(bid)
+                if not maybe_block:
                     continue
+                block = maybe_block
 
                 # P2-3: Gather assistant messages from turns after block entered
                 messages_since: list[str] = []
@@ -1011,7 +1012,7 @@ def create_app(
         }
 
     @app.get("/api/session/{session_id}/blocks")
-    def get_session_blocks(session_id: str):
+    def get_session_blocks(session_id: str) -> dict:
         """Block metadata for context tape. No content (lazy loaded)."""
         _validate_session_id(session_id)
         transcript_path = _find_transcript(session_id, transcript_dir)
@@ -1088,7 +1089,7 @@ def create_app(
         return {"session_id": session_id, "blocks": blocks_out}
 
     @app.get("/api/session/{session_id}/health")
-    def get_session_health(session_id: str):
+    def get_session_health(session_id: str) -> dict:
         """Context health score with signals and recommendations."""
         _validate_session_id(session_id)
         transcript_path = _find_transcript(session_id, transcript_dir)
@@ -1156,7 +1157,7 @@ def create_app(
         }
 
     @app.get("/api/session/{session_id}/errors")
-    def get_session_errors(session_id: str):
+    def get_session_errors(session_id: str) -> dict:
         """Error analysis: tool failures, retry patterns, self-corrections."""
         _validate_session_id(session_id)
         transcript_path = _find_transcript(session_id, transcript_dir)
@@ -1391,7 +1392,7 @@ def create_app(
         }
 
     @app.get("/api/session/{session_id}/dead_weight")
-    def get_session_dead_weight(session_id: str):
+    def get_session_dead_weight(session_id: str) -> dict:
         """Per-turn dead weight data and top stale blocks."""
         _validate_session_id(session_id)
         transcript_path = _find_transcript(session_id, transcript_dir)
@@ -1536,7 +1537,7 @@ def create_app(
         }
 
     @app.get("/api/session/{session_id}/turn/{turn_number}/messages")
-    def get_turn_messages(session_id: str, turn_number: int):
+    def get_turn_messages(session_id: str, turn_number: int) -> dict:
         """Full message content for a specific turn (drilldown)."""
         _validate_session_id(session_id)
         transcript_path = _find_transcript(session_id, transcript_dir)
@@ -1614,7 +1615,7 @@ def create_app(
         return {"tool_category": cat, "tool_display_name": display}
 
     @app.get("/api/session/{session_id}/call/{call_index}/content")
-    def get_call_content(session_id: str, call_index: int):
+    def get_call_content(session_id: str, call_index: int) -> dict:
         """Full message content for a specific API call (by call index 0-based).
 
         Uses the ccscope transcript parser which indexes by API call,
@@ -1698,7 +1699,7 @@ def create_app(
         return {"call_index": call_index, "messages": messages_out, "usage": {}}
 
     @app.get("/api/session/{session_id}/conv_turn/{conv_turn}/content")
-    def get_conv_turn_content(session_id: str, conv_turn: int):
+    def get_conv_turn_content(session_id: str, conv_turn: int) -> dict:
         """Full content for a conversation turn (all API calls in the turn).
 
         conv_turn is 1-based. Returns all messages across all API calls
@@ -1886,7 +1887,7 @@ def create_app(
         conv_turn: int,
         msg_index: int,
         img_index: int,
-    ):
+    ) -> dict | Response:
         """Serve a specific image from a conversation turn.
 
         msg_index is the 0-based index into the flattened messages array
@@ -1995,7 +1996,7 @@ def create_app(
         )
 
     @app.get("/sessions")
-    def serve_sessions_page():
+    def serve_sessions_page() -> Response:
         """Cross-session overview page."""
         sessions_html = static_dir / "sessions.html"
         if sessions_html.exists():
@@ -2003,7 +2004,7 @@ def create_app(
         return HTMLResponse("<h1>Sessions</h1><p>sessions.html not found</p>")
 
     @app.get("/")
-    def serve_dashboard():
+    def serve_dashboard() -> Response:
         # Prefer v3 dashboard, fall back to v2
         v3 = static_dir / "dashboard-v3.html"
         if v3.exists():
@@ -2014,28 +2015,28 @@ def create_app(
         return HTMLResponse("<h1>Context Analyzer</h1><p>Run ccscope build first.</p>")
 
     @app.get("/blocks.json")
-    def get_blocks_json():
+    def get_blocks_json() -> Response:
         blocks_path = static_dir / "blocks.json"
         if blocks_path.exists():
             return FileResponse(str(blocks_path), media_type="application/json")
         raise HTTPException(status_code=404, detail="Run ccscope build first")
 
     @app.get("/churn.json")
-    def get_churn_json():
+    def get_churn_json() -> Response:
         churn_path = static_dir / "churn.json"
         if churn_path.exists():
             return FileResponse(str(churn_path), media_type="application/json")
         raise HTTPException(status_code=404, detail="Run ccscope build first")
 
     @app.get("/meta.json")
-    def get_meta_json():
+    def get_meta_json() -> Response:
         meta_path = static_dir / "meta.json"
         if meta_path.exists():
             return FileResponse(str(meta_path), media_type="application/json")
         raise HTTPException(status_code=404, detail="No meta.json")
 
     @app.get("/turn_map.json")
-    def get_turn_map_json():
+    def get_turn_map_json() -> Response:
         path = static_dir / "turn_map.json"
         if path.exists():
             return FileResponse(str(path), media_type="application/json")

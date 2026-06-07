@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlalchemy import Column, Float, ForeignKey, Integer, Text, create_engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker
 
 DEFAULT_DB_DIR = Path.home() / ".context-analyzer"
@@ -158,7 +159,7 @@ class ToolResultOffloadRecord(Base):
     session = relationship("SessionRecord", back_populates="tool_result_offloads")
 
 
-def get_engine(db_path: Path = DEFAULT_DB_PATH):
+def get_engine(db_path: Path = DEFAULT_DB_PATH) -> Engine:
     """Create SQLAlchemy engine. Creates the DB directory and tables if needed."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
     engine = create_engine(f"sqlite:///{db_path}", echo=False)
@@ -166,7 +167,7 @@ def get_engine(db_path: Path = DEFAULT_DB_PATH):
     return engine
 
 
-def get_session_factory(engine=None, db_path: Path = DEFAULT_DB_PATH):
+def get_session_factory(engine: Engine | None = None, db_path: Path = DEFAULT_DB_PATH) -> sessionmaker:  # type: ignore[type-arg]
     """Get a sessionmaker bound to an engine."""
     if engine is None:
         engine = get_engine(db_path)

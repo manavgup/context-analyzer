@@ -46,7 +46,7 @@ def _build_turn_map(churn: list[dict], blocks: list[dict]) -> list[dict]:
     Groups API calls into conversation turns by finding user blocks
     that mark the start of each turn.
     """
-    turns = []
+    turns: list[dict] = []
     # Find user blocks and their enter turn (API call index)
     user_entries = []
     for b in blocks:
@@ -117,7 +117,7 @@ def ingest_session(
 
     with session_factory() as db:
         # Check if already ingested and up-to-date
-        existing = db.get(SessionRecord, session_id)
+        existing: SessionRecord | None = db.get(SessionRecord, session_id)
         if existing and not force:
             if existing.source_mtime >= source_mtime:
                 return existing  # Already up-to-date
@@ -346,7 +346,7 @@ def get_or_ingest(
     session_factory = get_session_factory(engine)
 
     with session_factory() as db:
-        existing = db.get(SessionRecord, session_id)
+        existing: SessionRecord | None = db.get(SessionRecord, session_id)
         if existing:
             return existing
 

@@ -16,6 +16,7 @@ from context_tracker.models import (
     PostCompactEvent,
     PostToolUseEvent,
     SessionStartEvent,
+    TrackerEvent,
 )
 from context_tracker.storage import DEFAULT_TRACE_DIR, list_sessions, read_events
 from context_tracker.transcript import parse_transcript
@@ -25,11 +26,11 @@ mcp = FastMCP(name="context-tracker", version="0.1.0")
 DEFAULT_TRANSCRIPT_DIR = Path.home() / ".claude" / "projects"
 
 # Cache read_events for 2 seconds (covers multiple tool calls in quick succession)
-_cache: dict = {}
+_cache: dict[tuple[str, str], tuple[float, list[TrackerEvent]]] = {}
 _cache_ttl = 2.0
 
 
-def _cached_read_events(session_id: str, trace_dir: Path = DEFAULT_TRACE_DIR):
+def _cached_read_events(session_id: str, trace_dir: Path = DEFAULT_TRACE_DIR) -> list[TrackerEvent]:
     key = (session_id, str(trace_dir))
     now = time()
     if key in _cache and now - _cache[key][0] < _cache_ttl:
