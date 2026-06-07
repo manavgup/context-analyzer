@@ -63,7 +63,7 @@ def test_list_sessions(tmp_path):
             SessionStartEvent(session_id=sid, source="startup", model="test"),
             trace_dir=trace_dir,
         )
-    sessions = list_sessions(trace_dir=trace_dir)
+    sessions = list_sessions(trace_dir=trace_dir, projects_dir=tmp_path / "empty")
     assert set(sessions) == {"aaa", "bbb", "ccc"}
 
 
@@ -77,6 +77,114 @@ def test_creates_directory_on_first_write(tmp_path):
     assert trace_dir.exists()
     events = read_events("new", trace_dir=trace_dir)
     assert len(events) == 1
+
+
+def test_list_sessions_from_projects_dir(tmp_path):
+    """Sessions from transcript files in projects dir are discovered."""
+    trace_dir = tmp_path / "traces"
+    trace_dir.mkdir()
+    projects_dir = tmp_path / "projects"
+
+    # Create transcript files in project subdirectories (mimics ~/.claude/projects/<slug>/<uuid>.jsonl)
+    proj1 = projects_dir / "project-one"
+    proj1.mkdir(parents=True)
+    (proj1 / "aaaaaaaa-1111-2222-3333-444444444444.jsonl").write_text("{}\n")
+
+    proj2 = projects_dir / "project-two"
+    proj2.mkdir(parents=True)
+    (proj2 / "bbbbbbbb-1111-2222-3333-444444444444.jsonl").write_text("{}\n")
+
+    sessions = list_sessions(trace_dir=trace_dir, projects_dir=projects_dir)
+    assert set(sessions) == {
+        "aaaaaaaa-1111-2222-3333-444444444444",
+        "bbbbbbbb-1111-2222-3333-444444444444",
+    }
+
+
+def test_list_sessions_deduplicates(tmp_path):
+    """Sessions present in both trace and projects dirs appear once."""
+    trace_dir = tmp_path / "traces"
+    trace_dir.mkdir()
+    shared_sid = "cccccccc-1111-2222-3333-444444444444"
+    (trace_dir / f"{shared_sid}.jsonl").write_text("{}\n")
+
+    projects_dir = tmp_path / "projects" / "proj"
+    projects_dir.mkdir(parents=True)
+    (projects_dir / f"{shared_sid}.jsonl").write_text("{}\n")
+
+    sessions = list_sessions(trace_dir=trace_dir, projects_dir=projects_dir)
+    assert sessions.count(shared_sid) == 1
+
+
+def test_list_sessions_excludes_subagents(tmp_path):
+    """Subagent transcripts (agent-*.jsonl inside subagents/) are excluded."""
+    trace_dir = tmp_path / "traces"
+    trace_dir.mkdir()
+    projects_dir = tmp_path / "projects" / "proj"
+    projects_dir.mkdir(parents=True)
+
+    # Real session
+    (projects_dir / "dddddddd-1111-2222-3333-444444444444.jsonl").write_text("{}\n")
+
+    # Subagent transcript — should be excluded
+    sa_dir = projects_dir / "dddddddd-1111-2222-3333-444444444444" / "subagents"
+    sa_dir.mkdir(parents=True)
+    (sa_dir / "agent-eeeeeeee-1111-2222-3333-444444444444.jsonl").write_text("{}\n")
+
+    sessions = list_sessions(trace_dir=trace_dir, projects_dir=projects_dir)
+    assert "dddddddd-1111-2222-3333-444444444444" in sessions
+    # The subagent file has "agent-" prefix so its stem won't match UUID pattern,
+    # but even if it somehow did, the subagents/ filter catches it
+    assert "eeeeeeee-1111-2222-3333-444444444444" not in sessions
+
+
+def test_list_sessions_excludes_non_uuid(tmp_path):
+    """Non-UUID filenames in projects dir are excluded."""
+    trace_dir = tmp_path / "traces"
+    trace_dir.mkdir()
+    projects_dir = tmp_path / "projects" / "proj"
+    projects_dir.mkdir(parents=True)
+
+    # Valid UUID
+    (projects_dir / "ffffffff-1111-2222-3333-444444444444.jsonl").write_text("{}\n")
+    # Not a UUID
+    (projects_dir / "random-notes.jsonl").write_text("{}\n")
+
+    sessions = list_sessions(trace_dir=trace_dir, projects_dir=projects_dir)
+    assert sessions == ["ffffffff-1111-2222-3333-444444444444"]
+
+
+def test_list_sessions_sorted_by_mtime(tmp_path):
+    """Sessions are sorted newest first by mtime."""
+    import os
+    import time
+
+    trace_dir = tmp_path / "traces"
+    trace_dir.mkdir()
+    projects_dir = tmp_path / "projects" / "proj"
+    projects_dir.mkdir(parents=True)
+
+    older = projects_dir / "11111111-1111-2222-3333-444444444444.jsonl"
+    older.write_text("{}\n")
+    os.utime(older, (1000, 1000))
+
+    time.sleep(0.01)
+    newer = projects_dir / "22222222-1111-2222-3333-444444444444.jsonl"
+    newer.write_text("{}\n")
+    os.utime(newer, (2000, 2000))
+
+    sessions = list_sessions(trace_dir=trace_dir, projects_dir=projects_dir)
+    assert sessions[0] == "22222222-1111-2222-3333-444444444444"
+    assert sessions[1] == "11111111-1111-2222-3333-444444444444"
+
+
+def test_list_sessions_missing_dirs(tmp_path):
+    """Both dirs missing returns empty list."""
+    sessions = list_sessions(
+        trace_dir=tmp_path / "nope",
+        projects_dir=tmp_path / "also-nope",
+    )
+    assert sessions == []
 
 
 def test_rejects_path_traversal(tmp_path):

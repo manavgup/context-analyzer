@@ -185,7 +185,7 @@ def get_session_history(
     transcript_dir: Path = DEFAULT_TRANSCRIPT_DIR,
 ) -> list[dict]:
     """List all sessions with summary stats."""
-    session_ids = list_sessions(trace_dir=trace_dir)
+    session_ids = list_sessions(trace_dir=trace_dir, projects_dir=transcript_dir)
     return [get_session_summary(sid, trace_dir=trace_dir, transcript_dir=transcript_dir) for sid in session_ids]
 
 

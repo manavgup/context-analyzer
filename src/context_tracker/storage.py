@@ -54,9 +54,46 @@ def read_events(session_id: str, trace_dir: Path = DEFAULT_TRACE_DIR) -> list[Tr
     return events
 
 
-def list_sessions(trace_dir: Path = DEFAULT_TRACE_DIR) -> list[str]:
-    """List all session IDs with trace files, sorted by modification time (newest first)."""
-    if not trace_dir.exists():
-        return []
-    files = sorted(trace_dir.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
-    return [f.stem for f in files]
+DEFAULT_PROJECTS_DIR = Path.home() / ".claude" / "projects"
+
+# UUID pattern for session IDs (Claude Code transcript filenames)
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+)
+
+
+def list_sessions(
+    trace_dir: Path = DEFAULT_TRACE_DIR,
+    projects_dir: Path | None = None,
+) -> list[str]:
+    """List all session IDs from hook traces and transcripts.
+
+    Merges both sources, deduplicates, and sorts by modification time
+    (newest first). Transcript files in subagents/ directories are excluded.
+    """
+    # session_id -> newest mtime across sources
+    sessions: dict[str, float] = {}
+
+    # Source 1: Hook trace files (existing behavior)
+    if trace_dir.exists():
+        for f in trace_dir.glob("*.jsonl"):
+            sessions[f.stem] = f.stat().st_mtime
+
+    # Source 2: Transcript files from projects directory
+    if projects_dir is None:
+        projects_dir = DEFAULT_PROJECTS_DIR
+    if projects_dir.exists():
+        for f in projects_dir.rglob("*.jsonl"):
+            # Skip subagent transcripts (agent-*.jsonl inside subagents/ dirs)
+            if "subagents" in f.parts:
+                continue
+            sid = f.stem
+            # Only include UUID-formatted session IDs
+            if not _UUID_RE.match(sid):
+                continue
+            mtime = f.stat().st_mtime
+            if sid not in sessions or mtime > sessions[sid]:
+                sessions[sid] = mtime
+
+    # Sort by mtime descending (newest first)
+    return sorted(sessions, key=lambda s: sessions[s], reverse=True)
