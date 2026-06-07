@@ -43,6 +43,12 @@ Thumbs.db
 node_modules/
 *.db
 
+# Generated session data (from ccscope build)
+static/blocks.json
+static/churn.json
+static/meta.json
+static/turn_map.json
+
 # Skill files (tooling, not project code)
 *.skill
 python-project-scaffold/
