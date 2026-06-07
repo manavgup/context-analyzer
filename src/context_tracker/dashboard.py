@@ -1887,7 +1887,7 @@ def create_app(
         conv_turn: int,
         msg_index: int,
         img_index: int,
-    ) -> dict | Response:
+    ) -> dict:  # type: ignore[return-value]
         """Serve a specific image from a conversation turn.
 
         msg_index is the 0-based index into the flattened messages array
