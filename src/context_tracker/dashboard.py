@@ -898,13 +898,15 @@ def create_app(
         """
         _validate_session_id(session_id)
 
-        # Load turn_map to find the API call range
-        turn_map_path = static_dir / "turn_map.json"
-        if not turn_map_path.exists():
-            raise HTTPException(status_code=404, detail="Run ccscope build first")
+        # Find transcript first
+        transcript_path = _find_transcript(session_id, transcript_dir)
+        if transcript_path is None or not transcript_path.exists():
+            raise HTTPException(status_code=404, detail="Transcript not found")
 
+        # Build turn_map on the fly (no ccscope build required)
+        from context_tracker.ccscope.parse_transcript import build_turn_map
         import json
-        turn_map = json.loads(turn_map_path.read_text(encoding="utf-8"))
+        turn_map = build_turn_map(transcript_path)
 
         # Find the entry for this conv_turn
         turn_entry = None
@@ -917,11 +919,6 @@ def create_app(
 
         first_call = turn_entry["first_call"]
         last_call = turn_entry["last_call"]
-
-        # Find transcript
-        transcript_path = _find_transcript(session_id, transcript_dir)
-        if transcript_path is None or not transcript_path.exists():
-            raise HTTPException(status_code=404, detail="Transcript not found")
 
         # Parse transcript to extract all messages for the API call range
         entries_raw = []

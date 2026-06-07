@@ -127,6 +127,17 @@ def build_health_signals(
 
     model_window = MODEL_CONTEXT_WINDOWS.get(model, config.model_context_window)
 
+    # If peak context exceeds the mapped window, the session is on a larger
+    # variant (e.g. transcript says "claude-opus-4-6" but it's actually the
+    # 1M variant).  Check for a "[1m]" entry or fall back to 1M.
+    peak_actual = max(
+        (s.actual_context_tokens for s in snapshots if s.actual_context_tokens > 0),
+        default=0,
+    )
+    if peak_actual > model_window:
+        larger_key = model + "[1m]"
+        model_window = MODEL_CONTEXT_WINDOWS.get(larger_key, 1_000_000)
+
     # --- Find the final non-compaction snapshot ---
     final_snap = None
     for snap in reversed(snapshots):
