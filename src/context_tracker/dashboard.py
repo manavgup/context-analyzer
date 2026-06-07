@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from pathlib import Path
@@ -24,6 +25,7 @@ from context_tracker.analysis.staleness import (
     detect_superseded,
     detect_task_boundaries,
 )
+from context_tracker.ccscope.tokens import image_dimensions, image_tokens
 from context_tracker.db import (
     DEFAULT_DB_PATH,
     BlockRecord,
@@ -79,6 +81,289 @@ def _ensure_ingested(
     return ingest_session(
         session_id, trace_dir=trace_dir, db_path=db_path, projects_dir=projects_dir,
     )
+
+
+def _extract_image_metadata(source: dict, media_type: str) -> dict:
+    """Extract width/height/tokens from an image source block."""
+    source_type = source.get("type", "base64")
+    w, h = 1024, 1024  # fallback
+    mt = media_type
+
+    if source_type == "base64":
+        mt = source.get("media_type", media_type)
+        b64_data = source.get("data", "")
+        w, h = image_dimensions(b64_data, mt)
+    elif source_type == "url":
+        url = source.get("url", "")
+        if url.startswith("data:"):
+            # Parse data URI: data:image/png;base64,<data>
+            try:
+                header, b64_data = url.split(",", 1)
+                mt = header.split(":")[1].split(";")[0] if ":" in header else media_type
+                w, h = image_dimensions(b64_data, mt)
+            except (ValueError, IndexError):
+                pass
+        # For http(s) URLs, we can't fetch dimensions without network — use fallback
+
+    return {
+        "media_type": mt,
+        "width": w,
+        "height": h,
+        "tokens": image_tokens(w, h),
+    }
+
+
+def _extract_content_blocks_with_images(
+    content: str | list,
+    entry_type: str,
+    timestamp: str,
+) -> list[dict]:
+    """Extract message dicts from raw content, including image metadata.
+
+    This shared helper is used by both get_call_content and
+    get_conv_turn_content to ensure consistent flattening order.
+
+    Returns a list of message dicts ready for the API response.
+    """
+    messages: list[dict] = []
+
+    if isinstance(content, str) and content:
+        messages.append({
+            "type": "user" if entry_type == "user" else "assistant",
+            "role": "user" if entry_type == "user" else "assistant",
+            "content": content[:8000],
+            "size_chars": len(content),
+            "is_truncated": len(content) > 8000,
+            "timestamp": timestamp,
+        })
+        return messages
+
+    if not isinstance(content, list):
+        return messages
+
+    for block_item in content:
+        if not isinstance(block_item, dict):
+            continue
+        block_type = block_item.get("type", "")
+
+        if block_type == "text":
+            text = block_item.get("text", "")
+            messages.append({
+                "type": "assistant_text" if entry_type == "assistant" else "user_text",
+                "role": entry_type,
+                "content": text[:8000],
+                "size_chars": len(text),
+                "is_truncated": len(text) > 8000,
+                "timestamp": timestamp,
+            })
+
+        elif block_type == "thinking":
+            text = block_item.get("thinking", "")
+            messages.append({
+                "type": "thinking",
+                "role": "assistant",
+                "content": text[:8000],
+                "size_chars": len(text),
+                "is_truncated": len(text) > 8000,
+                "timestamp": timestamp,
+            })
+
+        elif block_type == "tool_use":
+            tool_input = block_item.get("input", {})
+            input_str = (
+                json.dumps(tool_input, indent=2)
+                if isinstance(tool_input, dict)
+                else str(tool_input)
+            )
+            tool_name = block_item.get("name", "unknown")
+            resource = ""
+            if tool_name in ("Read", "Edit", "Write"):
+                resource = (
+                    tool_input.get("file_path", "")
+                    if isinstance(tool_input, dict)
+                    else ""
+                )
+            elif tool_name == "Bash":
+                resource = (
+                    tool_input.get("command", "")[:100]
+                    if isinstance(tool_input, dict)
+                    else ""
+                )
+            messages.append({
+                "type": "tool_use",
+                "role": "assistant",
+                "tool_name": tool_name,
+                "resource": resource,
+                "content": input_str[:8000],
+                "size_chars": len(input_str),
+                "is_truncated": len(input_str) > 8000,
+                "tool_use_id": block_item.get("id", ""),
+                "timestamp": timestamp,
+            })
+
+        elif block_type == "tool_result":
+            result_content = block_item.get("content", "")
+            images_meta: list[dict] = []
+            if isinstance(result_content, list):
+                text_parts = []
+                img_idx = 0
+                for sub in result_content:
+                    if not isinstance(sub, dict):
+                        text_parts.append(str(sub))
+                        continue
+                    if sub.get("type") == "image":
+                        source = sub.get("source", {})
+                        meta = _extract_image_metadata(
+                            source,
+                            source.get("media_type", "image/png"),
+                        )
+                        meta["index"] = img_idx
+                        images_meta.append(meta)
+                        img_idx += 1
+                    else:
+                        text_parts.append(sub.get("text", ""))
+                result_content = "\n".join(text_parts)
+            elif not isinstance(result_content, str):
+                result_content = str(result_content)
+
+            msg_dict: dict = {
+                "type": "tool_result",
+                "role": "tool",
+                "content": result_content[:8000],
+                "size_chars": len(result_content),
+                "is_truncated": len(result_content) > 8000,
+                "is_error": bool(block_item.get("is_error", False)),
+                "tool_use_id": block_item.get("tool_use_id", ""),
+                "timestamp": timestamp,
+            }
+            if images_meta:
+                msg_dict["images"] = images_meta
+            messages.append(msg_dict)
+
+        elif block_type == "image":
+            # Top-level image block (user-pasted screenshot)
+            source = block_item.get("source", {})
+            meta = _extract_image_metadata(
+                source,
+                source.get("media_type", "image/png"),
+            )
+            meta["index"] = 0
+            messages.append({
+                "type": "image",
+                "role": entry_type,
+                "content": f"[image: {meta['media_type']} {meta['width']}x{meta['height']}]",
+                "size_chars": 0,
+                "is_truncated": False,
+                "timestamp": timestamp,
+                "images": [meta],
+            })
+
+    return messages
+
+
+def _walk_transcript_for_range(
+    transcript_path: Path,
+    first_call: int,
+    last_call: int,
+) -> list[dict]:
+    """Walk a transcript JSONL and return raw entries for a range of API calls.
+
+    Shared between get_conv_turn_content and the image endpoint to ensure
+    consistent flattening order (msg_index alignment).
+    """
+    entries_raw: list[dict] = []
+    api_call_idx = -1
+    pending_user_entries: list[dict] = []
+
+    with open(transcript_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            entry_type = entry.get("type", "")
+            if entry_type in (
+                "file-history-snapshot", "last-prompt", "pr-link", "queue-operation",
+            ):
+                continue
+
+            if entry_type == "user":
+                pending_user_entries.append(entry)
+                continue
+
+            if entry_type == "assistant":
+                message = entry.get("message", {})
+                usage = message.get("usage", {})
+                stop_reason = message.get("stop_reason")
+                output_tokens = usage.get("output_tokens", 0)
+                model = message.get("model", "")
+
+                if stop_reason is None or output_tokens == 0 or model == "synthetic":
+                    continue
+
+                api_call_idx += 1
+
+                if first_call <= api_call_idx <= last_call:
+                    entries_raw.extend(pending_user_entries)
+                    entries_raw.append(entry)
+                elif api_call_idx > last_call:
+                    break
+
+                pending_user_entries = []
+
+    return entries_raw
+
+
+def _flatten_entries_to_messages(entries_raw: list[dict]) -> list[dict]:
+    """Flatten raw transcript entries into message dicts using shared helper.
+
+    Returns list of message dicts with images[] metadata where applicable.
+    """
+    messages_out: list[dict] = []
+    for entry in entries_raw:
+        entry_type = entry.get("type", "")
+        message = entry.get("message", {})
+        content = message.get("content", "")
+        timestamp = entry.get("timestamp", "")
+
+        msgs = _extract_content_blocks_with_images(
+            content, entry_type, timestamp,
+        )
+        messages_out.extend(msgs)
+    return messages_out
+
+
+def _serve_image_source(source: dict) -> dict:
+    """Return the appropriate response for an image source block.
+
+    Branches on source.type:
+    - base64: returns {"data_uri": "data:{media_type};base64,{data}"}
+    - url with data: prefix: returns {"data_uri": url}
+    - url with http(s): returns {"url": url}
+    """
+    source_type = source.get("type", "base64")
+
+    if source_type == "base64":
+        media_type = source.get("media_type", "image/png")
+        data = source.get("data", "")
+        return {"data_uri": f"data:{media_type};base64,{data}"}
+
+    if source_type == "url":
+        url = source.get("url", "")
+        if url.startswith("data:"):
+            return {"data_uri": url}
+        return {"url": url}
+
+    # Unknown source type — try base64 as fallback
+    media_type = source.get("media_type", "image/png")
+    data = source.get("data", "")
+    if data:
+        return {"data_uri": f"data:{media_type};base64,{data}"}
+    return {"error": "Unknown image source type"}
 
 
 def create_app(
@@ -724,153 +1009,17 @@ def create_app(
         if transcript_path is None:
             raise HTTPException(status_code=404, detail="Transcript not found")
 
-        import json
-
-        # Parse transcript entries directly — we need the raw content
-        # for the specific API call
         if not transcript_path.exists():
             raise HTTPException(status_code=404, detail="Transcript not found")
 
-        api_call_idx = -1
-        target_entries = []
-        pending_user_entries = []
-
-        with open(transcript_path) as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-
-                entry_type = entry.get("type", "")
-                if entry_type in ("file-history-snapshot", "last-prompt", "pr-link", "queue-operation"):
-                    continue
-
-                if entry_type == "user":
-                    # Buffer user messages — they belong to the next API call
-                    pending_user_entries.append(entry)
-                    continue
-
-                if entry_type == "assistant":
-                    message = entry.get("message", {})
-                    usage = message.get("usage", {})
-                    stop_reason = message.get("stop_reason")
-                    output_tokens = usage.get("output_tokens", 0)
-                    model = message.get("model", "")
-
-                    if stop_reason is None or output_tokens == 0 or model == "synthetic":
-                        continue
-
-                    api_call_idx += 1
-
-                    if api_call_idx == call_index:
-                        # This is the API call we want
-                        target_entries = list(pending_user_entries)
-                        target_entries.append(entry)
-                        break
-
-                    # Clear pending for next call
-                    pending_user_entries = []
+        target_entries = _walk_transcript_for_range(
+            transcript_path, call_index, call_index,
+        )
 
         if not target_entries:
             raise HTTPException(status_code=404, detail=f"API call {call_index} not found")
 
-        # Extract content blocks from the target entries
-        messages_out = []
-        for entry in target_entries:
-            entry_type = entry.get("type", "")
-            message = entry.get("message", {})
-            content = message.get("content", "")
-            timestamp = entry.get("timestamp", "")
-
-            if isinstance(content, str) and content:
-                messages_out.append({
-                    "type": "user" if entry_type == "user" else "assistant",
-                    "role": "user" if entry_type == "user" else "assistant",
-                    "content": content[:8000],
-                    "size_chars": len(content),
-                    "is_truncated": len(content) > 8000,
-                    "timestamp": timestamp,
-                })
-            elif isinstance(content, list):
-                for item in content:
-                    if not isinstance(item, dict):
-                        continue
-                    block_type = item.get("type", "")
-
-                    if block_type == "text":
-                        text = item.get("text", "")
-                        messages_out.append({
-                            "type": "assistant_text" if entry_type == "assistant" else "user_text",
-                            "role": entry_type,
-                            "content": text[:8000],
-                            "size_chars": len(text),
-                            "is_truncated": len(text) > 8000,
-                            "timestamp": timestamp,
-                        })
-
-                    elif block_type == "thinking":
-                        text = item.get("thinking", "")
-                        messages_out.append({
-                            "type": "thinking",
-                            "role": "assistant",
-                            "content": text[:8000],
-                            "size_chars": len(text),
-                            "is_truncated": len(text) > 8000,
-                            "timestamp": timestamp,
-                        })
-
-                    elif block_type == "tool_use":
-                        tool_input = item.get("input", {})
-                        input_str = (
-                            json.dumps(tool_input, indent=2)
-                            if isinstance(tool_input, dict)
-                            else str(tool_input)
-                        )
-                        tool_name = item.get("name", "unknown")
-                        resource = ""
-                        if tool_name in ("Read", "Edit", "Write"):
-                            resource = (
-                                tool_input.get("file_path", "")
-                                if isinstance(tool_input, dict)
-                                else ""
-                            )
-                        elif tool_name == "Bash":
-                            resource = (tool_input.get("command", "")[:100] if isinstance(tool_input, dict) else "")
-                        messages_out.append({
-                            "type": "tool_use",
-                            "role": "assistant",
-                            "tool_name": tool_name,
-                            "resource": resource,
-                            "content": input_str[:8000],
-                            "size_chars": len(input_str),
-                            "is_truncated": len(input_str) > 8000,
-                            "tool_use_id": item.get("id", ""),
-                            "timestamp": timestamp,
-                        })
-
-                    elif block_type == "tool_result":
-                        result_content = item.get("content", "")
-                        if isinstance(result_content, list):
-                            result_content = "\n".join(
-                                b.get("text", "") if isinstance(b, dict) else str(b)
-                                for b in result_content
-                            )
-                        elif not isinstance(result_content, str):
-                            result_content = str(result_content)
-                        messages_out.append({
-                            "type": "tool_result",
-                            "role": "tool",
-                            "content": result_content[:8000],
-                            "size_chars": len(result_content),
-                            "is_truncated": len(result_content) > 8000,
-                            "is_error": bool(item.get("is_error", False)),
-                            "tool_use_id": item.get("tool_use_id", ""),
-                            "timestamp": timestamp,
-                        })
+        messages_out = _flatten_entries_to_messages(target_entries)
 
         # Add usage info from the assistant entry
         for entry in target_entries:
@@ -905,12 +1054,11 @@ def create_app(
 
         # Build turn_map on the fly (no ccscope build required)
         from context_tracker.ccscope.parse_transcript import build_turn_map
-        import json
-        turn_map = build_turn_map(transcript_path)
+        turn_map_data = build_turn_map(transcript_path)
 
         # Find the entry for this conv_turn
         turn_entry = None
-        for entry in turn_map:
+        for entry in turn_map_data:
             if entry["conv_turn"] == conv_turn:
                 turn_entry = entry
                 break
@@ -920,155 +1068,24 @@ def create_app(
         first_call = turn_entry["first_call"]
         last_call = turn_entry["last_call"]
 
-        # Parse transcript to extract all messages for the API call range
-        entries_raw = []
-        api_call_idx = -1
-        pending_user_entries = []
-
-        with open(transcript_path) as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-
-                entry_type = entry.get("type", "")
-                if entry_type in ("file-history-snapshot", "last-prompt", "pr-link", "queue-operation"):
-                    continue
-
-                if entry_type == "user":
-                    pending_user_entries.append(entry)
-                    continue
-
-                if entry_type == "assistant":
-                    message = entry.get("message", {})
-                    usage = message.get("usage", {})
-                    stop_reason = message.get("stop_reason")
-                    output_tokens = usage.get("output_tokens", 0)
-                    model = message.get("model", "")
-
-                    if stop_reason is None or output_tokens == 0 or model == "synthetic":
-                        continue
-
-                    api_call_idx += 1
-
-                    if api_call_idx >= first_call and api_call_idx <= last_call:
-                        # Include pending user entries + this assistant entry
-                        entries_raw.extend(pending_user_entries)
-                        entries_raw.append(entry)
-                    elif api_call_idx > last_call:
-                        break  # Past the range
-
-                    pending_user_entries = []
+        entries_raw = _walk_transcript_for_range(
+            transcript_path, first_call, last_call,
+        )
 
         if not entries_raw:
             raise HTTPException(status_code=404, detail=f"No entries found for conversation turn {conv_turn}")
 
-        # Extract content blocks (same logic as get_call_content)
-        messages_out = []
+        # Compute usage from assistant entries
         total_usage = {"input_tokens": 0, "output_tokens": 0, "cache_read": 0, "cache_creation": 0}
-
         for entry in entries_raw:
-            entry_type = entry.get("type", "")
-            message = entry.get("message", {})
-            content = message.get("content", "")
-            timestamp = entry.get("timestamp", "")
-
-            if entry_type == "assistant":
-                usage = message.get("usage", {})
+            if entry.get("type") == "assistant":
+                usage = entry.get("message", {}).get("usage", {})
                 total_usage["input_tokens"] += usage.get("input_tokens", 0)
                 total_usage["output_tokens"] += usage.get("output_tokens", 0)
                 total_usage["cache_read"] += usage.get("cache_read_input_tokens", 0)
                 total_usage["cache_creation"] += usage.get("cache_creation_input_tokens", 0)
 
-            if isinstance(content, str) and content:
-                messages_out.append({
-                    "type": "user" if entry_type == "user" else "assistant",
-                    "role": "user" if entry_type == "user" else "assistant",
-                    "content": content[:8000],
-                    "size_chars": len(content),
-                    "is_truncated": len(content) > 8000,
-                    "timestamp": timestamp,
-                })
-            elif isinstance(content, list):
-                for item in content:
-                    if not isinstance(item, dict):
-                        continue
-                    block_type = item.get("type", "")
-
-                    if block_type == "text":
-                        text = item.get("text", "")
-                        messages_out.append({
-                            "type": "assistant_text" if entry_type == "assistant" else "user_text",
-                            "role": entry_type,
-                            "content": text[:8000],
-                            "size_chars": len(text),
-                            "is_truncated": len(text) > 8000,
-                            "timestamp": timestamp,
-                        })
-
-                    elif block_type == "thinking":
-                        text = item.get("thinking", "")
-                        messages_out.append({
-                            "type": "thinking",
-                            "role": "assistant",
-                            "content": text[:8000],
-                            "size_chars": len(text),
-                            "is_truncated": len(text) > 8000,
-                            "timestamp": timestamp,
-                        })
-
-                    elif block_type == "tool_use":
-                        tool_input = item.get("input", {})
-                        input_str = (
-                            json.dumps(tool_input, indent=2)
-                            if isinstance(tool_input, dict)
-                            else str(tool_input)
-                        )
-                        tool_name = item.get("name", "unknown")
-                        resource = ""
-                        if tool_name in ("Read", "Edit", "Write"):
-                            resource = (
-                                tool_input.get("file_path", "")
-                                if isinstance(tool_input, dict)
-                                else ""
-                            )
-                        elif tool_name == "Bash":
-                            resource = (tool_input.get("command", "")[:100] if isinstance(tool_input, dict) else "")
-                        messages_out.append({
-                            "type": "tool_use",
-                            "role": "assistant",
-                            "tool_name": tool_name,
-                            "resource": resource,
-                            "content": input_str[:8000],
-                            "size_chars": len(input_str),
-                            "is_truncated": len(input_str) > 8000,
-                            "tool_use_id": item.get("id", ""),
-                            "timestamp": timestamp,
-                        })
-
-                    elif block_type == "tool_result":
-                        result_content = item.get("content", "")
-                        if isinstance(result_content, list):
-                            result_content = "\n".join(
-                                b.get("text", "") if isinstance(b, dict) else str(b)
-                                for b in result_content
-                            )
-                        elif not isinstance(result_content, str):
-                            result_content = str(result_content)
-                        messages_out.append({
-                            "type": "tool_result",
-                            "role": "tool",
-                            "content": result_content[:8000],
-                            "size_chars": len(result_content),
-                            "is_truncated": len(result_content) > 8000,
-                            "is_error": bool(item.get("is_error", False)),
-                            "tool_use_id": item.get("tool_use_id", ""),
-                            "timestamp": timestamp,
-                        })
+        messages_out = _flatten_entries_to_messages(entries_raw)
 
         return {
             "conv_turn": conv_turn,
@@ -1078,6 +1095,114 @@ def create_app(
             "messages": messages_out,
             "usage": total_usage,
         }
+
+    @app.get("/api/session/{session_id}/conv_turn/{conv_turn}/image/{msg_index}/{img_index}")
+    def get_conv_turn_image(
+        session_id: str, conv_turn: int, msg_index: int, img_index: int,
+    ):
+        """Serve a specific image from a conversation turn.
+
+        msg_index is the 0-based index into the flattened messages array
+        (same order as returned by get_conv_turn_content).
+        img_index is the 0-based index into that message's images[] array.
+        """
+        _validate_session_id(session_id)
+
+        transcript_path = _find_transcript(session_id, transcript_dir)
+        if transcript_path is None or not transcript_path.exists():
+            raise HTTPException(status_code=404, detail="Transcript not found")
+
+        from context_tracker.ccscope.parse_transcript import build_turn_map
+        turn_map_data = build_turn_map(transcript_path)
+
+        turn_entry = None
+        for entry in turn_map_data:
+            if entry["conv_turn"] == conv_turn:
+                turn_entry = entry
+                break
+        if turn_entry is None:
+            raise HTTPException(status_code=404, detail=f"Conversation turn {conv_turn} not found")
+
+        first_call = turn_entry["first_call"]
+        last_call = turn_entry["last_call"]
+
+        entries_raw = _walk_transcript_for_range(
+            transcript_path, first_call, last_call,
+        )
+        if not entries_raw:
+            raise HTTPException(status_code=404, detail="No entries found for this turn")
+
+        # Flatten using the same logic to get consistent msg_index
+        # But we need the RAW content blocks, not the truncated messages.
+        # Walk entries the same way as _flatten_entries_to_messages but
+        # track which raw image sub-blocks correspond to each msg_index.
+        flat_msg_idx = -1
+        for entry in entries_raw:
+            message = entry.get("message", {})
+            content = message.get("content", "")
+
+            if isinstance(content, str) and content:
+                flat_msg_idx += 1
+                if flat_msg_idx == msg_index:
+                    raise HTTPException(
+                        status_code=404,
+                        detail="Message at this index has no images",
+                    )
+                continue
+
+            if not isinstance(content, list):
+                continue
+
+            for block_item in content:
+                if not isinstance(block_item, dict):
+                    continue
+                block_type = block_item.get("type", "")
+
+                if block_type in ("text", "thinking", "tool_use"):
+                    flat_msg_idx += 1
+                    if flat_msg_idx == msg_index:
+                        raise HTTPException(
+                            status_code=404,
+                            detail="Message at this index has no images",
+                        )
+
+                elif block_type == "tool_result":
+                    flat_msg_idx += 1
+                    if flat_msg_idx == msg_index:
+                        # Find the img_index-th image in this tool_result
+                        result_content = block_item.get("content", "")
+                        if not isinstance(result_content, list):
+                            raise HTTPException(
+                                status_code=404,
+                                detail="tool_result has no image sub-blocks",
+                            )
+                        current_img = -1
+                        for sub in result_content:
+                            if not isinstance(sub, dict):
+                                continue
+                            if sub.get("type") == "image":
+                                current_img += 1
+                                if current_img == img_index:
+                                    return _serve_image_source(sub.get("source", {}))
+                        raise HTTPException(
+                            status_code=404,
+                            detail=f"Image index {img_index} not found in message",
+                        )
+
+                elif block_type == "image":
+                    flat_msg_idx += 1
+                    if flat_msg_idx == msg_index:
+                        if img_index != 0:
+                            raise HTTPException(
+                                status_code=404,
+                                detail=f"Image index {img_index} not found",
+                            )
+                        return _serve_image_source(block_item.get("source", {}))
+
+        raise HTTPException(
+            status_code=404,
+            detail=f"Message index {msg_index} not found",
+        )
 
     @app.get("/sessions")
     def serve_sessions_page():

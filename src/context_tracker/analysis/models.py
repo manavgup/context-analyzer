@@ -25,6 +25,7 @@ class ContentBlock:
     tool_name: str | None = None
     tool_input: dict | None = None
     is_error: bool = False
+    image_count: int = 0
 
 
 @dataclass(frozen=True)

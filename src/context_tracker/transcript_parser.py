@@ -85,11 +85,18 @@ def _parse_content_blocks(content: str | list | None) -> list[ContentBlock]:
 
         elif block_type == "tool_result":
             result_content = item.get("content", "")
+            image_count = 0
             if isinstance(result_content, list):
-                result_content = "\n".join(
-                    b.get("text", "") if isinstance(b, dict) else str(b)
-                    for b in result_content
-                )
+                text_parts = []
+                for b in result_content:
+                    if isinstance(b, dict):
+                        if b.get("type") == "image":
+                            image_count += 1
+                        else:
+                            text_parts.append(b.get("text", ""))
+                    else:
+                        text_parts.append(str(b))
+                result_content = "\n".join(text_parts)
             elif not isinstance(result_content, str):
                 result_content = str(result_content)
             blocks.append(ContentBlock(
@@ -98,6 +105,18 @@ def _parse_content_blocks(content: str | list | None) -> list[ContentBlock]:
                 size_chars=len(result_content),
                 tool_use_id=item.get("tool_use_id"),
                 is_error=bool(item.get("is_error", False)),
+                image_count=image_count,
+            ))
+
+        elif block_type == "image":
+            # Top-level image block (e.g., user-pasted screenshot)
+            source = item.get("source", {})
+            media_type = source.get("media_type", "image/png")
+            blocks.append(ContentBlock(
+                block_type="image",
+                content=f"[image: {media_type}]",
+                size_chars=0,
+                image_count=1,
             ))
 
     return blocks
