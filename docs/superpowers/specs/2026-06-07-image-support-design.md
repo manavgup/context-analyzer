@@ -47,6 +47,17 @@ GET /conv_turn/{n}/image/{msg_index}/{img_index}
 Thumbnail replaces placeholder -> click opens lightbox
 ```
 
+### Image Source Types
+
+Image sources in transcripts can be either base64 or URL:
+- `{"type": "base64", "media_type": "image/png", "data": "iVBOR..."}` -- inline base64 data
+- `{"type": "url", "url": "https://..."}` or `{"type": "url", "url": "data:image/png;base64,..."}` -- external or data URL
+
+The implementation must branch on `source.type`:
+- `base64`: extract dimensions from `source.data`, serve as `data:{media_type};base64,{data}`
+- `url` with `data:` prefix: parse as data URI, extract base64 portion for dimension parsing
+- `url` with `http(s):`: return the URL directly as `{"url": "https://..."}` (no proxying). Dimension extraction not possible without fetching. Use fallback dimensions (1024x1024).
+
 ### Image Dimension Extraction
 
 Parse actual dimensions from base64 data headers (only first 256 bytes needed):
@@ -79,7 +90,7 @@ def image_tokens(w: int, h: int) -> int:
 
 ### 1. Model Change (`analysis/models.py`)
 
-Add `image_count: int = 0` to `ContentBlock`. Additive-only, all existing call sites use kwargs so the default applies without changes.
+Add `image_count: int = 0` to `ContentBlock`. Since `ContentBlock` is a frozen dataclass, `image_count` must be passed at construction time -- it cannot be set after creation. All existing call sites use kwargs, so the default of 0 applies without changes. New construction sites in `_parse_content_blocks()` must pass `image_count=N` explicitly.
 
 ### 2. Parser Fix (`transcript_parser.py`)
 
@@ -94,7 +105,7 @@ Also add detection for top-level `image` blocks in user messages (separate elif 
 
 ### 3. Token Sizing Fix (`ccscope/tokens.py`)
 
-In `char_count_of_block()`, the `tool_result` branch iterates only text sub-blocks. Change to detect `type: "image"` sub-blocks and compute chars from actual dimensions:
+**Note:** `char_count_of_block()` works on raw transcript block dicts (not `ContentBlock`). It already iterates `tool_result.content[]` sub-blocks but only sums `sub["text"]`. Guard with `isinstance(sub, dict)` when adding the image branch. Change to detect `type: "image"` sub-blocks and compute chars from actual dimensions:
 
 ```python
 if sub.get("type") == "image":
@@ -105,12 +116,17 @@ if sub.get("type") == "image":
 
 ### 4. API: Extend conv_turn Content Response (`dashboard.py`)
 
-Both `get_call_content()` and `get_conv_turn_content()` have identical image-dropping logic. Fix both to:
+**Critical:** `get_conv_turn_content()` does NOT use parsed `ContentBlock` data. It re-reads raw JSONL and flattens transcript entries into message objects. This means parser/model changes alone will not affect the messages pane. The dashboard endpoints must be updated separately with the same image detection logic.
 
-- Detect `type: "image"` sub-blocks in `tool_result.content[]`
-- Extract metadata: `index`, `media_type`, `width`, `height`, `tokens` (from dimension parsing)
-- Return as `images: [{index, media_type, width, height, tokens}]` array on the message object
-- Also detect top-level `image` blocks in user messages
+**Shared extraction helper:** Extract a `_extract_content_blocks_with_images(entry)` helper function that both `get_call_content()` and `get_conv_turn_content()` call. This helper must:
+
+- Iterate `tool_result.content[]` sub-blocks
+- For `type: "text"`: collect as text content (existing behavior)
+- For `type: "image"`: extract metadata (index, media_type, width, height, tokens) from `source`, branch on `source.type` (base64 vs url)
+- For top-level `image` blocks in user messages: same extraction
+- Return both the text content string AND the `images[]` metadata array
+
+The image endpoint (`/conv_turn/{n}/image/{msg_index}/{img_index}`) MUST reuse the exact same flattening order as `get_conv_turn_content()`. Otherwise `msg_index` will address the wrong message. Both endpoints should share the JSONL-walking code path, not duplicate it.
 
 Response shape (additive -- existing fields unchanged):
 
@@ -131,15 +147,19 @@ Response shape (additive -- existing fields unchanged):
 
 `GET /api/session/{session_id}/conv_turn/{conv_turn}/image/{msg_index}/{img_index}`
 
+**`msg_index` definition:** This is the 0-based index into the `data.messages` array returned by `get_conv_turn_content()`. It is NOT the raw transcript entry index. `get_conv_turn_content()` flattens one transcript entry into multiple message rows (e.g., one assistant entry with text + tool_use + tool_use becomes 3 messages). The image endpoint must replicate this exact flattening to address the correct message.
+
 Implementation:
 1. Validate session ID via existing `_validate_session_id()`
 2. Find transcript via `_find_transcript()`
 3. Build turn map via `build_turn_map(transcript_path)` to get `first_call`/`last_call` range
-4. Re-read transcript JSONL, walk to the specific API call entries for this turn
-5. Walk messages in the same order as `get_conv_turn_content()` to find `msg_index`
+4. Re-read transcript JSONL using the **same walking logic** as `get_conv_turn_content()` -- ideally call a shared helper
+5. Walk the flattened messages array to position `msg_index`
 6. Within that message, find the `img_index`-th image sub-block
-7. Extract `source.data` and `source.media_type`
-8. Return `{"data_uri": "data:{media_type};base64,{data}"}`
+7. Branch on `source.type`:
+   - `base64`: extract `source.data` and `source.media_type`, return `{"data_uri": "data:{media_type};base64,{data}"}`
+   - `url` with `data:` prefix: return `{"data_uri": source.url}`
+   - `url` with `http(s):`: return `{"url": source.url}`
 
 Error cases: 404 for missing session, missing turn, missing message, missing image, or non-image message.
 
@@ -178,11 +198,13 @@ Add styles for:
 - Badge position: after preview text, before size bar (right-aligned via `margin-left: auto`)
 
 **Modal view** (`renderMessageBlock`):
+- Current `renderMessageBlock(msg)` does not accept a `msgIndex` parameter. Update signature to `renderMessageBlock(msg, convTurn, msgIndex)` to enable image strip rendering.
 - After the content `<pre>` block, call `renderImageStrip(msg.images, convTurn, msgIndex)` to append placeholder thumbnails
+- In `openConvTurnModal()`, pass `(msg, convTurn, i)` where `i` is the loop index over `data.messages`
 - After setting `body.innerHTML`, call `wireImagePlaceholders(body, convTurn)` to activate lazy loading
 - Show dimension/token metadata below the strip: "N images -- WxH TYPE (T tok) + ..."
 
-**Session switching**: Clear `_imageCache` in `switchSession()` alongside existing cache clears.
+**Session switching**: Clear `_imageCache` in `switchSession()` alongside existing cache clears. Additionally, track a `_imageSessionId` variable set to the current session ID when images are rendered. Before replacing a placeholder with a loaded thumbnail, verify `_imageSessionId` still matches the current session -- otherwise discard the result. This prevents stale async image fetches from a previous session writing into the current session's DOM.
 
 ## Compatibility with Other Issues
 
@@ -213,8 +235,9 @@ None.
 1. `models.py` -- add `image_count` field
 2. `transcript_parser.py` -- detect image blocks, set `image_count`
 3. `tokens.py` -- image dimension parsing + token calculation
-4. `dashboard.py` -- extend conv_turn endpoints with `images[]` metadata
-5. `dashboard.py` -- add image serving endpoint
+4. `dashboard.py` -- extract shared `_extract_content_blocks_with_images()` helper
+5. `dashboard.py` -- extend conv_turn endpoints using shared helper, return `images[]` metadata
+6. `dashboard.py` -- add image serving endpoint using same shared helper for msg_index consistency
 6. `dashboard-v3.html` -- CSS for thumbnails, placeholders, lightbox
 7. `dashboard-v3.html` -- JS: `loadConvTurnImage`, `openLightbox`, `renderImageStrip`, `wireImagePlaceholders`
 8. `dashboard-v3.html` -- integrate into `renderMessagesFromAPI` (badge) and `renderMessageBlock` (strip + lazy load)
@@ -227,3 +250,17 @@ None.
 - Image search or filtering (future)
 - Image diff visualization (e.g., before/after screenshots)
 - Video or animated GIF special handling (treated as static images)
+
+## Codex Review Findings (2026-06-07)
+
+Independent review via `/codex` identified 4 P1 and 3 P2 findings. All addressed in this revision:
+
+| # | Severity | Finding | Resolution |
+|---|----------|---------|------------|
+| 1 | P1 | ContentBlock is frozen -- image_count must be passed at construction | Clarified in spec: pass `image_count=` at construction time |
+| 2 | P1 | get_conv_turn_content re-reads raw JSONL, not parsed ContentBlock | Added shared `_extract_content_blocks_with_images()` helper requirement |
+| 3 | P1 | msg_index under-specified, flattening order mismatch risk | Defined msg_index as 0-based `data.messages` index, image endpoint must share walking logic |
+| 4 | P1 | Only handles base64 sources, not URL-type images | Added source.type branching (base64 / data URL / http URL) |
+| 5 | P2 | No top-level image branch in parser | Confirmed, spec already covers this |
+| 6 | P2 | char_count_of_block works on raw dicts, needs isinstance guard | Added guard note |
+| 7 | P2 | Stale async image fetches after session switch | Added _imageSessionId verification before DOM write |
