@@ -216,7 +216,7 @@ def build_health_signals(
     window = config.cache_trend_window
     cache_efficiencies: list[float] = []
     for snap in snapshots:
-        total_in = snap.cache_read_tokens + snap.input_tokens
+        total_in = snap.cache_read_tokens + snap.input_tokens + snap.cache_creation_tokens
         if total_in > 0:
             cache_efficiencies.append(snap.cache_read_tokens / total_in)
         else:
@@ -249,6 +249,7 @@ def build_health_signals(
                 block
                 and block.block_type == BlockType.TOOL_RESULT
                 and block.resource
+                and block.tool_name in ("Read", "Glob", "Grep", None)
             ):
                 resource_read_counts[block.resource] += 1
     repeated_reads = {
@@ -296,15 +297,16 @@ def build_health_signals(
             output_inflation = min(1.0, inflation)
 
     # --- Edit churn (evidence only) ---
+    # Use snapshots (blocks_entered_ids) since ApiCall.blocks_entered is unpopulated
     edit_churn: list[str] = []
     edit_window = config.edit_churn_window
     recent_edits: dict[str, int] = defaultdict(int)
-    for turn in turns[-edit_window:]:
-        for api_call in turn.api_calls:
-            for bid in api_call.blocks_entered:
-                block = block_registry.get(bid)
-                if block and block.tool_name in ("Edit", "Write") and block.resource:
-                    recent_edits[block.resource] += 1
+    edit_snap_start = max(0, len(snapshots) - edit_window)
+    for snap in snapshots[edit_snap_start:]:
+        for bid in snap.blocks_entered_ids:
+            block = block_registry.get(bid)
+            if block and block.tool_name in ("Edit", "Write") and block.resource:
+                recent_edits[block.resource] += 1
     edit_churn = [r for r, c in recent_edits.items() if c >= 3]
 
     # --- Compaction count ---

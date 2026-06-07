@@ -2319,6 +2319,8 @@ html, body {
 
   function rebuildGrowthChartWithStaleness() {
     if (!turnsData || !turnsData.turns || turnsData.turns.length === 0) return;
+    // Guard: need residentData and growthChart to be ready
+    if (!residentData || residentData.length === 0 || !growthChart) return;
 
     // Build a map from turn number → staleness breakdown
     const staleTurnMap = {};
@@ -2331,33 +2333,42 @@ html, body {
     staleData = [];
     deadWeightChartData = [];
 
-    // Build API call index → conversation turn number mapping
-    // Uses the session's turnMap (first_call/last_call ranges) for accurate mapping
-    const apiCallToTurn = {};
+    // Build API call index → conv turn mapping, but only apply staleness at
+    // the LAST API call of each turn. Earlier calls in the same turn get the
+    // previous turn's staleness (since the current turn's blocks haven't all
+    // entered yet). This fixes the P1 finding where mid-turn API calls showed
+    // end-of-turn staleness state.
+    const apiCallLastTurn = {};  // api_call_idx → conv_turn (only at last_call)
+    const apiCallPrevTurn = {};  // api_call_idx → previous conv_turn (for mid-turn calls)
     if (turnMap && turnMap.length > 0) {
-      for (const tm of turnMap) {
+      for (let ti = 0; ti < turnMap.length; ti++) {
+        const tm = turnMap[ti];
+        const prevTurn = ti > 0 ? turnMap[ti - 1].conv_turn : null;
         for (let c = tm.first_call; c <= tm.last_call; c++) {
-          apiCallToTurn[c] = tm.conv_turn;
+          if (c === tm.last_call) {
+            apiCallLastTurn[c] = tm.conv_turn;
+          } else {
+            // Mid-turn calls use previous turn's staleness
+            apiCallPrevTurn[c] = prevTurn;
+          }
         }
       }
     }
 
     for (let i = 0; i < churn.length; i++) {
-      // Look up the conversation turn for this API call, then find its staleness data
-      const convTurn = apiCallToTurn[i];
+      // Use current turn's staleness only at last_call; mid-turn uses prev turn
+      let convTurn = apiCallLastTurn[i];
+      if (convTurn == null) convTurn = apiCallPrevTurn[i];
       const t = convTurn != null ? staleTurnMap[convTurn] : null;
       if (t) {
-        // Scale staleness tokens to match the actual resident tokens for this API call
         const resident = residentData[i] || 0;
         const totalEst = t.system_tokens + t.active_tokens + t.stale_tokens;
         if (totalEst > 0 && resident > 0) {
           const scale = resident / totalEst;
           systemData[i] = Math.round(t.system_tokens * scale);
           activeData[i] = Math.round(t.active_tokens * scale);
-          // Split stale into stale + dead_weight using the turn's ratio
-          const staleRaw = t.stale_tokens;  // includes dead_weight
-          staleData[i] = Math.round(staleRaw * scale);
-          deadWeightChartData[i] = 0; // dead weight is included in stale_tokens from /turns
+          staleData[i] = Math.round(t.stale_tokens * scale);
+          deadWeightChartData[i] = 0;
         } else {
           systemData[i] = systemData[i] || 0;
           activeData[i] = Math.max(0, resident - (systemData[i] || 0));
@@ -2795,6 +2806,8 @@ html, body {
     renderTokenBreakdown();
     buildGrowthChart();
     buildChurnChart();
+    // If turnsData arrived before chart was built, apply staleness now
+    if (turnsData) rebuildGrowthChartWithStaleness();
     wireControls();
 
     // Initial turn details
