@@ -93,7 +93,7 @@ html, body {
 /* ===== SCORECARDS ===== */
 .scorecards {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 14px;
   margin-bottom: 20px;
 }
@@ -513,6 +513,139 @@ html, body {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ===== HEALTH SCORECARD ===== */
+.health-bar {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #e5e7eb;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.health-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+/* ===== RECOMMENDATIONS ===== */
+.recommendations-panel {
+  margin-bottom: 20px;
+}
+.recommendations-panel.hidden { display: none; }
+.rec-panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+.rec-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+.rec-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  border-left: 4px solid #9ca3af;
+  box-shadow: var(--shadow);
+}
+.rec-card.critical { border-left-color: #f87171; }
+.rec-card.warning { border-left-color: #fbbf24; }
+.rec-card.info { border-left-color: #60a5fa; }
+.rec-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.rec-detail {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  line-height: 1.5;
+}
+.rec-action {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.rec-tokens {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent);
+  margin-top: 4px;
+}
+
+/* ===== DEAD WEIGHT TAB ===== */
+.tab-toggle {
+  display: flex;
+  gap: 0;
+  margin-bottom: 12px;
+}
+.tab-btn {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  padding: 4px 10px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.tab-btn:hover { color: var(--text-secondary); }
+.tab-btn.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.dw-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.dw-label {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.dw-resource {
+  flex: 1;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.dw-tokens {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  flex-shrink: 0;
+}
+.dw-staleness-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
 /* Responsive */
 @media (max-width: 1100px) {
   .bottom-grid { grid-template-columns: 280px 1fr; }
@@ -828,6 +961,12 @@ html, body {
         <div class="scorecard-value" id="sc-cost">--</div>
         <div class="scorecard-sub" id="sc-cost-sub">--</div>
       </div>
+      <div class="scorecard">
+        <div class="scorecard-label">Health Score</div>
+        <div class="scorecard-value" id="sc-health">--</div>
+        <div class="scorecard-sub" id="sc-health-sub">--</div>
+        <div class="health-bar"><div class="health-bar-fill" id="health-bar-fill" style="width:0%;background:#34d399"></div></div>
+      </div>
     </div>
 
     <!-- Section 2+3: Context Growth + Cache-Read Churn side by side -->
@@ -877,6 +1016,12 @@ html, body {
     </div>
     </div> <!-- /chart-row -->
 
+    <!-- Section 3.5: Recommendations -->
+    <div class="recommendations-panel hidden" id="recommendations-panel">
+      <div class="rec-panel-title">Recommendations</div>
+      <div class="rec-grid" id="rec-grid"></div>
+    </div>
+
     <!-- Section 4: Scrubber -->
     <div class="scrubber">
       <button class="scrubber-btn" id="btn-play" title="Play/Pause (Space)">
@@ -908,10 +1053,14 @@ html, body {
           </div>
         </div>
       </div>
-      <!-- Col 2: Top Growth Turns -->
+      <!-- Col 2: Top Growth Turns / Dead Weight -->
       <div class="bottom-card" id="col-growth">
-        <div class="bottom-card-title">Top Growth Turns</div>
+        <div class="tab-toggle">
+          <button class="tab-btn active" id="tab-growth" onclick="switchGrowthTab('growth')">Top Growth Turns</button>
+          <button class="tab-btn" id="tab-deadweight" onclick="switchGrowthTab('deadweight')">Dead Weight</button>
+        </div>
         <div id="growth-list"></div>
+        <div id="deadweight-list" style="display:none"></div>
       </div>
       <!-- Col 3: Messages -->
       <div class="bottom-card" id="col-messages">
@@ -955,11 +1104,17 @@ html, body {
   let churnChart = null;
   let callContentCache = {};  // cache fetched content by call index
   let convTurnContentCache = {};  // cache fetched content by conv turn
+  let healthData = null;       // from /api/session/{id}/health
+  let deadWeightData = null;   // from /api/session/{id}/dead_weight
+  let turnsData = null;        // from /api/session/{id}/turns — staleness per turn
 
   // Derived data (computed once)
   let labels = [];
   let systemData = [];
   let workingData = [];
+  let activeData = [];         // staleness: active tokens per turn
+  let staleData = [];          // staleness: stale tokens per turn
+  let deadWeightChartData = []; // staleness: dead weight tokens per turn
   let residentData = [];
   let cacheReadData = [];
   let cumulativeRead = [];
@@ -1066,6 +1221,12 @@ html, body {
       churn = data.churn || [];
       meta = data.meta || { session_id: sessionId };
       turnMap = data.turn_map || [];
+
+      // Fire non-blocking async fetches
+      fetchTurnsData(sessionId);
+      fetchHealthData(sessionId);
+      fetchDeadWeightData(sessionId);
+
       return true;
     } catch(e) {
       document.getElementById('loading').innerHTML =
@@ -1084,6 +1245,9 @@ html, body {
     // Clear caches
     callContentCache = {};
     convTurnContentCache = {};
+    healthData = null;
+    deadWeightData = null;
+    turnsData = null;
 
     // Destroy existing charts
     if (growthChart) { growthChart.destroy(); growthChart = null; }
@@ -2134,6 +2298,257 @@ html, body {
     return TYPE_COLORS[type] || '#6b7280';
   }
 
+  // Staleness label colors
+  const STALENESS_COLORS = {
+    active: '#34d399',
+    warm: '#a78bfa',
+    stale: '#fb923c',
+    dead_weight: '#f87171',
+    pinned: '#6366f1',
+  };
+
+  // ===== TURNS (STALENESS) FETCHING =====
+  async function fetchTurnsData(sessionId) {
+    try {
+      const resp = await fetch('/api/session/' + encodeURIComponent(sessionId) + '/turns');
+      if (!resp.ok) return;
+      turnsData = await resp.json();
+      rebuildGrowthChartWithStaleness();
+    } catch(e) { /* non-blocking */ }
+  }
+
+  function rebuildGrowthChartWithStaleness() {
+    if (!turnsData || !turnsData.turns || turnsData.turns.length === 0) return;
+    // Guard: need residentData and growthChart to be ready
+    if (!residentData || residentData.length === 0 || !growthChart) return;
+
+    // Build a map from turn number → staleness breakdown
+    const staleTurnMap = {};
+    for (const t of turnsData.turns) {
+      staleTurnMap[t.turn] = t;
+    }
+
+    // Reset staleness arrays
+    activeData = [];
+    staleData = [];
+    deadWeightChartData = [];
+
+    // Build API call index → conv turn mapping, but only apply staleness at
+    // the LAST API call of each turn. Earlier calls in the same turn get the
+    // previous turn's staleness (since the current turn's blocks haven't all
+    // entered yet). This fixes the P1 finding where mid-turn API calls showed
+    // end-of-turn staleness state.
+    const apiCallLastTurn = {};  // api_call_idx → conv_turn (only at last_call)
+    const apiCallPrevTurn = {};  // api_call_idx → previous conv_turn (for mid-turn calls)
+    if (turnMap && turnMap.length > 0) {
+      for (let ti = 0; ti < turnMap.length; ti++) {
+        const tm = turnMap[ti];
+        const prevTurn = ti > 0 ? turnMap[ti - 1].conv_turn : null;
+        for (let c = tm.first_call; c <= tm.last_call; c++) {
+          if (c === tm.last_call) {
+            apiCallLastTurn[c] = tm.conv_turn;
+          } else {
+            // Mid-turn calls use previous turn's staleness
+            apiCallPrevTurn[c] = prevTurn;
+          }
+        }
+      }
+    }
+
+    for (let i = 0; i < churn.length; i++) {
+      // Use current turn's staleness only at last_call; mid-turn uses prev turn
+      let convTurn = apiCallLastTurn[i];
+      if (convTurn == null) convTurn = apiCallPrevTurn[i];
+      const t = convTurn != null ? staleTurnMap[convTurn] : null;
+      if (t) {
+        const resident = residentData[i] || 0;
+        const totalEst = t.system_tokens + t.active_tokens + t.stale_tokens;
+        if (totalEst > 0 && resident > 0) {
+          const scale = resident / totalEst;
+          systemData[i] = Math.round(t.system_tokens * scale);
+          activeData[i] = Math.round(t.active_tokens * scale);
+          staleData[i] = Math.round(t.stale_tokens * scale);
+          deadWeightChartData[i] = 0;
+        } else {
+          systemData[i] = systemData[i] || 0;
+          activeData[i] = Math.max(0, resident - (systemData[i] || 0));
+          staleData[i] = 0;
+          deadWeightChartData[i] = 0;
+        }
+      } else {
+        activeData[i] = workingData[i] || 0;
+        staleData[i] = 0;
+        deadWeightChartData[i] = 0;
+      }
+    }
+
+    // Rebuild the chart with staleness layers
+    if (growthChart) {
+      growthChart.data.datasets = [
+        {
+          label: 'System (pinned)',
+          data: systemData,
+          fill: true,
+          backgroundColor: 'rgba(99, 102, 241, 0.35)',
+          borderColor: 'rgba(99, 102, 241, 0.7)',
+          borderWidth: 1,
+          pointRadius: 0,
+          pointHitRadius: 6,
+          tension: 0.1,
+          order: 3,
+        },
+        {
+          label: 'Active',
+          data: activeData,
+          fill: true,
+          backgroundColor: 'rgba(52, 211, 153, 0.35)',
+          borderColor: 'rgba(52, 211, 153, 0.7)',
+          borderWidth: 1,
+          pointRadius: 0,
+          pointHitRadius: 6,
+          tension: 0.1,
+          order: 2,
+        },
+        {
+          label: 'Stale',
+          data: staleData,
+          fill: true,
+          backgroundColor: 'rgba(251, 146, 60, 0.45)',
+          borderColor: 'rgba(251, 146, 60, 0.7)',
+          borderWidth: 1,
+          pointRadius: 0,
+          pointHitRadius: 6,
+          tension: 0.1,
+          order: 1,
+        },
+      ];
+      growthChart.update('none');
+    }
+  }
+
+  // ===== HEALTH + DEAD WEIGHT FETCHING =====
+  async function fetchHealthData(sessionId) {
+    try {
+      const resp = await fetch('/api/session/' + encodeURIComponent(sessionId) + '/health');
+      if (!resp.ok) return;
+      healthData = await resp.json();
+      renderHealthScorecard();
+      renderRecommendations();
+    } catch(e) { /* non-blocking */ }
+  }
+
+  async function fetchDeadWeightData(sessionId) {
+    try {
+      const resp = await fetch('/api/session/' + encodeURIComponent(sessionId) + '/dead_weight');
+      if (!resp.ok) return;
+      deadWeightData = await resp.json();
+      renderDeadWeightTab();
+    } catch(e) { /* non-blocking */ }
+  }
+
+  // ===== HEALTH SCORECARD =====
+  function renderHealthScorecard() {
+    if (!healthData) return;
+    const score = healthData.health_score;
+    const pct = Math.round(score * 100);
+    const classification = healthData.classification || 'unknown';
+
+    document.getElementById('sc-health').textContent = pct + '%';
+    document.getElementById('sc-health-sub').textContent = classification.replace(/_/g, ' ');
+
+    const bar = document.getElementById('health-bar-fill');
+    bar.style.width = pct + '%';
+    if (pct >= 70) {
+      bar.style.background = '#34d399';
+    } else if (pct >= 40) {
+      bar.style.background = '#fbbf24';
+    } else {
+      bar.style.background = '#f87171';
+    }
+  }
+
+  // ===== RECOMMENDATIONS =====
+  function renderRecommendations() {
+    const panel = document.getElementById('recommendations-panel');
+    const grid = document.getElementById('rec-grid');
+    if (!healthData || !healthData.recommendations || healthData.recommendations.length === 0) {
+      panel.classList.add('hidden');
+      return;
+    }
+    panel.classList.remove('hidden');
+
+    let html = '';
+    for (const rec of healthData.recommendations) {
+      const tokensLine = rec.tokens_recoverable > 0
+        ? '<div class="rec-tokens">' + fmt(rec.tokens_recoverable) + ' tokens recoverable</div>'
+        : '';
+      html += '<div class="rec-card ' + rec.priority + '">' +
+        '<div class="rec-title">' + escapeHtml(rec.title) + '</div>' +
+        '<div class="rec-detail">' + escapeHtml(rec.detail) + '</div>' +
+        '<div class="rec-action">' + escapeHtml(rec.action) + '</div>' +
+        tokensLine +
+        '</div>';
+    }
+    grid.innerHTML = html;
+  }
+
+  // ===== DEAD WEIGHT TAB =====
+  function renderDeadWeightTab() {
+    const el = document.getElementById('deadweight-list');
+    if (!deadWeightData || !deadWeightData.top_blocks || deadWeightData.top_blocks.length === 0) {
+      el.innerHTML = '<div class="empty-state">No stale blocks</div>';
+      return;
+    }
+
+    const blocks = deadWeightData.top_blocks;
+    const maxTokens = Math.max(1, ...blocks.map(b => b.size_tokens_est));
+
+    let html = '';
+    // Summary header
+    const summary = deadWeightData.summary;
+    html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;font-family:var(--mono);">' +
+      'Peak: ' + (summary.peak_dead_weight_pct * 100).toFixed(1) + '% dead weight' +
+      ' &middot; Avg: ' + (summary.avg_dead_weight_pct * 100).toFixed(1) + '%' +
+      '</div>';
+
+    for (const b of blocks) {
+      const color = STALENESS_COLORS[b.staleness_label] || '#9ca3af';
+      const resource = b.resource ? b.resource.split('/').slice(-2).join('/') : b.block_type;
+      const badgeBg = b.staleness_label === 'dead_weight'
+        ? 'rgba(248,113,113,0.15)' : 'rgba(251,146,60,0.15)';
+      const badgeColor = b.staleness_label === 'dead_weight' ? '#f87171' : '#fb923c';
+      const labelText = b.staleness_label === 'dead_weight' ? 'dead' : b.staleness_label;
+
+      html += '<div class="dw-row">' +
+        '<span class="dw-label" style="background:' + color + '"></span>' +
+        '<span class="dw-resource" title="' + escapeHtml(b.resource || b.block_type) + '">' + escapeHtml(resource) + '</span>' +
+        '<span class="dw-staleness-badge" style="background:' + badgeBg + ';color:' + badgeColor + '">' + labelText + '</span>' +
+        '<span class="dw-tokens">' + fmt(b.size_tokens_est) + '</span>' +
+        '</div>';
+    }
+    el.innerHTML = html;
+  }
+
+  function switchGrowthTab(tab) {
+    const growthEl = document.getElementById('growth-list');
+    const dwEl = document.getElementById('deadweight-list');
+    const growthBtn = document.getElementById('tab-growth');
+    const dwBtn = document.getElementById('tab-deadweight');
+
+    if (tab === 'growth') {
+      growthEl.style.display = '';
+      dwEl.style.display = 'none';
+      growthBtn.classList.add('active');
+      dwBtn.classList.remove('active');
+    } else {
+      growthEl.style.display = 'none';
+      dwEl.style.display = '';
+      growthBtn.classList.remove('active');
+      dwBtn.classList.add('active');
+    }
+  }
+  window.switchGrowthTab = switchGrowthTab;
+
   const COLLAPSE_LINES = 8;
   let _collapseId = 0;
 
@@ -2391,6 +2806,8 @@ html, body {
     renderTokenBreakdown();
     buildGrowthChart();
     buildChurnChart();
+    // If turnsData arrived before chart was built, apply staleness now
+    if (turnsData) rebuildGrowthChartWithStaleness();
     wireControls();
 
     // Initial turn details
