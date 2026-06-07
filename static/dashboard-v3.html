@@ -2503,8 +2503,9 @@ html, body {
         const toolCat = msg.tool_category;
         if (toolCat) {
           const badgeCls = 'tool-cat-badge-' + toolCat;
-          const cls = classifyTool(msg.tool_name || '');
-          catBadgeHtml = '<span class="tool-cat-badge ' + badgeCls + '">' + cls.badge + '</span> ';
+          const badgeLabels = {mcp: 'MCP', skill: 'SKILL', agent: 'AGENT', builtin: 'TOOL'};
+          const badge = badgeLabels[toolCat] || 'TOOL';
+          catBadgeHtml = '<span class="tool-cat-badge ' + badgeCls + '">' + badge + '</span> ';
         } else if (msg.tool_name) {
           const cls = classifyTool(msg.tool_name);
           const badgeCls = 'tool-cat-badge-' + cls.category;
@@ -2864,7 +2865,7 @@ html, body {
       for (const srv of toolIntelData.mcp_servers) {
         const barPct = Math.max(2, (srv.total_tokens / maxTokens) * 100);
         const srvId = 'mcp-' + srv.server.replace(/[^a-z0-9]/gi, '_');
-        html += '<div class="tool-row" style="cursor:pointer" onclick="toggleMcpFn(\'' + srvId + '\',this)">' +
+        html += '<div class="tool-row" style="cursor:pointer" onclick="toggleMcpFn(\'' + srvId + '\')">' +
           '<span class="mcp-expand-icon" id="icon-' + srvId + '">&#9654;</span>' +
           '<span class="tool-row-name" style="font-weight:500;color:var(--text)">' + escapeHtml(srv.server) + '</span>' +
           '<span class="tool-row-bar"><span class="tool-row-bar-fill" style="width:' + barPct.toFixed(0) + '%;background:#ec4899"></span></span>' +

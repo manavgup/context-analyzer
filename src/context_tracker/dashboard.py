@@ -620,13 +620,16 @@ def create_app(
             return server, func
 
         def _extract_skill_name(block_id: str) -> str:
-            raw = content_store.get_content(block_id)
+            try:
+                raw = content_store.get_content(block_id)
+            except Exception:
+                return "unknown"
             if raw:
                 try:
-                    parsed = _json.loads(raw)
+                    parsed = json.loads(raw)
                     if isinstance(parsed, dict):
                         return parsed.get("skill", "unknown")
-                except (_json.JSONDecodeError, TypeError):
+                except (json.JSONDecodeError, TypeError):
                     pass
             return "unknown"
 
@@ -718,8 +721,10 @@ def create_app(
                         agents[tn]["chars"] += block.size_chars
                     category_chars["agent"] += block.size_chars
                 else:
-                    if tn in regular_tools:
-                        regular_tools[tn]["chars"] += block.size_chars
+                    rkey = tn or "unknown"
+                    if rkey not in regular_tools:
+                        regular_tools[rkey] = {"chars": 0, "count": 0}
+                    regular_tools[rkey]["chars"] += block.size_chars
                     category_chars["regular_tool"] += block.size_chars
 
             elif block.is_pinned:
