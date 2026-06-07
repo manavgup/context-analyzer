@@ -14,6 +14,7 @@ from context_tracker.analysis.config import (
 from context_tracker.analysis.models import (
     ApiCall,
     BlockType,
+    ContentStore,
     ContextBlock,
     ConversationTurn,
     TurnSnapshot,
@@ -31,12 +32,12 @@ class HealthSignals:
     dead_weight_ratio: float
     context_utilization: float
     cache_efficiency: float
-    cache_efficiency_trend: float   # Normalized 0-1: 0=stable, 1=declining fast
+    cache_efficiency_trend: float  # Normalized 0-1: 0=stable, 1=declining fast
     repeated_reads: dict[str, int]  # resource → unchanged read count (rolling window)
     error_rate: float
-    error_rate_spike: float         # max(0, current/max(avg,0.01) - 1.0)
-    output_inflation: float         # Normalized 0-1
-    edit_churn: list[str]           # Evidence only
+    error_rate_spike: float  # max(0, current/max(avg,0.01) - 1.0)
+    output_inflation: float  # Normalized 0-1
+    edit_churn: list[str]  # Evidence only
     compaction_count: int
     cost_this_turn: float
     cost_cumulative: float
@@ -45,7 +46,7 @@ class HealthSignals:
 @dataclass
 class AttentionLossSignal:
     signal_type: str
-    severity: str       # info, warning, critical
+    severity: str  # info, warning, critical
     description: str
     turn: int
     resource: str | None = None
@@ -60,7 +61,7 @@ class SessionRecommendation:
     recoverable_tokens: int
     recoverable_blocks: int
     top_stale_block_ids: list[str]
-    confidence: str     # "high" or "low"
+    confidence: str  # "high" or "low"
 
 
 def compute_turn_cost(api_call: ApiCall, model: str) -> float:
@@ -104,7 +105,7 @@ def build_health_signals(
     turns: list[ConversationTurn],
     snapshots: list[TurnSnapshot],
     block_registry: dict[str, ContextBlock],
-    content_store: object,
+    content_store: ContentStore,
     model: str,
     config: HealthConfig | None = None,
     staleness_config: StalenessConfig | None = None,
@@ -164,11 +165,11 @@ def build_health_signals(
 
     for snap in snapshots:
         for bid in snap.blocks_entered_ids:
-            block = block_registry.get(bid)
-            if block:
-                blocks_seen.append(block)
-                if block.resource:
-                    resource_last_used[block.resource] = snap.turn_number
+            blk: ContextBlock | None = block_registry.get(bid)
+            if blk:
+                blocks_seen.append(blk)
+                if blk.resource:
+                    resource_last_used[blk.resource] = snap.turn_number
 
     superseded = detect_superseded(blocks_seen)
 
@@ -179,9 +180,10 @@ def build_health_signals(
 
     if final_snap:
         for bid in final_snap.block_ids:
-            block = block_registry.get(bid)
-            if not block:
+            block_or_none: ContextBlock | None = block_registry.get(bid)
+            if not block_or_none:
                 continue
+            block = block_or_none
             messages_since: list[str] = []
             for t in range(block.turn_entered + 1, last_turn + 1):
                 messages_since.extend(assistant_texts_by_turn.get(t, []))
@@ -200,16 +202,10 @@ def build_health_signals(
             if bid in superseded:
                 superseded_count += 1
 
-    dead_weight_ratio = (
-        dead_weight_tokens / actual_context_tokens
-        if actual_context_tokens > 0
-        else 0.0
-    )
+    dead_weight_ratio = dead_weight_tokens / actual_context_tokens if actual_context_tokens > 0 else 0.0
 
     # --- Context utilization ---
-    peak_context = max(
-        (s.actual_context_tokens for s in snapshots), default=0
-    )
+    peak_context = max((s.actual_context_tokens for s in snapshots), default=0)
     context_utilization = peak_context / model_window if model_window > 0 else 0.0
 
     # --- Cache efficiency + trend ---
@@ -244,17 +240,15 @@ def build_health_signals(
     resource_read_counts: dict[str, int] = defaultdict(int)
     for snap in recent_snaps:
         for bid in snap.blocks_entered_ids:
-            block = block_registry.get(bid)
+            read_blk: ContextBlock | None = block_registry.get(bid)
             if (
-                block
-                and block.block_type == BlockType.TOOL_RESULT
-                and block.resource
-                and block.tool_name in ("Read", "Glob", "Grep", None)
+                read_blk
+                and read_blk.block_type == BlockType.TOOL_RESULT
+                and read_blk.resource
+                and read_blk.tool_name in ("Read", "Glob", "Grep", None)
             ):
-                resource_read_counts[block.resource] += 1
-    repeated_reads = {
-        r: c for r, c in resource_read_counts.items() if c >= 2
-    }
+                resource_read_counts[read_blk.resource] += 1
+    repeated_reads = {r: c for r, c in resource_read_counts.items() if c >= 2}
 
     # --- Error rate ---
     total_tool_results = 0
@@ -271,15 +265,14 @@ def build_health_signals(
     if len(turns) > 5:
         recent_turn_nums = {t.turn_number for t in turns[-5:]}
         recent_errors = sum(
-            1 for b in block_registry.values()
-            if b.block_type == BlockType.TOOL_RESULT
-            and b.is_error
-            and b.turn_entered in recent_turn_nums
+            1
+            for b in block_registry.values()
+            if b.block_type == BlockType.TOOL_RESULT and b.is_error and b.turn_entered in recent_turn_nums
         )
         recent_total = sum(
-            1 for b in block_registry.values()
-            if b.block_type == BlockType.TOOL_RESULT
-            and b.turn_entered in recent_turn_nums
+            1
+            for b in block_registry.values()
+            if b.block_type == BlockType.TOOL_RESULT and b.turn_entered in recent_turn_nums
         )
         if recent_total > 0:
             recent_err = recent_errors / recent_total
@@ -304,9 +297,9 @@ def build_health_signals(
     edit_snap_start = max(0, len(snapshots) - edit_window)
     for snap in snapshots[edit_snap_start:]:
         for bid in snap.blocks_entered_ids:
-            block = block_registry.get(bid)
-            if block and block.tool_name in ("Edit", "Write") and block.resource:
-                recent_edits[block.resource] += 1
+            edit_blk: ContextBlock | None = block_registry.get(bid)
+            if edit_blk and edit_blk.tool_name in ("Edit", "Write") and edit_blk.resource:
+                recent_edits[edit_blk.resource] += 1
     edit_churn = [r for r, c in recent_edits.items() if c >= 3]
 
     # --- Compaction count ---
@@ -365,130 +358,107 @@ def generate_recommendations(
         recoverable = 0
         if snapshots:
             final_snap = snapshots[-1]
-            recoverable = int(
-                final_snap.actual_context_tokens * signals.dead_weight_ratio
-            )
+            recoverable = int(final_snap.actual_context_tokens * signals.dead_weight_ratio)
         priority = "critical" if signals.dead_weight_ratio > 0.50 else "warning"
-        recs.append({
-            "priority": priority,
-            "code": "HIGH_DEAD_WEIGHT",
-            "title": "High dead weight",
-            "detail": (
-                f"{signals.dead_weight_ratio:.0%} of context is dead weight "
-                f"({recoverable:,} tokens)."
-            ),
-            "action": (
-                "Start a new session or use /compact to reclaim stale context."
-            ),
-            "tokens_recoverable": recoverable,
-        })
+        recs.append(
+            {
+                "priority": priority,
+                "code": "HIGH_DEAD_WEIGHT",
+                "title": "High dead weight",
+                "detail": (f"{signals.dead_weight_ratio:.0%} of context is dead weight ({recoverable:,} tokens)."),
+                "action": ("Start a new session or use /compact to reclaim stale context."),
+                "tokens_recoverable": recoverable,
+            }
+        )
 
     # CONTEXT_NEAR_LIMIT
     if signals.context_utilization > 0.75:
         priority = "critical" if signals.context_utilization > 0.90 else "warning"
-        recs.append({
-            "priority": priority,
-            "code": "CONTEXT_NEAR_LIMIT",
-            "title": "Context near limit",
-            "detail": (
-                f"Context utilization at {signals.context_utilization:.0%} of model window."
-            ),
-            "action": (
-                "Consider starting a new session to avoid auto-compaction."
-            ),
-            "tokens_recoverable": 0,
-        })
+        recs.append(
+            {
+                "priority": priority,
+                "code": "CONTEXT_NEAR_LIMIT",
+                "title": "Context near limit",
+                "detail": (f"Context utilization at {signals.context_utilization:.0%} of model window."),
+                "action": ("Consider starting a new session to avoid auto-compaction."),
+                "tokens_recoverable": 0,
+            }
+        )
 
     # REPEATED_READS
-    heavy_reads = {
-        r: c for r, c in signals.repeated_reads.items()
-        if c >= config.repeated_read_warning
-    }
+    heavy_reads = {r: c for r, c in signals.repeated_reads.items() if c >= config.repeated_read_warning}
     if heavy_reads:
-        top_resource = max(heavy_reads, key=heavy_reads.get)
+        top_resource = max(heavy_reads, key=lambda r: heavy_reads[r])
         top_count = heavy_reads[top_resource]
-        priority = (
-            "critical" if top_count >= config.repeated_read_critical else "warning"
-        )
+        priority = "critical" if top_count >= config.repeated_read_critical else "warning"
         # Estimate recoverable: size of the superseded copies
         recoverable = 0
         for block in block_registry.values():
-            if (
-                block.block_type == BlockType.TOOL_RESULT
-                and block.resource in heavy_reads
-            ):
+            if block.block_type == BlockType.TOOL_RESULT and block.resource in heavy_reads:
                 recoverable += block.size_tokens_est
         # Subtract one copy per resource (the active one stays)
         active_copy_est = recoverable // max(1, sum(heavy_reads.values()))
         recoverable = max(0, recoverable - active_copy_est * len(heavy_reads))
 
-        recs.append({
-            "priority": priority,
-            "code": "REPEATED_READS",
-            "title": "Repeated file reads",
-            "detail": (
-                f"{len(heavy_reads)} file(s) read 3+ times. "
-                f"Top: {top_resource.split('/')[-1]} ({top_count}x)."
-            ),
-            "action": (
-                "Avoid re-reading files that haven't changed. "
-                "Use Edit instead of Read+Write."
-            ),
-            "tokens_recoverable": recoverable,
-        })
+        recs.append(
+            {
+                "priority": priority,
+                "code": "REPEATED_READS",
+                "title": "Repeated file reads",
+                "detail": (
+                    f"{len(heavy_reads)} file(s) read 3+ times. Top: {top_resource.split('/')[-1]} ({top_count}x)."
+                ),
+                "action": ("Avoid re-reading files that haven't changed. Use Edit instead of Read+Write."),
+                "tokens_recoverable": recoverable,
+            }
+        )
 
     # CACHE_CHURN
     if signals.cache_efficiency_trend > 0.3:
         priority = "warning" if signals.cache_efficiency_trend < 0.6 else "critical"
-        recs.append({
-            "priority": priority,
-            "code": "CACHE_CHURN",
-            "title": "Cache hit rate declining",
-            "detail": (
-                f"Cache efficiency dropped by {signals.cache_efficiency_trend:.0%} "
-                f"over recent turns (current: {signals.cache_efficiency:.0%})."
-            ),
-            "action": (
-                "Context is changing too fast for the cache. "
-                "Group related work together."
-            ),
-            "tokens_recoverable": 0,
-        })
+        recs.append(
+            {
+                "priority": priority,
+                "code": "CACHE_CHURN",
+                "title": "Cache hit rate declining",
+                "detail": (
+                    f"Cache efficiency dropped by {signals.cache_efficiency_trend:.0%} "
+                    f"over recent turns (current: {signals.cache_efficiency:.0%})."
+                ),
+                "action": ("Context is changing too fast for the cache. Group related work together."),
+                "tokens_recoverable": 0,
+            }
+        )
 
     # HIGH_ERROR_RATE
     if signals.error_rate > 0.15:
         priority = "warning" if signals.error_rate < 0.30 else "critical"
-        recs.append({
-            "priority": priority,
-            "code": "HIGH_ERROR_RATE",
-            "title": "High tool error rate",
-            "detail": (
-                f"{signals.error_rate:.0%} of tool results are errors."
-            ),
-            "action": (
-                "Investigate failing tool calls. Errors consume context "
-                "without contributing useful information."
-            ),
-            "tokens_recoverable": 0,
-        })
+        recs.append(
+            {
+                "priority": priority,
+                "code": "HIGH_ERROR_RATE",
+                "title": "High tool error rate",
+                "detail": (f"{signals.error_rate:.0%} of tool results are errors."),
+                "action": (
+                    "Investigate failing tool calls. Errors consume context without contributing useful information."
+                ),
+                "tokens_recoverable": 0,
+            }
+        )
 
     # OUTPUT_INFLATION
     if signals.output_inflation > 0.5:
         priority = "info" if signals.output_inflation < 0.8 else "warning"
-        recs.append({
-            "priority": priority,
-            "code": "OUTPUT_INFLATION",
-            "title": "Response inflation",
-            "detail": (
-                f"Recent outputs are {signals.output_inflation:.0%} larger "
-                f"than session average."
-            ),
-            "action": (
-                "Larger outputs fill context faster. "
-                "Consider more targeted prompts."
-            ),
-            "tokens_recoverable": 0,
-        })
+        recs.append(
+            {
+                "priority": priority,
+                "code": "OUTPUT_INFLATION",
+                "title": "Response inflation",
+                "detail": (f"Recent outputs are {signals.output_inflation:.0%} larger than session average."),
+                "action": ("Larger outputs fill context faster. Consider more targeted prompts."),
+                "tokens_recoverable": 0,
+            }
+        )
 
     # SUPERSEDED_READS
     if snapshots:
@@ -496,29 +466,23 @@ def generate_recommendations(
         superseded_map = detect_superseded(blocks_list)
         # Count superseded blocks still in the final snapshot
         final_block_ids = set(snapshots[-1].block_ids) if snapshots else set()
-        superseded_in_context = [
-            bid for bid in superseded_map if bid in final_block_ids
-        ]
+        superseded_in_context = [bid for bid in superseded_map if bid in final_block_ids]
         if len(superseded_in_context) > 3:
             recoverable = sum(
-                block_registry[bid].size_tokens_est
-                for bid in superseded_in_context
-                if bid in block_registry
+                block_registry[bid].size_tokens_est for bid in superseded_in_context if bid in block_registry
             )
-            recs.append({
-                "priority": "warning",
-                "code": "SUPERSEDED_READS",
-                "title": "Superseded file reads",
-                "detail": (
-                    f"{len(superseded_in_context)} blocks have been superseded "
-                    f"by newer reads of the same file."
-                ),
-                "action": (
-                    "These old file contents waste context. "
-                    "A compaction would remove them."
-                ),
-                "tokens_recoverable": recoverable,
-            })
+            recs.append(
+                {
+                    "priority": "warning",
+                    "code": "SUPERSEDED_READS",
+                    "title": "Superseded file reads",
+                    "detail": (
+                        f"{len(superseded_in_context)} blocks have been superseded by newer reads of the same file."
+                    ),
+                    "action": ("These old file contents waste context. A compaction would remove them."),
+                    "tokens_recoverable": recoverable,
+                }
+            )
 
     # Sort: critical first, then warning, then info
     priority_order = {"critical": 0, "warning": 1, "info": 2}

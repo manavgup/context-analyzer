@@ -46,7 +46,7 @@ def _build_turn_map(churn: list[dict], blocks: list[dict]) -> list[dict]:
     Groups API calls into conversation turns by finding user blocks
     that mark the start of each turn.
     """
-    turns = []
+    turns: list[dict] = []
     # Find user blocks and their enter turn (API call index)
     user_entries = []
     for b in blocks:
@@ -78,12 +78,14 @@ def _build_turn_map(churn: list[dict], blocks: list[dict]) -> list[dict]:
             last_call = max_call
 
         prompt_preview = ub.get("content", "")[:200] if ub.get("content") else ""
-        turns.append({
-            "turn_number": i,
-            "first_api_call": first_call,
-            "last_api_call": last_call,
-            "prompt_preview": prompt_preview,
-        })
+        turns.append(
+            {
+                "turn_number": i,
+                "first_api_call": first_call,
+                "last_api_call": last_call,
+                "prompt_preview": prompt_preview,
+            }
+        )
 
     return turns
 
@@ -115,7 +117,7 @@ def ingest_session(
 
     with session_factory() as db:
         # Check if already ingested and up-to-date
-        existing = db.get(SessionRecord, session_id)
+        existing: SessionRecord | None = db.get(SessionRecord, session_id)
         if existing and not force:
             if existing.source_mtime >= source_mtime:
                 return existing  # Already up-to-date
@@ -126,7 +128,9 @@ def ingest_session(
         # --- Parse all data sources via reconcile ---
         try:
             blocks, churn, subagent_summaries = reconcile(
-                session_id, projects_dir=projects_dir, trace_dir=trace_dir,
+                session_id,
+                projects_dir=projects_dir,
+                trace_dir=trace_dir,
             )
         except Exception:
             logger.exception("Failed to reconcile data for %s", session_id)
@@ -175,41 +179,47 @@ def ingest_session(
 
         # --- API call records ---
         for i, c in enumerate(churn):
-            db.add(ApiCallRecord(
-                session_id=session_id,
-                call_index=i,
-                input_tokens=c.get("input", 0),
-                output_tokens=c.get("output", 0),
-                cache_read=c.get("cache_read", 0),
-                cache_creation=c.get("cache_creation", 0),
-                system_tokens=c.get("system_tokens", 0),
-                working_tokens=c.get("working_tokens", 0),
-            ))
+            db.add(
+                ApiCallRecord(
+                    session_id=session_id,
+                    call_index=i,
+                    input_tokens=c.get("input", 0),
+                    output_tokens=c.get("output", 0),
+                    cache_read=c.get("cache_read", 0),
+                    cache_creation=c.get("cache_creation", 0),
+                    system_tokens=c.get("system_tokens", 0),
+                    working_tokens=c.get("working_tokens", 0),
+                )
+            )
 
         # --- Block records ---
         for b in blocks:
-            db.add(BlockRecord(
-                session_id=session_id,
-                block_id=b.get("id", ""),
-                block_type=b.get("type", ""),
-                label=b.get("label"),
-                tokens=b.get("tokens", 0),
-                enter_turn=b.get("enter"),
-                exit_turn=b.get("exit"),
-                cached=1 if b.get("cached") else 0,
-                ref=1 if b.get("ref") else 0,
-                content_preview=b.get("content", "")[:500] if b.get("content") else None,
-            ))
+            db.add(
+                BlockRecord(
+                    session_id=session_id,
+                    block_id=b.get("id", ""),
+                    block_type=b.get("type", ""),
+                    label=b.get("label"),
+                    tokens=b.get("tokens", 0),
+                    enter_turn=b.get("enter"),
+                    exit_turn=b.get("exit"),
+                    cached=1 if b.get("cached") else 0,
+                    ref=1 if b.get("ref") else 0,
+                    content_preview=b.get("content", "")[:500] if b.get("content") else None,
+                )
+            )
 
         # --- Turn records ---
         for t in turn_map:
-            db.add(TurnRecord(
-                session_id=session_id,
-                turn_number=t["turn_number"],
-                first_api_call=t["first_api_call"],
-                last_api_call=t["last_api_call"],
-                prompt_preview=t.get("prompt_preview"),
-            ))
+            db.add(
+                TurnRecord(
+                    session_id=session_id,
+                    turn_number=t["turn_number"],
+                    first_api_call=t["first_api_call"],
+                    last_api_call=t["last_api_call"],
+                    prompt_preview=t.get("prompt_preview"),
+                )
+            )
 
         # --- Hook event records ---
         hook_path = paths.get("hook_events")
@@ -223,23 +233,30 @@ def ingest_session(
 
                 # Store event-specific fields as JSON
                 skip_keys = {
-                    "event", "session_id", "timestamp", "tool_name",
-                    "tool_use_id", "input_payload_chars", "output_payload_chars",
+                    "event",
+                    "session_id",
+                    "timestamp",
+                    "tool_name",
+                    "tool_use_id",
+                    "input_payload_chars",
+                    "output_payload_chars",
                     "error_length",
                 }
                 extra = {k: v for k, v in evt.items() if k not in skip_keys}
                 metadata_json = json.dumps(extra) if extra else None
 
-                db.add(HookEventRecord(
-                    session_id=session_id,
-                    event_type=event_type,
-                    timestamp=evt.get("timestamp"),
-                    tool_name=tool_name,
-                    tool_use_id=tool_use_id,
-                    payload_chars=payload_chars,
-                    error_length=error_length,
-                    metadata_json=metadata_json,
-                ))
+                db.add(
+                    HookEventRecord(
+                        session_id=session_id,
+                        event_type=event_type,
+                        timestamp=evt.get("timestamp"),
+                        tool_name=tool_name,
+                        tool_use_id=tool_use_id,
+                        payload_chars=payload_chars,
+                        error_length=error_length,
+                        metadata_json=metadata_json,
+                    )
+                )
 
         # --- Subagent records + their per-call churn ---
         for sa in subagent_summaries:
@@ -258,15 +275,17 @@ def ingest_session(
 
             # Store each subagent's per-API-call churn
             for sc in sa.get("churn", []):
-                db.add(SubagentApiCallRecord(
-                    subagent_id=sa_rec.id,
-                    session_id=session_id,
-                    call_index=sc.get("turn", 0),
-                    input_tokens=sc.get("input", 0),
-                    output_tokens=sc.get("output", 0),
-                    cache_read=sc.get("cache_read", 0),
-                    cache_creation=sc.get("cache_creation", 0),
-                ))
+                db.add(
+                    SubagentApiCallRecord(
+                        subagent_id=sa_rec.id,
+                        session_id=session_id,
+                        call_index=sc.get("turn", 0),
+                        input_tokens=sc.get("input", 0),
+                        output_tokens=sc.get("output", 0),
+                        cache_read=sc.get("cache_read", 0),
+                        cache_creation=sc.get("cache_creation", 0),
+                    )
+                )
 
         # --- Tool result offloads ---
         tr_path = paths.get("tool_results")
@@ -280,12 +299,14 @@ def ingest_session(
                     preview = f.read_text(encoding="utf-8", errors="replace")[:500]
                 except OSError:
                     preview = None
-                db.add(ToolResultOffloadRecord(
-                    session_id=session_id,
-                    filename=f.name,
-                    size_bytes=size_bytes,
-                    content_preview=preview,
-                ))
+                db.add(
+                    ToolResultOffloadRecord(
+                        session_id=session_id,
+                        filename=f.name,
+                        size_bytes=size_bytes,
+                        content_preview=preview,
+                    )
+                )
 
         db.commit()
         db.refresh(session_rec)
@@ -303,7 +324,11 @@ def ingest_all(
     ingested = []
     for sid in sessions:
         result = ingest_session(
-            sid, trace_dir=trace_dir, db_path=db_path, force=force, projects_dir=projects_dir,
+            sid,
+            trace_dir=trace_dir,
+            db_path=db_path,
+            force=force,
+            projects_dir=projects_dir,
         )
         if result is not None:
             ingested.append(sid)
@@ -321,11 +346,14 @@ def get_or_ingest(
     session_factory = get_session_factory(engine)
 
     with session_factory() as db:
-        existing = db.get(SessionRecord, session_id)
+        existing: SessionRecord | None = db.get(SessionRecord, session_id)
         if existing:
             return existing
 
     # Not in DB -- try to ingest
     return ingest_session(
-        session_id, trace_dir=trace_dir, db_path=db_path, projects_dir=projects_dir,
+        session_id,
+        trace_dir=trace_dir,
+        db_path=db_path,
+        projects_dir=projects_dir,
     )

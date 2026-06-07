@@ -17,9 +17,10 @@ SYNTHETIC_MODEL = "synthetic"
 @dataclass(frozen=True)
 class TranscriptMessage:
     """A single parsed message from a Claude Code transcript."""
+
     message_id: str
     sequence_index: int
-    entry_type: str           # "user", "assistant", "system"
+    entry_type: str  # "user", "assistant", "system"
     timestamp: str | None
     session_id: str
     content_blocks: list[ContentBlock] = field(default_factory=list)
@@ -39,11 +40,13 @@ def _parse_content_blocks(content: str | list | None) -> list[ContentBlock]:
     if isinstance(content, str):
         if not content:
             return []
-        return [ContentBlock(
-            block_type="text",
-            content=content,
-            size_chars=len(content),
-        )]
+        return [
+            ContentBlock(
+                block_type="text",
+                content=content,
+                size_chars=len(content),
+            )
+        ]
 
     if not isinstance(content, list):
         return []
@@ -57,31 +60,37 @@ def _parse_content_blocks(content: str | list | None) -> list[ContentBlock]:
 
         if block_type == "text":
             text = item.get("text", "")
-            blocks.append(ContentBlock(
-                block_type="text",
-                content=text,
-                size_chars=len(text),
-            ))
+            blocks.append(
+                ContentBlock(
+                    block_type="text",
+                    content=text,
+                    size_chars=len(text),
+                )
+            )
 
         elif block_type == "thinking":
             text = item.get("thinking", "")
-            blocks.append(ContentBlock(
-                block_type="thinking",
-                content=text,
-                size_chars=len(text),
-            ))
+            blocks.append(
+                ContentBlock(
+                    block_type="thinking",
+                    content=text,
+                    size_chars=len(text),
+                )
+            )
 
         elif block_type == "tool_use":
             tool_input = item.get("input", {})
             input_str = json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input)
-            blocks.append(ContentBlock(
-                block_type="tool_use",
-                content=input_str,
-                size_chars=len(input_str),
-                tool_use_id=item.get("id"),
-                tool_name=item.get("name"),
-                tool_input=tool_input if isinstance(tool_input, dict) else None,
-            ))
+            blocks.append(
+                ContentBlock(
+                    block_type="tool_use",
+                    content=input_str,
+                    size_chars=len(input_str),
+                    tool_use_id=item.get("id"),
+                    tool_name=item.get("name"),
+                    tool_input=tool_input if isinstance(tool_input, dict) else None,
+                )
+            )
 
         elif block_type == "tool_result":
             result_content = item.get("content", "")
@@ -99,25 +108,29 @@ def _parse_content_blocks(content: str | list | None) -> list[ContentBlock]:
                 result_content = "\n".join(text_parts)
             elif not isinstance(result_content, str):
                 result_content = str(result_content)
-            blocks.append(ContentBlock(
-                block_type="tool_result",
-                content=result_content,
-                size_chars=len(result_content),
-                tool_use_id=item.get("tool_use_id"),
-                is_error=bool(item.get("is_error", False)),
-                image_count=image_count,
-            ))
+            blocks.append(
+                ContentBlock(
+                    block_type="tool_result",
+                    content=result_content,
+                    size_chars=len(result_content),
+                    tool_use_id=item.get("tool_use_id"),
+                    is_error=bool(item.get("is_error", False)),
+                    image_count=image_count,
+                )
+            )
 
         elif block_type == "image":
             # Top-level image block (e.g., user-pasted screenshot)
             source = item.get("source", {})
             media_type = source.get("media_type", "image/png")
-            blocks.append(ContentBlock(
-                block_type="image",
-                content=f"[image: {media_type}]",
-                size_chars=0,
-                image_count=1,
-            ))
+            blocks.append(
+                ContentBlock(
+                    block_type="image",
+                    content=f"[image: {media_type}]",
+                    size_chars=0,
+                    image_count=1,
+                )
+            )
 
     return blocks
 
@@ -146,11 +159,13 @@ def parse_raw_transcript(
             try:
                 entry = json.loads(raw_line)
             except json.JSONDecodeError:
-                warnings.append(DataQualityWarning(
-                    line_number=line_number,
-                    warning_type="malformed_json",
-                    description=f"Could not parse JSON: {raw_line[:80]}",
-                ))
+                warnings.append(
+                    DataQualityWarning(
+                        line_number=line_number,
+                        warning_type="malformed_json",
+                        description=f"Could not parse JSON: {raw_line[:80]}",
+                    )
+                )
                 continue
 
             entry_type = entry.get("type", "")
@@ -164,13 +179,15 @@ def parse_raw_transcript(
             message_id = entry.get("uuid", f"gen-{line_number}")
 
             if entry_type == "system":
-                messages.append(TranscriptMessage(
-                    message_id=message_id,
-                    sequence_index=sequence_index,
-                    entry_type="system",
-                    timestamp=timestamp,
-                    session_id=session_id,
-                ))
+                messages.append(
+                    TranscriptMessage(
+                        message_id=message_id,
+                        sequence_index=sequence_index,
+                        entry_type="system",
+                        timestamp=timestamp,
+                        session_id=session_id,
+                    )
+                )
                 sequence_index += 1
                 continue
 
@@ -194,32 +211,36 @@ def parse_raw_transcript(
                     continue
 
                 content_blocks = _parse_content_blocks(message.get("content"))
-                messages.append(TranscriptMessage(
-                    message_id=message_id,
-                    sequence_index=sequence_index,
-                    entry_type="assistant",
-                    timestamp=timestamp,
-                    session_id=session_id,
-                    content_blocks=content_blocks,
-                    input_tokens=usage.get("input_tokens", 0),
-                    output_tokens=output_tokens,
-                    cache_read_tokens=usage.get("cache_read_input_tokens", 0),
-                    cache_creation_tokens=usage.get("cache_creation_input_tokens", 0),
-                    stop_reason=stop_reason,
-                    model=model,
-                ))
+                messages.append(
+                    TranscriptMessage(
+                        message_id=message_id,
+                        sequence_index=sequence_index,
+                        entry_type="assistant",
+                        timestamp=timestamp,
+                        session_id=session_id,
+                        content_blocks=content_blocks,
+                        input_tokens=usage.get("input_tokens", 0),
+                        output_tokens=output_tokens,
+                        cache_read_tokens=usage.get("cache_read_input_tokens", 0),
+                        cache_creation_tokens=usage.get("cache_creation_input_tokens", 0),
+                        stop_reason=stop_reason,
+                        model=model,
+                    )
+                )
                 sequence_index += 1
 
             elif entry_type == "user":
                 content_blocks = _parse_content_blocks(message.get("content"))
-                messages.append(TranscriptMessage(
-                    message_id=message_id,
-                    sequence_index=sequence_index,
-                    entry_type="user",
-                    timestamp=timestamp,
-                    session_id=session_id,
-                    content_blocks=content_blocks,
-                ))
+                messages.append(
+                    TranscriptMessage(
+                        message_id=message_id,
+                        sequence_index=sequence_index,
+                        entry_type="user",
+                        timestamp=timestamp,
+                        session_id=session_id,
+                        content_blocks=content_blocks,
+                    )
+                )
                 sequence_index += 1
 
     return messages, warnings

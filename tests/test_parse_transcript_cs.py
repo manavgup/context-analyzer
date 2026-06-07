@@ -9,6 +9,7 @@ from context_tracker.ccscope.tokens import char_count_of_block, estimate_tokens
 # Helpers to build synthetic transcript JSONL
 # ---------------------------------------------------------------------------
 
+
 def _user_entry(content, uuid="u1", parent=None, is_meta=False):
     """Build a user entry dict."""
     entry = {

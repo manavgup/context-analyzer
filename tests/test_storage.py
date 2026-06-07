@@ -47,7 +47,7 @@ def test_malformed_lines_skipped(tmp_path):
     filepath = trace_dir / "sess-bad.jsonl"
     filepath.write_text(
         '{"event":"post_tool_use","session_id":"sess-bad","tool_name":"X","input_payload_chars":1,"output_payload_chars":2,"tool_use_id":"t"}\n'
-        'not json\n'
+        "not json\n"
         '{"event":"post_tool_use","session_id":"sess-bad","tool_name":"Y","input_payload_chars":3,"output_payload_chars":4,"tool_use_id":"u"}\n'
     )
     events = read_events("sess-bad", trace_dir=trace_dir)

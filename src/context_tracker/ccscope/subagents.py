@@ -59,7 +59,7 @@ def _discover_agent_ids(subagents_dir: Path) -> list[str]:
     for path in subagents_dir.glob("agent-*.jsonl"):
         # Extract ID from "agent-{id}.jsonl"
         name = path.stem  # "agent-{id}"
-        agent_id = name[len("agent-"):]
+        agent_id = name[len("agent-") :]
         if agent_id:
             ids.append(agent_id)
     return ids
@@ -99,20 +99,26 @@ def _parse_single_subagent(subagents_dir: Path, agent_id: str) -> dict:
 
         total_cache_read += cache_read
 
-        churn.append({
-            "turn": api_calls,
-            "cache_read": cache_read,
-            "cache_creation": cache_creation,
-            "input": input_tokens,
-            "output": output_tokens,
-        })
+        churn.append(
+            {
+                "turn": api_calls,
+                "cache_read": cache_read,
+                "cache_creation": cache_creation,
+                "input": input_tokens,
+                "output": output_tokens,
+            }
+        )
 
         api_calls += 1
 
     # Build parent block
     parent_block = _build_parent_block(
-        agent_id, agent_type, description,
-        peak_resident, total_cache_read, api_calls,
+        agent_id,
+        agent_type,
+        description,
+        peak_resident,
+        total_cache_read,
+        api_calls,
     )
 
     return {
@@ -147,7 +153,7 @@ def _read_meta(subagents_dir: Path, agent_id: str) -> tuple[str, str]:
 
 def _load_entries(path: Path) -> list[dict]:
     """Load all JSONL entries from a transcript file."""
-    entries = []
+    entries: list[dict] = []
     if not path.exists():
         return entries
     with open(path) as f:
@@ -192,9 +198,7 @@ def _build_parent_block(
     """
     label = f"{agent_type}: {description[:60]}"
     content = (
-        f"Subagent {agent_type} "
-        f"({api_calls} calls, peak {peak_resident:,} tok, "
-        f"churn {total_cache_read:,} cache_read)"
+        f"Subagent {agent_type} ({api_calls} calls, peak {peak_resident:,} tok, churn {total_cache_read:,} cache_read)"
     )
 
     return {

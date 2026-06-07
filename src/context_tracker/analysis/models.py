@@ -18,7 +18,8 @@ class BlockType(StrEnum):
 @dataclass(frozen=True)
 class ContentBlock:
     """A single content block within a transcript message."""
-    block_type: str              # "text", "tool_use", "tool_result", "thinking"
+
+    block_type: str  # "text", "tool_use", "tool_result", "thinking"
     content: str
     size_chars: int
     tool_use_id: str | None = None
@@ -31,6 +32,7 @@ class ContentBlock:
 @dataclass(frozen=True)
 class ContextBlock:
     """An immutable block in the context window. Content stored separately."""
+
     block_id: str
     turn_entered: int
     api_call_entered: int
@@ -52,9 +54,10 @@ class ContextBlock:
 @dataclass(frozen=True)
 class BlockStateAtTurn:
     """Per-block staleness state at a specific turn. Immutable overlay."""
+
     block_id: str
     staleness_score: float
-    staleness_label: str       # active, warm, stale, dead_weight, pinned
+    staleness_label: str  # active, warm, stale, dead_weight, pinned
     is_superseded: bool = False
     superseded_by: str | None = None
 
@@ -62,6 +65,7 @@ class BlockStateAtTurn:
 @dataclass
 class ContextEpoch:
     """A context epoch — compaction creates a new one."""
+
     epoch_number: int
     started_at_turn: int
     compaction_summary_size: int | None = None
@@ -71,6 +75,7 @@ class ContextEpoch:
 @dataclass(frozen=True)
 class ApiCall:
     """A single API round-trip within a conversation turn."""
+
     api_call_index: int
     conversation_turn: int
     input_tokens: int = 0
@@ -85,6 +90,7 @@ class ApiCall:
 @dataclass
 class ConversationTurn:
     """One user prompt + all API calls until next user prompt."""
+
     turn_number: int
     timestamp: str | None
     user_prompt_text: str
@@ -95,6 +101,7 @@ class ConversationTurn:
 @dataclass
 class TurnSnapshot:
     """State of the context window at a specific turn."""
+
     turn_number: int
     timestamp: str | None
     epoch: int
@@ -137,6 +144,7 @@ class ContentStore:
 @dataclass
 class DataQualityWarning:
     """Warning for data quality issues during parsing."""
+
     line_number: int
-    warning_type: str       # malformed_json, missing_field, unexpected_type
+    warning_type: str  # malformed_json, missing_field, unexpected_type
     description: str

@@ -11,6 +11,7 @@ from context_tracker.ccscope.subagents import parse_subagents
 # Helpers to build synthetic subagent data
 # ---------------------------------------------------------------------------
 
+
 def _meta_json(agent_type: str = "general-purpose", description: str = "Test agent") -> str:
     return json.dumps({"agentType": agent_type, "description": description})
 
@@ -80,6 +81,7 @@ def _write_subagent(tmp_dir: Path, agent_id: str, meta: str, entries: list[dict]
 # Test: empty / nonexistent directory
 # ---------------------------------------------------------------------------
 
+
 class TestEmptyDirectory:
     def test_nonexistent_dir(self, tmp_path):
         result = parse_subagents(tmp_path / "nonexistent")
@@ -102,16 +104,19 @@ class TestEmptyDirectory:
 # Test: single subagent parsing
 # ---------------------------------------------------------------------------
 
+
 class TestSingleSubagent:
     def test_basic_parse(self, tmp_path):
         entries = [
             _user_entry("hello"),
-            _assistant_entry({
-                "input_tokens": 100,
-                "cache_creation_input_tokens": 5000,
-                "cache_read_input_tokens": 0,
-                "output_tokens": 50,
-            }),
+            _assistant_entry(
+                {
+                    "input_tokens": 100,
+                    "cache_creation_input_tokens": 5000,
+                    "cache_read_input_tokens": 0,
+                    "output_tokens": 50,
+                }
+            ),
         ]
         _write_subagent(tmp_path, "test1", _meta_json(), entries)
         results = parse_subagents(tmp_path)
@@ -126,12 +131,14 @@ class TestSingleSubagent:
         meta = _meta_json("code-review", "Review PR #42")
         entries = [
             _user_entry("review this"),
-            _assistant_entry({
-                "input_tokens": 50,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "output_tokens": 20,
-            }),
+            _assistant_entry(
+                {
+                    "input_tokens": 50,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                    "output_tokens": 20,
+                }
+            ),
         ]
         _write_subagent(tmp_path, "rev1", meta, entries)
         r = parse_subagents(tmp_path)[0]
@@ -143,12 +150,14 @@ class TestSingleSubagent:
         entries = [
             _user_entry("hello"),
             _streaming_assistant(),
-            _assistant_entry({
-                "input_tokens": 100,
-                "cache_creation_input_tokens": 5000,
-                "cache_read_input_tokens": 0,
-                "output_tokens": 50,
-            }),
+            _assistant_entry(
+                {
+                    "input_tokens": 100,
+                    "cache_creation_input_tokens": 5000,
+                    "cache_read_input_tokens": 0,
+                    "output_tokens": 50,
+                }
+            ),
         ]
         _write_subagent(tmp_path, "s1", _meta_json(), entries)
         r = parse_subagents(tmp_path)[0]
@@ -158,16 +167,22 @@ class TestSingleSubagent:
         entries = [
             _user_entry("hello"),
             _assistant_entry(
-                {"input_tokens": 100, "cache_creation_input_tokens": 0,
-                 "cache_read_input_tokens": 0, "output_tokens": 50},
+                {
+                    "input_tokens": 100,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                    "output_tokens": 50,
+                },
                 model="synthetic",
             ),
-            _assistant_entry({
-                "input_tokens": 200,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "output_tokens": 30,
-            }),
+            _assistant_entry(
+                {
+                    "input_tokens": 200,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                    "output_tokens": 30,
+                }
+            ),
         ]
         _write_subagent(tmp_path, "syn1", _meta_json(), entries)
         r = parse_subagents(tmp_path)[0]
@@ -178,23 +193,29 @@ class TestSingleSubagent:
 # Test: peak_resident computation
 # ---------------------------------------------------------------------------
 
+
 class TestPeakResident:
     def test_peak_is_max_across_calls(self, tmp_path):
         entries = [
             _user_entry("1"),
-            _assistant_entry({
-                "input_tokens": 100,
-                "cache_creation_input_tokens": 5000,
-                "cache_read_input_tokens": 200,
-                "output_tokens": 50,
-            }, stop_reason="tool_use"),
+            _assistant_entry(
+                {
+                    "input_tokens": 100,
+                    "cache_creation_input_tokens": 5000,
+                    "cache_read_input_tokens": 200,
+                    "output_tokens": 50,
+                },
+                stop_reason="tool_use",
+            ),
             _user_entry("2"),
-            _assistant_entry({
-                "input_tokens": 300,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 8000,
-                "output_tokens": 100,
-            }),
+            _assistant_entry(
+                {
+                    "input_tokens": 300,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 8000,
+                    "output_tokens": 100,
+                }
+            ),
         ]
         _write_subagent(tmp_path, "pk1", _meta_json(), entries)
         r = parse_subagents(tmp_path)[0]
@@ -205,12 +226,14 @@ class TestPeakResident:
     def test_peak_with_single_call(self, tmp_path):
         entries = [
             _user_entry("x"),
-            _assistant_entry({
-                "input_tokens": 500,
-                "cache_creation_input_tokens": 10000,
-                "cache_read_input_tokens": 3000,
-                "output_tokens": 200,
-            }),
+            _assistant_entry(
+                {
+                    "input_tokens": 500,
+                    "cache_creation_input_tokens": 10000,
+                    "cache_read_input_tokens": 3000,
+                    "output_tokens": 200,
+                }
+            ),
         ]
         _write_subagent(tmp_path, "pk2", _meta_json(), entries)
         r = parse_subagents(tmp_path)[0]
@@ -221,23 +244,29 @@ class TestPeakResident:
 # Test: total_cache_read computation
 # ---------------------------------------------------------------------------
 
+
 class TestTotalCacheRead:
     def test_sums_cache_read(self, tmp_path):
         entries = [
             _user_entry("1"),
-            _assistant_entry({
-                "input_tokens": 100,
-                "cache_creation_input_tokens": 5000,
-                "cache_read_input_tokens": 1000,
-                "output_tokens": 50,
-            }, stop_reason="tool_use"),
+            _assistant_entry(
+                {
+                    "input_tokens": 100,
+                    "cache_creation_input_tokens": 5000,
+                    "cache_read_input_tokens": 1000,
+                    "output_tokens": 50,
+                },
+                stop_reason="tool_use",
+            ),
             _user_entry("2"),
-            _assistant_entry({
-                "input_tokens": 100,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 6000,
-                "output_tokens": 50,
-            }),
+            _assistant_entry(
+                {
+                    "input_tokens": 100,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 6000,
+                    "output_tokens": 50,
+                }
+            ),
         ]
         _write_subagent(tmp_path, "cr1", _meta_json(), entries)
         r = parse_subagents(tmp_path)[0]
@@ -246,12 +275,14 @@ class TestTotalCacheRead:
     def test_zero_cache_read(self, tmp_path):
         entries = [
             _user_entry("x"),
-            _assistant_entry({
-                "input_tokens": 100,
-                "cache_creation_input_tokens": 5000,
-                "cache_read_input_tokens": 0,
-                "output_tokens": 50,
-            }),
+            _assistant_entry(
+                {
+                    "input_tokens": 100,
+                    "cache_creation_input_tokens": 5000,
+                    "cache_read_input_tokens": 0,
+                    "output_tokens": 50,
+                }
+            ),
         ]
         _write_subagent(tmp_path, "cr2", _meta_json(), entries)
         r = parse_subagents(tmp_path)[0]
@@ -262,23 +293,29 @@ class TestTotalCacheRead:
 # Test: parent_block format (Context Scope contract)
 # ---------------------------------------------------------------------------
 
+
 class TestParentBlock:
     def test_parent_block_shape(self, tmp_path):
         entries = [
             _user_entry("x"),
-            _assistant_entry({
-                "input_tokens": 100,
-                "cache_creation_input_tokens": 5000,
-                "cache_read_input_tokens": 2000,
-                "output_tokens": 50,
-            }, stop_reason="tool_use"),
+            _assistant_entry(
+                {
+                    "input_tokens": 100,
+                    "cache_creation_input_tokens": 5000,
+                    "cache_read_input_tokens": 2000,
+                    "output_tokens": 50,
+                },
+                stop_reason="tool_use",
+            ),
             _user_entry("y"),
-            _assistant_entry({
-                "input_tokens": 200,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 6000,
-                "output_tokens": 100,
-            }),
+            _assistant_entry(
+                {
+                    "input_tokens": 200,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 6000,
+                    "output_tokens": 100,
+                }
+            ),
         ]
         meta = _meta_json("general-purpose", "Build the feature")
         _write_subagent(tmp_path, "blk1", meta, entries)
@@ -302,12 +339,14 @@ class TestParentBlock:
         long_desc = "A" * 100
         entries = [
             _user_entry("x"),
-            _assistant_entry({
-                "input_tokens": 100,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "output_tokens": 50,
-            }),
+            _assistant_entry(
+                {
+                    "input_tokens": 100,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                    "output_tokens": 50,
+                }
+            ),
         ]
         _write_subagent(tmp_path, "trunc", _meta_json("general-purpose", long_desc), entries)
         r = parse_subagents(tmp_path)[0]
@@ -320,23 +359,29 @@ class TestParentBlock:
 # Test: churn entries
 # ---------------------------------------------------------------------------
 
+
 class TestChurn:
     def test_churn_entries(self, tmp_path):
         entries = [
             _user_entry("1"),
-            _assistant_entry({
-                "input_tokens": 100,
-                "cache_creation_input_tokens": 5000,
-                "cache_read_input_tokens": 1000,
-                "output_tokens": 50,
-            }, stop_reason="tool_use"),
+            _assistant_entry(
+                {
+                    "input_tokens": 100,
+                    "cache_creation_input_tokens": 5000,
+                    "cache_read_input_tokens": 1000,
+                    "output_tokens": 50,
+                },
+                stop_reason="tool_use",
+            ),
             _user_entry("2"),
-            _assistant_entry({
-                "input_tokens": 200,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 6000,
-                "output_tokens": 100,
-            }),
+            _assistant_entry(
+                {
+                    "input_tokens": 200,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 6000,
+                    "output_tokens": 100,
+                }
+            ),
         ]
         _write_subagent(tmp_path, "ch1", _meta_json(), entries)
         r = parse_subagents(tmp_path)[0]
@@ -361,17 +406,20 @@ class TestChurn:
 # Test: multiple subagents
 # ---------------------------------------------------------------------------
 
+
 class TestMultipleSubagents:
     def test_parses_all_subagents(self, tmp_path):
         for i in range(3):
             entries = [
                 _user_entry(f"hello {i}"),
-                _assistant_entry({
-                    "input_tokens": 100 * (i + 1),
-                    "cache_creation_input_tokens": 0,
-                    "cache_read_input_tokens": 1000 * (i + 1),
-                    "output_tokens": 50,
-                }),
+                _assistant_entry(
+                    {
+                        "input_tokens": 100 * (i + 1),
+                        "cache_creation_input_tokens": 0,
+                        "cache_read_input_tokens": 1000 * (i + 1),
+                        "output_tokens": 50,
+                    }
+                ),
             ]
             _write_subagent(tmp_path, f"multi{i}", _meta_json(), entries)
         results = parse_subagents(tmp_path)
@@ -394,9 +442,7 @@ class TestMultipleSubagents:
 # ---------------------------------------------------------------------------
 
 REAL_SUBAGENTS_DIR = (
-    Path.home()
-    / ".claude/projects/-Users-mg-Downloads-claude-src"
-    / "81dc8a2f-2bc6-4241-81bb-9dea09f45a68/subagents"
+    Path.home() / ".claude/projects/-Users-mg-Downloads-claude-src" / "81dc8a2f-2bc6-4241-81bb-9dea09f45a68/subagents"
 )
 
 

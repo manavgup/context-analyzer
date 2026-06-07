@@ -85,14 +85,13 @@ def char_count_of_block(block: dict) -> int:
         return len(block.get("thinking", ""))
     if btype == "tool_use":
         import json
+
         inp = block.get("input", {})
         return len(json.dumps(inp, default=str))
     if btype == "image":
         # Top-level image block
         source = block.get("source", {})
-        w, h = image_dimensions(
-            source.get("data", ""), source.get("media_type", "image/png")
-        )
+        w, h = image_dimensions(source.get("data", ""), source.get("media_type", "image/png"))
         return image_tokens(w, h) * CHARS_PER_TOKEN
     if btype == "tool_result":
         content = block.get("content", "")

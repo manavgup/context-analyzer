@@ -18,17 +18,8 @@ from context_tracker.ccscope.reconcile import (
 
 REAL_SESSION_ID = "81dc8a2f-2bc6-4241-81bb-9dea09f45a68"
 REAL_PROJECTS_DIR = Path.home() / ".claude" / "projects"
-REAL_TRANSCRIPT = (
-    REAL_PROJECTS_DIR
-    / "-Users-mg-Downloads-claude-src"
-    / f"{REAL_SESSION_ID}.jsonl"
-)
-REAL_SUBAGENTS_DIR = (
-    REAL_PROJECTS_DIR
-    / "-Users-mg-Downloads-claude-src"
-    / REAL_SESSION_ID
-    / "subagents"
-)
+REAL_TRANSCRIPT = REAL_PROJECTS_DIR / "-Users-mg-Downloads-claude-src" / f"{REAL_SESSION_ID}.jsonl"
+REAL_SUBAGENTS_DIR = REAL_PROJECTS_DIR / "-Users-mg-Downloads-claude-src" / REAL_SESSION_ID / "subagents"
 
 
 # ---------------------------------------------------------------------------
@@ -466,9 +457,7 @@ class TestWriteOutput:
             {"id": "sys", "type": "system", "tokens": 1000},
             {"id": "t0-user-0", "type": "user", "tokens": 50},
         ]
-        churn = [
-            {"turn": 0, "cache_read": 0, "cache_creation": 5000, "input": 100, "output": 50}
-        ]
+        churn = [{"turn": 0, "cache_read": 0, "cache_creation": 5000, "input": 100, "output": 50}]
 
         blocks_path, churn_path = write_output(blocks, churn, tmp_path / "output")
 
@@ -505,76 +494,48 @@ class TestRealSession:
     """
 
     def test_block_count(self):
-        blocks, churn, subagents = reconcile(
-            REAL_SESSION_ID, REAL_PROJECTS_DIR
-        )
+        blocks, churn, subagents = reconcile(REAL_SESSION_ID, REAL_PROJECTS_DIR)
         # Individual blocks from transcript should be > 700
         parent_block_count = len(blocks) - len(subagents)
-        assert parent_block_count > 700, (
-            f"Expected >700 parent blocks, got {parent_block_count}"
-        )
+        assert parent_block_count > 700, f"Expected >700 parent blocks, got {parent_block_count}"
 
     def test_churn_entries(self):
-        blocks, churn, subagents = reconcile(
-            REAL_SESSION_ID, REAL_PROJECTS_DIR
-        )
+        blocks, churn, subagents = reconcile(REAL_SESSION_ID, REAL_PROJECTS_DIR)
         assert len(churn) == 314, f"Expected 314 churn entries, got {len(churn)}"
 
     def test_subagent_count(self):
-        blocks, churn, subagents = reconcile(
-            REAL_SESSION_ID, REAL_PROJECTS_DIR
-        )
+        blocks, churn, subagents = reconcile(REAL_SESSION_ID, REAL_PROJECTS_DIR)
         assert len(subagents) == 17, f"Expected 17 subagents, got {len(subagents)}"
 
     def test_subagent_blocks_appended(self):
-        blocks, churn, subagents = reconcile(
-            REAL_SESSION_ID, REAL_PROJECTS_DIR
-        )
+        blocks, churn, subagents = reconcile(REAL_SESSION_ID, REAL_PROJECTS_DIR)
         sa_blocks = [b for b in blocks if "subagent" in b.get("id", "")]
-        assert len(sa_blocks) == 17, (
-            f"Expected 17 subagent blocks in timeline, got {len(sa_blocks)}"
-        )
+        assert len(sa_blocks) == 17, f"Expected 17 subagent blocks in timeline, got {len(sa_blocks)}"
 
     def test_churn_totals(self):
-        blocks, churn, subagents = reconcile(
-            REAL_SESSION_ID, REAL_PROJECTS_DIR
-        )
+        blocks, churn, subagents = reconcile(REAL_SESSION_ID, REAL_PROJECTS_DIR)
         # Parent churn
         total_cr = sum(c["cache_read"] for c in churn)
-        assert total_cr >= 80_000_000, (
-            f"Expected parent cache_read >= 80M, got {total_cr:,}"
-        )
+        assert total_cr >= 80_000_000, f"Expected parent cache_read >= 80M, got {total_cr:,}"
         # Subagent churn
         sub_churn = sum(s["total_cache_read"] for s in subagents)
-        assert sub_churn >= 8_000_000, (
-            f"Expected subagent cache_read >= 8M, got {sub_churn:,}"
-        )
+        assert sub_churn >= 8_000_000, f"Expected subagent cache_read >= 8M, got {sub_churn:,}"
         # Combined
         combined = total_cr + sub_churn
-        assert combined >= 90_000_000, (
-            f"Expected combined >= 90M, got {combined:,}"
-        )
+        assert combined >= 90_000_000, f"Expected combined >= 90M, got {combined:,}"
 
     def test_spilled_tokens(self):
-        blocks, churn, subagents = reconcile(
-            REAL_SESSION_ID, REAL_PROJECTS_DIR
-        )
+        blocks, churn, subagents = reconcile(REAL_SESSION_ID, REAL_PROJECTS_DIR)
         spilled = [b for b in blocks if b.get("spilled_tokens")]
         assert len(spilled) > 0, "Expected some blocks with spilled_tokens"
 
     def test_total_block_count(self):
-        blocks, churn, subagents = reconcile(
-            REAL_SESSION_ID, REAL_PROJECTS_DIR
-        )
+        blocks, churn, subagents = reconcile(REAL_SESSION_ID, REAL_PROJECTS_DIR)
         # Total should be parent blocks + subagent blocks
-        assert len(blocks) > 750, (
-            f"Expected >750 total blocks, got {len(blocks)}"
-        )
+        assert len(blocks) > 750, f"Expected >750 total blocks, got {len(blocks)}"
 
     def test_write_output_roundtrip(self, tmp_path):
-        blocks, churn, subagents = reconcile(
-            REAL_SESSION_ID, REAL_PROJECTS_DIR
-        )
+        blocks, churn, subagents = reconcile(REAL_SESSION_ID, REAL_PROJECTS_DIR)
         blocks_path, churn_path = write_output(blocks, churn, tmp_path)
 
         loaded_blocks = json.loads(blocks_path.read_text())

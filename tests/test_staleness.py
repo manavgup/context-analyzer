@@ -13,14 +13,26 @@ from context_tracker.analysis.staleness import (
 )
 
 
-def _block(block_id: str, turn: int, resource: str | None = None,
-           resource_type: str | None = None, block_type: BlockType = BlockType.TOOL_RESULT,
-           is_pinned: bool = False) -> ContextBlock:
+def _block(
+    block_id: str,
+    turn: int,
+    resource: str | None = None,
+    resource_type: str | None = None,
+    block_type: BlockType = BlockType.TOOL_RESULT,
+    is_pinned: bool = False,
+) -> ContextBlock:
     return ContextBlock(
-        block_id=block_id, turn_entered=turn, api_call_entered=0,
-        epoch_entered=0, block_type=block_type, resource=resource,
-        resource_type=resource_type, size_chars=1000, size_tokens_est=250,
-        content_hash=f"hash-{block_id}", is_pinned=is_pinned,
+        block_id=block_id,
+        turn_entered=turn,
+        api_call_entered=0,
+        epoch_entered=0,
+        block_type=block_type,
+        resource=resource,
+        resource_type=resource_type,
+        size_chars=1000,
+        size_tokens_est=250,
+        content_hash=f"hash-{block_id}",
+        is_pinned=is_pinned,
     )
 
 
@@ -56,9 +68,13 @@ def test_pinned_block_always_fresh():
     block = _block("sys", turn=1, is_pinned=True, block_type=BlockType.SYSTEM)
     config = StalenessConfig()
     score, label = compute_staleness(
-        block=block, current_turn=300, config=config,
-        resource_last_used={}, messages_since_block=[],
-        active_resources=set(), task_boundaries=[],
+        block=block,
+        current_turn=300,
+        config=config,
+        resource_last_used={},
+        messages_since_block=[],
+        active_resources=set(),
+        task_boundaries=[],
         superseded_map={},
     )
     assert score == 0.0
@@ -69,9 +85,13 @@ def test_fresh_block_is_active():
     block = _block("b1", turn=10, resource="/a.py", resource_type="file")
     config = StalenessConfig()
     score, label = compute_staleness(
-        block=block, current_turn=11, config=config,
-        resource_last_used={"/a.py": 10}, messages_since_block=[],
-        active_resources={"/a.py"}, task_boundaries=[],
+        block=block,
+        current_turn=11,
+        config=config,
+        resource_last_used={"/a.py": 10},
+        messages_since_block=[],
+        active_resources={"/a.py"},
+        task_boundaries=[],
         superseded_map={},
     )
     assert score < 0.3
@@ -82,7 +102,9 @@ def test_old_unreferenced_block_is_stale():
     block = _block("b1", turn=5, resource="/old.py", resource_type="file")
     config = StalenessConfig(decay_window=10)
     score, label = compute_staleness(
-        block=block, current_turn=50, config=config,
+        block=block,
+        current_turn=50,
+        config=config,
         resource_last_used={},  # Never used again
         messages_since_block=[],  # Never referenced
         active_resources=set(),

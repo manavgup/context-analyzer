@@ -10,7 +10,7 @@ from context_tracker.models import BaseEvent, TrackerEvent, parse_event
 
 DEFAULT_TRACE_DIR = Path.home() / ".claude" / "context-trace"
 
-_SESSION_ID_RE = re.compile(r'^[a-zA-Z0-9_-]+$')
+_SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
 def _validate_session_id(session_id: str) -> None:
@@ -35,9 +35,7 @@ def append_event(event: BaseEvent, trace_dir: Path = DEFAULT_TRACE_DIR) -> None:
         os.close(fd)
 
 
-def read_events(
-    session_id: str, trace_dir: Path = DEFAULT_TRACE_DIR
-) -> list[TrackerEvent]:
+def read_events(session_id: str, trace_dir: Path = DEFAULT_TRACE_DIR) -> list[TrackerEvent]:
     """Read all events for a session. Skips malformed lines."""
     _validate_session_id(session_id)
     filepath = _session_path(session_id, trace_dir)
