@@ -2948,12 +2948,41 @@ html, body {
       return;
     }
 
+    // Filter to agents launched at the current conv_turn
+    const ct = getConvTurnForCall(currentTurn);
+    const currentConvTurn = ct ? ct.conv_turn : null;
+    const filtered = currentConvTurn !== null
+      ? subagentData.subagents.filter(sa => sa.launch_turn === currentConvTurn)
+      : [];
+
+    if (filtered.length === 0) {
+      // Show all agents with launch turn info when none match current turn
+      const allAgents = subagentData.subagents;
+      let html = '<div class="empty-state">No subagents launched in Turn ' + currentConvTurn + '</div>';
+      if (allAgents.length > 0) {
+        html += '<div style="font-size:10px;color:var(--text-muted);margin-top:8px;padding:0 4px;">';
+        html += allAgents.length + ' subagent' + (allAgents.length !== 1 ? 's' : '') + ' in session:';
+        html += '<ul style="margin-top:4px;padding-left:16px;list-style:none;">';
+        for (const sa of allAgents) {
+          const turnLabel = sa.launch_turn ? 'Turn ' + sa.launch_turn : 'unknown turn';
+          html += '<li style="margin:2px 0;"><span style="color:var(--active);font-weight:600;">' +
+            escapeHtml(sa.agent_type) + '</span> <span style="color:var(--text-muted);">&middot; ' +
+            turnLabel + ' &middot; ' + escapeHtml((sa.description || '').substring(0, 40)) + '</span></li>';
+        }
+        html += '</ul></div>';
+      }
+      el.innerHTML = html;
+      return;
+    }
+
+    const totalPeak = filtered.reduce((s, sa) => s + sa.peak_resident, 0);
     let html = '<div class="agents-summary">' +
-      subagentData.count + ' subagent' + (subagentData.count !== 1 ? 's' : '') +
-      ' &mdash; Total: ' + fmt(subagentData.total_peak_tokens) + ' tok peak' +
+      filtered.length + ' subagent' + (filtered.length !== 1 ? 's' : '') +
+      ' in Turn ' + currentConvTurn +
+      ' &mdash; ' + fmt(totalPeak) + ' tok peak' +
       '</div>';
 
-    for (const sa of subagentData.subagents) {
+    for (const sa of filtered) {
       const desc = sa.description ? escapeHtml(sa.description.substring(0, 60)) + (sa.description.length > 60 ? '...' : '') : '';
 
       // Build mini SVG growth chart from churn data
@@ -3662,6 +3691,7 @@ html, body {
     renderTokenBreakdown();
     renderTopGrowth();
     renderMessages();
+    renderAgentsTab();
   }
 
   // ===== SCRUBBER =====
