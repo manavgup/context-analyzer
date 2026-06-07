@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections import Counter, defaultdict
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -43,13 +44,52 @@ from context_tracker.transcript_parser import parse_raw_transcript
 logger = logging.getLogger(__name__)
 
 # Reuse the same session ID pattern as storage.py
-_SESSION_ID_RE = re.compile(r'^[a-zA-Z0-9_-]+$')
+_SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+# L3: Self-correction regex patterns
+SELF_CORRECTION_HIGH = [
+    re.compile(r"I (?:made|introduced) (?:an?|the) error", re.IGNORECASE),
+    re.compile(r"(?:that|this) (?:was|is) (?:wrong|incorrect|a bug)", re.IGNORECASE),
+    re.compile(r"I (?:accidentally|mistakenly)", re.IGNORECASE),
+    re.compile(
+        r"(?:let me|I(?:'ll| will)) (?:fix|correct|revert) (?:that|this)",
+        re.IGNORECASE,
+    ),
+]
+SELF_CORRECTION_MEDIUM = [
+    re.compile(r"I apologize", re.IGNORECASE),
+    re.compile(r"(?:actually|wait),? I (?:need|should) to", re.IGNORECASE),
+    re.compile(r"I (?:forgot|missed|overlooked)", re.IGNORECASE),
+    re.compile(
+        r"(?:that|the previous) (?:approach|change) (?:didn't|won't) work",
+        re.IGNORECASE,
+    ),
+]
+
+
+def _detect_self_corrections(
+    text: str,
+) -> tuple[bool, str, str]:
+    """Test text against self-correction patterns.
+
+    Returns (matched, confidence, pattern_str).
+    """
+    for pat in SELF_CORRECTION_HIGH:
+        m = pat.search(text)
+        if m:
+            return True, "high", m.group(0)
+    for pat in SELF_CORRECTION_MEDIUM:
+        m = pat.search(text)
+        if m:
+            return True, "medium", m.group(0)
+    return False, "", ""
 
 
 def _validate_session_id(session_id: str) -> None:
     """Validate session ID format. Raises HTTPException(400) for invalid IDs."""
     if not _SESSION_ID_RE.match(session_id):
         raise HTTPException(status_code=400, detail="Invalid session ID")
+
 
 DEFAULT_TRANSCRIPT_DIR = Path.home() / ".claude" / "projects"
 DEFAULT_STATIC_DIR = Path(__file__).parent.parent.parent / "static"
@@ -79,7 +119,10 @@ def _ensure_ingested(
             return existing
     # Not in DB — try to ingest
     return ingest_session(
-        session_id, trace_dir=trace_dir, db_path=db_path, projects_dir=projects_dir,
+        session_id,
+        trace_dir=trace_dir,
+        db_path=db_path,
+        projects_dir=projects_dir,
     )
 
 
@@ -400,29 +443,27 @@ def create_app(
                         results.append({"session_id": sid})
                         continue
                 # Get first turn prompt for session label
-                first_turn = (
-                    db.query(TurnRecord)
-                    .filter_by(session_id=sid, turn_number=0)
-                    .first()
-                )
+                first_turn = db.query(TurnRecord).filter_by(session_id=sid, turn_number=0).first()
                 first_prompt = ""
                 if first_turn and first_turn.prompt_preview:
                     first_prompt = first_turn.prompt_preview[:80]
 
-                results.append({
-                    "session_id": rec.session_id,
-                    "model": rec.model,
-                    "total_turns": rec.total_turns,
-                    "total_api_calls": rec.total_api_calls,
-                    "total_blocks": rec.total_blocks,
-                    "peak_context_tokens": rec.peak_context_tokens,
-                    "total_input_tokens": rec.total_input_tokens,
-                    "total_output_tokens": rec.total_output_tokens,
-                    "total_cache_read": rec.total_cache_read,
-                    "total_cost_usd": rec.total_cost_usd,
-                    "source_mtime": rec.source_mtime,
-                    "first_prompt": first_prompt,
-                })
+                results.append(
+                    {
+                        "session_id": rec.session_id,
+                        "model": rec.model,
+                        "total_turns": rec.total_turns,
+                        "total_api_calls": rec.total_api_calls,
+                        "total_blocks": rec.total_blocks,
+                        "peak_context_tokens": rec.peak_context_tokens,
+                        "total_input_tokens": rec.total_input_tokens,
+                        "total_output_tokens": rec.total_output_tokens,
+                        "total_cache_read": rec.total_cache_read,
+                        "total_cost_usd": rec.total_cost_usd,
+                        "source_mtime": rec.source_mtime,
+                        "first_prompt": first_prompt,
+                    }
+                )
         return results
 
     @app.get("/api/session/{session_id}/summary")
@@ -486,17 +527,19 @@ def create_app(
                     rec = db.get(SessionRecord, sid)
                     if not rec:
                         continue
-                trends.append({
-                    "session_id": rec.session_id,
-                    "model": rec.model,
-                    "total_turns": rec.total_turns,
-                    "total_api_calls": rec.total_api_calls,
-                    "peak_context_tokens": rec.peak_context_tokens,
-                    "total_cache_read": rec.total_cache_read,
-                    "total_output_tokens": rec.total_output_tokens,
-                    "total_cost_usd": rec.total_cost_usd,
-                    "source_mtime": rec.source_mtime,
-                })
+                trends.append(
+                    {
+                        "session_id": rec.session_id,
+                        "model": rec.model,
+                        "total_turns": rec.total_turns,
+                        "total_api_calls": rec.total_api_calls,
+                        "peak_context_tokens": rec.peak_context_tokens,
+                        "total_cache_read": rec.total_cache_read,
+                        "total_output_tokens": rec.total_output_tokens,
+                        "total_cost_usd": rec.total_cost_usd,
+                        "source_mtime": rec.source_mtime,
+                    }
+                )
 
         return {
             "session_count": len(trends),
@@ -521,7 +564,9 @@ def create_app(
 
         try:
             blocks, churn, subagents = reconcile(
-                session_id, projects_dir=transcript_dir, trace_dir=trace_dir,
+                session_id,
+                projects_dir=transcript_dir,
+                trace_dir=trace_dir,
             )
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Session transcript not found") from exc
@@ -549,8 +594,8 @@ def create_app(
 
         messages, warnings = parse_raw_transcript(transcript_path)
         hook_events = read_events(session_id, trace_dir=trace_dir)
-        turns, snapshots, content_store, epochs, recon_warnings, block_registry = (
-            reconstruct_session(messages, hook_events)
+        turns, snapshots, content_store, epochs, recon_warnings, block_registry = reconstruct_session(
+            messages, hook_events
         )
 
         config = StalenessConfig()
@@ -632,23 +677,37 @@ def create_app(
 
             total = system_tokens + active_tokens + stale_tokens + dead_weight_tokens
 
-            turn_data.append({
-                "turn": snap.turn_number,
-                "system_tokens": system_tokens,
-                "active_tokens": active_tokens,
-                "stale_tokens": stale_tokens + dead_weight_tokens,
-                "total_tokens": total,
-                "actual_context_tokens": snap.actual_context_tokens,
-                "block_count": block_count,
-                "stale_block_count": stale_count + dead_count,
-                "input_tokens": snap.input_tokens,
-                "output_tokens": snap.output_tokens,
-                "cache_read_tokens": snap.cache_read_tokens,
-                "cache_creation_tokens": snap.cache_creation_tokens,
-                "compaction_detected": snap.compaction_detected,
-                "epoch": snap.epoch,
-                "api_call_count": snap.api_call_count,
-            })
+            # Count errors and tool results entering this turn
+            turn_error_count = 0
+            turn_tool_result_count = 0
+            for bid in snap.blocks_entered_ids:
+                blk = block_registry.get(bid)
+                if blk and blk.block_type == BlockType.TOOL_RESULT:
+                    turn_tool_result_count += 1
+                    if blk.is_error:
+                        turn_error_count += 1
+
+            turn_data.append(
+                {
+                    "turn": snap.turn_number,
+                    "system_tokens": system_tokens,
+                    "active_tokens": active_tokens,
+                    "stale_tokens": stale_tokens + dead_weight_tokens,
+                    "total_tokens": total,
+                    "actual_context_tokens": snap.actual_context_tokens,
+                    "block_count": block_count,
+                    "stale_block_count": stale_count + dead_count,
+                    "error_count": turn_error_count,
+                    "tool_result_count": turn_tool_result_count,
+                    "input_tokens": snap.input_tokens,
+                    "output_tokens": snap.output_tokens,
+                    "cache_read_tokens": snap.cache_read_tokens,
+                    "cache_creation_tokens": snap.cache_creation_tokens,
+                    "compaction_detected": snap.compaction_detected,
+                    "epoch": snap.epoch,
+                    "api_call_count": snap.api_call_count,
+                }
+            )
 
         # Detect model from messages
         model = "unknown"
@@ -676,9 +735,7 @@ def create_app(
 
         messages, _ = parse_raw_transcript(transcript_path)
         hook_events = read_events(session_id, trace_dir=trace_dir)
-        turns, snapshots, content_store, epochs, _, block_registry = (
-            reconstruct_session(messages, hook_events)
-        )
+        turns, snapshots, content_store, epochs, _, block_registry = reconstruct_session(messages, hook_events)
 
         config = StalenessConfig()
         task_boundaries = detect_task_boundaries(turns, config)
@@ -708,7 +765,7 @@ def create_app(
         last_turn = snapshots[-1].turn_number if snapshots else 0
 
         blocks_out = []
-        for bid in (snapshots[-1].block_ids if snapshots else []):
+        for bid in snapshots[-1].block_ids if snapshots else []:
             block = block_registry.get(bid)
             if not block:
                 continue
@@ -728,18 +785,20 @@ def create_app(
                 task_boundaries=task_boundaries,
                 superseded_map=superseded,
             )
-            blocks_out.append({
-                "block_id": block.block_id,
-                "turn_entered": block.turn_entered,
-                "block_type": block.block_type.value,
-                "resource": block.resource,
-                "tool_name": block.tool_name,
-                "size_chars": block.size_chars,
-                "size_tokens_est": block.size_tokens_est,
-                "is_pinned": block.is_pinned,
-                "staleness_score": round(score_val, 3),
-                "staleness_label": label,
-            })
+            blocks_out.append(
+                {
+                    "block_id": block.block_id,
+                    "turn_entered": block.turn_entered,
+                    "block_type": block.block_type.value,
+                    "resource": block.resource,
+                    "tool_name": block.tool_name,
+                    "size_chars": block.size_chars,
+                    "size_tokens_est": block.size_tokens_est,
+                    "is_pinned": block.is_pinned,
+                    "staleness_score": round(score_val, 3),
+                    "staleness_label": label,
+                }
+            )
 
         return {"session_id": session_id, "blocks": blocks_out}
 
@@ -753,9 +812,7 @@ def create_app(
 
         messages, _ = parse_raw_transcript(transcript_path)
         hook_events = read_events(session_id, trace_dir=trace_dir)
-        turns, snapshots, content_store, epochs, _, block_registry = (
-            reconstruct_session(messages, hook_events)
-        )
+        turns, snapshots, content_store, epochs, _, block_registry = reconstruct_session(messages, hook_events)
 
         # Detect model
         model = "unknown"
@@ -813,6 +870,241 @@ def create_app(
             "recommendations": recommendations,
         }
 
+    @app.get("/api/session/{session_id}/errors")
+    def get_session_errors(session_id: str):
+        """Error analysis: tool failures, retry patterns, self-corrections."""
+        _validate_session_id(session_id)
+        transcript_path = _find_transcript(session_id, transcript_dir)
+        if transcript_path is None:
+            raise HTTPException(status_code=404, detail="Transcript not found")
+
+        messages, _ = parse_raw_transcript(transcript_path)
+        hook_events = read_events(session_id, trace_dir=trace_dir)
+        turns, snapshots, content_store, epochs, _, block_registry = reconstruct_session(messages, hook_events)
+
+        # --- L1: Tool failures ---
+        # Count errors per turn, collect error block details
+        per_turn_errors: dict[int, list[dict]] = defaultdict(list)
+        total_tool_results = 0
+        total_errors = 0
+
+        for bid, block in block_registry.items():
+            if block.block_type == BlockType.TOOL_RESULT:
+                total_tool_results += 1
+                if block.is_error:
+                    total_errors += 1
+                    # Look up tool_name via parent_block_id
+                    tool_name = None
+                    if block.parent_block_id:
+                        parent = block_registry.get(block.parent_block_id)
+                        if parent:
+                            tool_name = parent.tool_name
+                    per_turn_errors[block.turn_entered].append(
+                        {
+                            "block_id": bid,
+                            "tool_name": tool_name or "unknown",
+                            "size_chars": block.size_chars,
+                        }
+                    )
+
+        error_rate = total_errors / total_tool_results if total_tool_results > 0 else 0.0
+
+        per_turn_list = []
+        for tn in sorted(per_turn_errors.keys()):
+            per_turn_list.append(
+                {
+                    "turn": tn,
+                    "error_count": len(per_turn_errors[tn]),
+                    "errors": per_turn_errors[tn],
+                }
+            )
+
+        # --- L2: Retry patterns (3-turn sliding window) ---
+        # Collect (tool_name, turn) pairs for error blocks
+        error_tool_turns: list[tuple[str, int]] = []
+        for tn, errs in per_turn_errors.items():
+            for err in errs:
+                error_tool_turns.append((err["tool_name"], tn))
+
+        # Group by turn
+        errors_by_turn: dict[int, list[str]] = defaultdict(list)
+        for tool_name, tn in error_tool_turns:
+            errors_by_turn[tn].append(tool_name)
+
+        all_error_turns = sorted(errors_by_turn.keys())
+        retry_patterns = []
+        seen_retries: set[tuple[str, int]] = set()  # (tool_name, window_start)
+
+        for i, start_turn in enumerate(all_error_turns):
+            # Gather tool names within a 3-turn window
+            window_tools: list[tuple[str, int]] = []
+            for tn in all_error_turns[i:]:
+                if tn > start_turn + 2:
+                    break
+                for tname in errors_by_turn[tn]:
+                    window_tools.append((tname, tn))
+
+            # Group by tool_name
+            tool_counts: dict[str, int] = defaultdict(int)
+            for tname, _ in window_tools:
+                tool_counts[tname] += 1
+
+            for tname, count in tool_counts.items():
+                if count >= 2:
+                    key = (tname, start_turn)
+                    if key not in seen_retries:
+                        seen_retries.add(key)
+                        retry_patterns.append(
+                            {
+                                "tool_name": tname,
+                                "window_start_turn": start_turn,
+                                "retry_count": count,
+                            }
+                        )
+
+        # --- L3: Self-correction detection ---
+        # Iterate raw transcript messages to find assistant visible text
+        # (skip thinking blocks)
+        self_corrections: list[dict] = []
+        # Build a positional index of assistant messages for fallback turn assignment
+        assistant_indices: list[int] = []
+        for idx, msg in enumerate(messages):
+            if msg.entry_type == "assistant":
+                assistant_indices.append(idx)
+
+        for msg in messages:
+            if msg.entry_type != "assistant":
+                continue
+            # Find turn number for this message
+            # Use timestamp matching against turns
+            msg_turn = 0
+            for turn in turns:
+                if turn.timestamp is not None and msg.timestamp is not None:
+                    if turn.timestamp <= msg.timestamp:
+                        msg_turn = turn.turn_number
+            if msg_turn == 0:
+                # Fallback: if timestamp is null, infer turn from message position.
+                # Use the 1-based position among assistant messages, capped to turn count.
+                if msg.timestamp is None:
+                    pos = assistant_indices.index(messages.index(msg)) + 1
+                    msg_turn = min(pos, len(turns)) if turns else 0
+                    if msg_turn > 0:
+                        logger.warning(
+                            "Null timestamp on assistant message; inferred turn %d from position",
+                            msg_turn,
+                        )
+                if msg_turn == 0:
+                    continue
+
+            for cb in msg.content_blocks:
+                # Only scan visible text, skip thinking blocks
+                if cb.block_type != "text":
+                    continue
+                text = cb.content or ""
+                if not text:
+                    continue
+
+                matched, confidence, pattern_str = _detect_self_corrections(text)
+                if matched:
+                    preview = text[:120].replace("\n", " ")
+                    self_corrections.append(
+                        {
+                            "turn": msg_turn,
+                            "confidence": confidence,
+                            "pattern": pattern_str,
+                            "preview": preview,
+                        }
+                    )
+
+        # --- Cluster detection: consecutive turns with errors ---
+        clusters: list[dict] = []
+        if all_error_turns:
+            cluster_start = all_error_turns[0]
+            cluster_turns = [cluster_start]
+
+            for j in range(1, len(all_error_turns)):
+                if all_error_turns[j] <= all_error_turns[j - 1] + 1:
+                    cluster_turns.append(all_error_turns[j])
+                else:
+                    if len(cluster_turns) >= 2:
+                        cluster_total = sum(len(per_turn_errors[t]) for t in cluster_turns)
+                        clusters.append(
+                            {
+                                "start_turn": cluster_turns[0],
+                                "end_turn": cluster_turns[-1],
+                                "turn_count": len(cluster_turns),
+                                "total_errors": cluster_total,
+                            }
+                        )
+                    cluster_start = all_error_turns[j]
+                    cluster_turns = [cluster_start]
+
+            # Final cluster
+            if len(cluster_turns) >= 2:
+                cluster_total = sum(len(per_turn_errors[t]) for t in cluster_turns)
+                clusters.append(
+                    {
+                        "start_turn": cluster_turns[0],
+                        "end_turn": cluster_turns[-1],
+                        "turn_count": len(cluster_turns),
+                        "total_errors": cluster_total,
+                    }
+                )
+
+        # --- Build recommendations ---
+        error_recommendations: list[dict] = []
+        for cluster in clusters:
+            error_recommendations.append(
+                {
+                    "priority": "critical",
+                    "code": "error_cluster",
+                    "title": (f"Error cluster: Turns {cluster['start_turn']}-{cluster['end_turn']}"),
+                    "detail": (
+                        f"{cluster['total_errors']} tool errors across {cluster['turn_count']} consecutive turns"
+                    ),
+                    "action": "Review the error cluster for systemic issues",
+                    "tokens_recoverable": 0,
+                }
+            )
+        for rp in retry_patterns:
+            error_recommendations.append(
+                {
+                    "priority": "warning",
+                    "code": "retry_pattern",
+                    "title": f"Retry pattern: {rp['tool_name']}",
+                    "detail": (f"{rp['retry_count']} errors within 3 turns starting at turn {rp['window_start_turn']}"),
+                    "action": "Check if the tool approach needs adjustment",
+                    "tokens_recoverable": 0,
+                }
+            )
+        if self_corrections:
+            high_count = sum(1 for sc in self_corrections if sc["confidence"] == "high")
+            med_count = sum(1 for sc in self_corrections if sc["confidence"] == "medium")
+            error_recommendations.append(
+                {
+                    "priority": "warning",
+                    "code": "self_correction",
+                    "title": "Self-correction detected",
+                    "detail": (
+                        f"{len(self_corrections)} patterns found ({high_count} high / {med_count} medium confidence)"
+                    ),
+                    "action": "Review self-corrections for recurring issues",
+                    "tokens_recoverable": 0,
+                }
+            )
+
+        return {
+            "session_id": session_id,
+            "total_errors": total_errors,
+            "total_tool_results": total_tool_results,
+            "error_rate": round(error_rate, 4),
+            "per_turn": per_turn_list,
+            "clusters": clusters,
+            "retry_patterns": retry_patterns,
+            "self_corrections": self_corrections,
+            "recommendations": error_recommendations,
+        }
+
     @app.get("/api/session/{session_id}/dead_weight")
     def get_session_dead_weight(session_id: str):
         """Per-turn dead weight data and top stale blocks."""
@@ -823,9 +1115,7 @@ def create_app(
 
         messages, _ = parse_raw_transcript(transcript_path)
         hook_events = read_events(session_id, trace_dir=trace_dir)
-        turns, snapshots, content_store, epochs, _, block_registry = (
-            reconstruct_session(messages, hook_events)
-        )
+        turns, snapshots, content_store, epochs, _, block_registry = reconstruct_session(messages, hook_events)
 
         config = StalenessConfig()
         task_boundaries = detect_task_boundaries(turns, config)
@@ -894,13 +1184,15 @@ def create_app(
             total = active_tokens + stale_tokens + dead_weight_tokens
             dead_pct = dead_weight_tokens / total if total > 0 else 0.0
 
-            per_turn.append({
-                "turn": snap.turn_number,
-                "dead_weight_tokens": dead_weight_tokens,
-                "dead_weight_pct": round(dead_pct, 4),
-                "stale_tokens": stale_tokens,
-                "active_tokens": active_tokens,
-            })
+            per_turn.append(
+                {
+                    "turn": snap.turn_number,
+                    "dead_weight_tokens": dead_weight_tokens,
+                    "dead_weight_pct": round(dead_pct, 4),
+                    "stale_tokens": stale_tokens,
+                    "active_tokens": active_tokens,
+                }
+            )
 
         # Top stale blocks at the final snapshot
         if snapshots:
@@ -929,14 +1221,16 @@ def create_app(
                 )
 
                 if label in ("stale", "dead_weight"):
-                    all_stale_blocks.append({
-                        "block_id": block.block_id,
-                        "block_type": block.block_type.value,
-                        "resource": block.resource,
-                        "size_tokens_est": block.size_tokens_est,
-                        "staleness_score": round(score_val, 3),
-                        "staleness_label": label,
-                    })
+                    all_stale_blocks.append(
+                        {
+                            "block_id": block.block_id,
+                            "block_type": block.block_type.value,
+                            "resource": block.resource,
+                            "size_tokens_est": block.size_tokens_est,
+                            "staleness_score": round(score_val, 3),
+                            "staleness_label": label,
+                        }
+                    )
 
         # Sort by size descending, take top 15
         all_stale_blocks.sort(key=lambda b: b["size_tokens_est"], reverse=True)
@@ -966,9 +1260,7 @@ def create_app(
 
         messages, _ = parse_raw_transcript(transcript_path)
         hook_events = read_events(session_id, trace_dir=trace_dir)
-        turns, snapshots, content_store, epochs, _, block_registry = (
-            reconstruct_session(messages, hook_events)
-        )
+        turns, snapshots, content_store, epochs, _, block_registry = reconstruct_session(messages, hook_events)
 
         if turn_number < 1 or turn_number > len(turns):
             raise HTTPException(status_code=404, detail="Turn not found")
@@ -984,16 +1276,18 @@ def create_app(
             if not block:
                 continue
             content = content_store.get_content(bid)
-            msgs_out.append({
-                "block_id": bid,
-                "block_type": block.block_type.value,
-                "tool_name": block.tool_name,
-                "resource": block.resource,
-                "size_chars": block.size_chars,
-                "size_tokens_est": block.size_tokens_est,
-                "content": content[:5000],
-                "is_truncated": len(content) > 5000,
-            })
+            msgs_out.append(
+                {
+                    "block_id": bid,
+                    "block_type": block.block_type.value,
+                    "tool_name": block.tool_name,
+                    "resource": block.resource,
+                    "size_chars": block.size_chars,
+                    "size_tokens_est": block.size_tokens_est,
+                    "content": content[:5000],
+                    "is_truncated": len(content) > 5000,
+                }
+            )
 
         return {"turn": turn_number, "messages": msgs_out}
 
@@ -1020,6 +1314,23 @@ def create_app(
             raise HTTPException(status_code=404, detail=f"API call {call_index} not found")
 
         messages_out = _flatten_entries_to_messages(target_entries)
+
+        # Add server-computed error flags to messages
+        # Note: retry detection requires multi-turn context (comparing tool names
+        # across consecutive turns), which is not available in this single-call
+        # scope. All messages are marked is_retry=False here.
+        for msg_item in messages_out:
+            msg_item["is_retry"] = False
+
+            msg_type = msg_item.get("type", "")
+            if msg_type == "assistant_text":
+                text = msg_item.get("content", "")
+                matched, confidence, _ = _detect_self_corrections(text)
+                msg_item["is_self_correction"] = matched
+                msg_item["self_correction_confidence"] = confidence if matched else None
+            else:
+                msg_item["is_self_correction"] = False
+                msg_item["self_correction_confidence"] = None
 
         # Add usage info from the assistant entry
         for entry in target_entries:
@@ -1086,6 +1397,104 @@ def create_app(
                 total_usage["cache_creation"] += usage.get("cache_creation_input_tokens", 0)
 
         messages_out = _flatten_entries_to_messages(entries_raw)
+
+        # --- Server-computed error flags ---
+        # Build tool_use_id -> tool_name map from tool_use entries
+        tu_id_to_name: dict[str, str] = {}
+        for msg_item in messages_out:
+            if msg_item.get("type") == "tool_use" and msg_item.get("tool_use_id"):
+                tu_id_to_name[msg_item["tool_use_id"]] = msg_item.get("tool_name", "unknown")
+
+        # Collect error tool_use_ids with their tool_names in this turn
+        error_tool_names_this_turn: list[str] = []
+        for msg_item in messages_out:
+            if msg_item.get("type") == "tool_result" and msg_item.get("is_error"):
+                tuid = msg_item.get("tool_use_id", "")
+                tname = tu_id_to_name.get(tuid, "unknown")
+                error_tool_names_this_turn.append(tname)
+
+        # Lightweight retry detection: scan nearby turns for errors
+        # with the same tool_name (3-turn window centered on this turn)
+        # Re-scan transcript for error tool_names in turns [conv_turn-1, conv_turn+1]
+        nearby_error_tools: list[str] = list(error_tool_names_this_turn)
+        neighbor_turns = set()
+        for t_entry in turn_map_data:
+            ct = t_entry["conv_turn"]
+            if abs(ct - conv_turn) <= 1 and ct != conv_turn:
+                neighbor_turns.add((t_entry["first_call"], t_entry["last_call"]))
+
+        if neighbor_turns:
+            # Re-scan transcript for neighbor turns
+            neighbor_api_idx = -1
+            neighbor_tu_map: dict[str, str] = {}
+            with open(transcript_path) as f2:
+                for nline in f2:
+                    nline = nline.strip()
+                    if not nline:
+                        continue
+                    try:
+                        nentry = json.loads(nline)
+                    except json.JSONDecodeError:
+                        continue
+                    ntype = nentry.get("type", "")
+                    if ntype in ("file-history-snapshot", "last-prompt", "pr-link", "queue-operation"):
+                        continue
+                    if ntype == "user":
+                        ncontent = nentry.get("message", {}).get("content", "")
+                        if isinstance(ncontent, list):
+                            for ni in ncontent:
+                                if isinstance(ni, dict) and ni.get("type") == "tool_result":
+                                    tuid = ni.get("tool_use_id", "")
+                                    if ni.get("is_error") and tuid in neighbor_tu_map:
+                                        nearby_error_tools.append(neighbor_tu_map[tuid])
+                        continue
+                    if ntype == "assistant":
+                        nmsg = nentry.get("message", {})
+                        nusage = nmsg.get("usage", {})
+                        if nmsg.get("stop_reason") is None or nusage.get("output_tokens", 0) == 0:
+                            continue
+                        if nmsg.get("model", "") == "synthetic":
+                            continue
+                        neighbor_api_idx += 1
+                        in_neighbor = any(fc <= neighbor_api_idx <= lc for fc, lc in neighbor_turns)
+                        if in_neighbor:
+                            ncontent = nmsg.get("content", "")
+                            if isinstance(ncontent, list):
+                                for ni in ncontent:
+                                    if isinstance(ni, dict):
+                                        if ni.get("type") == "tool_use":
+                                            neighbor_tu_map[ni.get("id", "")] = ni.get("name", "unknown")
+                                        elif ni.get("type") == "tool_result":
+                                            tuid = ni.get("tool_use_id", "")
+                                            if ni.get("is_error") and tuid in neighbor_tu_map:
+                                                nearby_error_tools.append(neighbor_tu_map[tuid])
+
+        # Count error tool_names -- retry if same name appears 2+ times
+        retry_tool_names = set()
+        tool_name_counts = Counter(nearby_error_tools)
+        for tname, cnt in tool_name_counts.items():
+            if cnt >= 2:
+                retry_tool_names.add(tname)
+
+        # Annotate messages_out with is_retry, is_self_correction
+        for msg_item in messages_out:
+            msg_type = msg_item.get("type", "")
+
+            if msg_type == "tool_result":
+                tuid = msg_item.get("tool_use_id", "")
+                tname = tu_id_to_name.get(tuid, "unknown")
+                msg_item["is_retry"] = bool(msg_item.get("is_error") and tname in retry_tool_names)
+            else:
+                msg_item["is_retry"] = False
+
+            if msg_type == "assistant_text":
+                text = msg_item.get("content", "")
+                matched, confidence, _ = _detect_self_corrections(text)
+                msg_item["is_self_correction"] = matched
+                msg_item["self_correction_confidence"] = confidence if matched else None
+            else:
+                msg_item["is_self_correction"] = False
+                msg_item["self_correction_confidence"] = None
 
         return {
             "conv_turn": conv_turn,
@@ -1271,6 +1680,7 @@ def main() -> None:
 
     if args.host != "127.0.0.1":
         import sys
+
         print(
             f"WARNING: Binding to {args.host} exposes session data on the network. "
             "Use 127.0.0.1 (default) to restrict access to localhost.",

@@ -93,7 +93,7 @@ html, body {
 /* ===== SCORECARDS ===== */
 .scorecards {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 14px;
   margin-bottom: 20px;
 }
@@ -653,7 +653,7 @@ html, body {
 }
 
 @media (max-width: 900px) {
-  .scorecards { grid-template-columns: repeat(2, 1fr); }
+  .scorecards { grid-template-columns: repeat(3, 1fr); }
   .bottom-grid { grid-template-columns: 1fr; }
   .churn-stats { grid-template-columns: repeat(2, 1fr); }
 }
@@ -906,6 +906,56 @@ html, body {
 
 .info-modal-close:hover { color: var(--text); }
 
+/* ===== ERROR HIGHLIGHTING ===== */
+.msg-row.is-error {
+  background: rgba(239, 68, 68, 0.06);
+  border-left-color: #ef4444 !important;
+}
+.msg-row.is-self-correct {
+  background: rgba(245, 158, 11, 0.06);
+  border-left-color: #d97706 !important;
+}
+.badge-err {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.badge-retry {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.badge-fix {
+  background: rgba(217, 118, 6, 0.15);
+  color: #d97706;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.scorecard-value.has-errors { color: #ef4444; }
+
 /* Custom scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -1072,6 +1122,11 @@ html, body {
         <div class="scorecard-sub" id="sc-health-sub">--</div>
         <div class="health-bar"><div class="health-bar-fill" id="health-bar-fill" style="width:0%;background:#34d399"></div></div>
       </div>
+      <div class="scorecard">
+        <div class="scorecard-label">Tool Errors</div>
+        <div class="scorecard-value" id="sc-errors">--</div>
+        <div class="scorecard-sub" id="sc-errors-sub">--</div>
+      </div>
     </div>
 
     <!-- Section 2+3: Context Growth + Cache-Read Churn side by side -->
@@ -1214,6 +1269,9 @@ html, body {
   let turnsData = null;        // from /api/session/{id}/turns — staleness per turn
   let _imageCache = {};        // keyed by "sessionId/convTurn/msgIdx/imgIdx"
   let _imageSessionId = null;  // track current session for stale fetch detection
+  let errorData = null;        // from /api/session/{id}/errors
+  let errorTurnSet = new Set(); // conv_turn numbers with errors (O(1) lookup)
+  let selfCorrectionTurnSet = new Set(); // turns with self-corrections
 
   // Derived data (computed once)
   let labels = [];
@@ -1333,6 +1391,7 @@ html, body {
       fetchTurnsData(sessionId);
       fetchHealthData(sessionId);
       fetchDeadWeightData(sessionId);
+      fetchErrorData(sessionId);
 
       return true;
     } catch(e) {
@@ -1357,6 +1416,9 @@ html, body {
     turnsData = null;
     _imageCache = {};
     _imageSessionId = null;
+    errorData = null;
+    errorTurnSet = new Set();
+    selfCorrectionTurnSet = new Set();
 
     // Destroy existing charts
     if (growthChart) { growthChart.destroy(); growthChart = null; }
@@ -2162,7 +2224,12 @@ html, body {
 
     if (ct) {
       // Use conversation turn grouping
-      titleEl.textContent = 'Messages \u2014 Turn ' + ct.conv_turn;
+      let titleHtml = escapeHtml('Messages \u2014 Turn ' + ct.conv_turn);
+      const pt = errorData && errorData.per_turn ? errorData.per_turn.find(e => e.turn === ct.conv_turn) : null;
+      if (pt && pt.error_count > 0) {
+        titleHtml += ' <span style="color:#ef4444;font-size:9px">(' + pt.error_count + ' error' + (pt.error_count > 1 ? 's' : '') + ')</span>';
+      }
+      titleEl.innerHTML = titleHtml;
       listEl.innerHTML = '<div class="empty-state" style="padding:16px">Loading messages...</div>';
       viewAllLink.onclick = () => openConvTurnModal(ct.conv_turn);
 
@@ -2210,16 +2277,30 @@ html, body {
       const barColor = getBadgeColor(type);
       const borderColor = getBadgeColor(type);
 
+      // Error badges (server-computed flags)
+      let badges = '';
+      let rowClasses = 'msg-row';
+      if (msg.is_error) {
+        badges += '<span class="badge-err">ERR</span>';
+        rowClasses += ' is-error';
+      }
+      if (msg.is_retry) {
+        badges += '<span class="badge-retry">RETRY</span>';
+      }
+      if (msg.is_self_correction) {
+        badges += '<span class="badge-fix">FIX</span>';
+        rowClasses += ' is-self-correct';
+      }
+
       // Image badge
       const imgCount = (msg.images && msg.images.length) || 0;
       const imgBadge = imgCount > 0
         ? '<span class="msg-img-badge">' + imgCount + ' img</span>'
         : '';
 
-      html += '<div class="msg-row" data-idx="' + i + '" style="border-left-color:' + borderColor + '">' +
+      html += '<div class="' + rowClasses + '" data-idx="' + i + '" style="border-left-color:' + borderColor + '">' +
         '<span class="msg-role ' + roleClass + '">' + roleLabel + '</span>' +
-        '<span class="msg-cat-dot" style="background:' + catColor + '"></span>' +
-        '<span class="msg-cat-label">' + catLabel + '</span>' +
+        badges +
         '<span class="msg-content-preview">' + escapeHtml(preview) + '</span>' +
         imgBadge +
         '<span class="msg-size-bar"><span class="msg-size-fill" style="width:' + barPct.toFixed(0) + '%;background:' + barColor + '"></span></span>' +
@@ -2440,6 +2521,8 @@ html, body {
       if (!resp.ok) return;
       turnsData = await resp.json();
       rebuildGrowthChartWithStaleness();
+      // Re-apply error annotations after staleness overlay (they may have been waiting for turnMap)
+      addErrorAnnotationsToGrowthChart();
     } catch(e) { /* non-blocking */ }
   }
 
@@ -2572,6 +2655,176 @@ html, body {
     } catch(e) { /* non-blocking */ }
   }
 
+  // ===== ERROR DATA FETCHING =====
+  async function fetchErrorData(sessionId) {
+    try {
+      const resp = await fetch('/api/session/' + encodeURIComponent(sessionId) + '/errors');
+      if (!resp.ok) return;
+      errorData = await resp.json();
+
+      // Build lookup sets
+      errorTurnSet = new Set();
+      selfCorrectionTurnSet = new Set();
+      if (errorData.per_turn) {
+        for (const pt of errorData.per_turn) {
+          errorTurnSet.add(pt.turn);
+        }
+      }
+      if (errorData.self_corrections) {
+        for (const sc of errorData.self_corrections) {
+          selfCorrectionTurnSet.add(sc.turn);
+        }
+      }
+
+      renderErrorScorecard();
+      addErrorAnnotationsToGrowthChart();
+      // Re-render recommendations to merge error recs
+      renderRecommendations();
+    } catch(e) { /* non-blocking */ }
+  }
+
+  // ===== ERROR SCORECARD =====
+  function renderErrorScorecard() {
+    if (!errorData) return;
+    const total = errorData.total_errors || 0;
+    const el = document.getElementById('sc-errors');
+    const sub = document.getElementById('sc-errors-sub');
+
+    el.textContent = total.toString();
+    if (total > 0) {
+      el.classList.add('has-errors');
+    } else {
+      el.classList.remove('has-errors');
+    }
+
+    // Sub-label: error rate + spike indicator from health data
+    const ratePct = ((errorData.error_rate || 0) * 100).toFixed(1);
+    let subText = ratePct + '% rate';
+    const clusterCount = (errorData.clusters || []).length;
+    if (clusterCount > 0) {
+      subText += ' / ' + clusterCount + ' cluster' + (clusterCount > 1 ? 's' : '');
+    }
+    // Spike indicator from health signals
+    if (healthData && healthData.signals && healthData.signals.error_rate_spike > 0.3) {
+      subText += ' (spike)';
+    }
+    sub.textContent = subText;
+  }
+
+  // ===== ERROR ANNOTATIONS ON GROWTH CHART =====
+  function addErrorAnnotationsToGrowthChart() {
+    if (!errorData || !growthChart) return;
+    // Require turnMap for correct coordinate mapping
+    if (!turnMap || turnMap.length === 0) return;
+
+    const annotations = growthChart.options.plugins.annotation.annotations;
+
+    // Build conv_turn -> last_call index map
+    const turnToLastCall = {};
+    for (const tm of turnMap) {
+      turnToLastCall[tm.conv_turn] = tm.last_call;
+    }
+
+    // Remove old error annotations
+    for (const key of Object.keys(annotations)) {
+      if (key.startsWith('err_') || key.startsWith('cluster_') || key.startsWith('sc_')) {
+        delete annotations[key];
+      }
+    }
+
+    // L1: Red dot annotations at error turns
+    if (errorData.per_turn) {
+      for (const pt of errorData.per_turn) {
+        const callIdx = turnToLastCall[pt.turn];
+        if (callIdx == null) continue;
+        const radius = pt.error_count >= 2 ? 7 : 5;
+        annotations['err_' + pt.turn] = {
+          type: 'point',
+          xValue: callIdx,
+          yValue: residentData[callIdx] || 0,
+          backgroundColor: 'rgba(239, 68, 68, 0.8)',
+          borderColor: '#ef4444',
+          borderWidth: 1.5,
+          radius: radius,
+        };
+      }
+    }
+
+    // Cluster bands: box annotations for runs of 2+ consecutive error turns
+    if (errorData.clusters) {
+      for (let ci = 0; ci < errorData.clusters.length; ci++) {
+        const cluster = errorData.clusters[ci];
+        const startCall = turnToLastCall[cluster.start_turn];
+        const endCall = turnToLastCall[cluster.end_turn];
+        if (startCall == null || endCall == null) continue;
+        annotations['cluster_' + ci] = {
+          type: 'box',
+          xMin: startCall - 0.5,
+          xMax: endCall + 0.5,
+          yMin: 0,
+          yMax: Math.max(...residentData) * 1.05,
+          backgroundColor: 'rgba(239, 68, 68, 0.04)',
+          borderColor: 'rgba(239, 68, 68, 0.15)',
+          borderWidth: 1,
+        };
+      }
+    }
+
+    // L3: Amber triangles for self-corrections
+    if (errorData.self_corrections) {
+      const scByTurn = {};
+      for (const sc of errorData.self_corrections) {
+        if (!scByTurn[sc.turn]) scByTurn[sc.turn] = sc;
+      }
+      for (const turn of Object.keys(scByTurn)) {
+        const callIdx = turnToLastCall[parseInt(turn)];
+        if (callIdx == null) continue;
+        annotations['sc_' + turn] = {
+          type: 'point',
+          xValue: callIdx,
+          yValue: (residentData[callIdx] || 0) * 1.02,
+          backgroundColor: 'rgba(245, 158, 11, 0.8)',
+          borderColor: '#f59e0b',
+          borderWidth: 1.5,
+          radius: 5,
+          pointStyle: 'triangle',
+        };
+      }
+    }
+
+    // Enhance tooltip with error info
+    const origAfterBody = growthChart.options.plugins.tooltip.callbacks.afterBody;
+    growthChart.options.plugins.tooltip.callbacks.afterBody = function(items) {
+      let base = '';
+      if (origAfterBody) {
+        const result = origAfterBody(items);
+        if (typeof result === 'string') base = result;
+        else if (Array.isArray(result)) base = result.join('\n');
+      }
+      const idx = items[0].dataIndex;
+      // Find conv_turn for this API call index
+      let convTurn = null;
+      for (let i = turnMap.length - 1; i >= 0; i--) {
+        if (idx >= turnMap[i].first_call && idx <= turnMap[i].last_call) {
+          convTurn = turnMap[i].conv_turn;
+          break;
+        }
+      }
+      if (convTurn && errorTurnSet.has(convTurn)) {
+        const pt = errorData.per_turn.find(p => p.turn === convTurn);
+        if (pt) {
+          base += '\n' + pt.error_count + ' tool error' + (pt.error_count > 1 ? 's' : '') + ' this turn';
+        }
+      }
+      if (convTurn && selfCorrectionTurnSet.has(convTurn)) {
+        base += '\nSelf-correction detected';
+      }
+      return base;
+    };
+
+    growthChart.update('none');
+  }
+
   // ===== HEALTH SCORECARD =====
   function renderHealthScorecard() {
     if (!healthData) return;
@@ -2597,14 +2850,24 @@ html, body {
   function renderRecommendations() {
     const panel = document.getElementById('recommendations-panel');
     const grid = document.getElementById('rec-grid');
-    if (!healthData || !healthData.recommendations || healthData.recommendations.length === 0) {
+
+    // Merge health recommendations with error recommendations
+    const healthRecs = (healthData && healthData.recommendations) ? healthData.recommendations : [];
+    const errorRecs = (errorData && errorData.recommendations) ? errorData.recommendations : [];
+    const allRecs = [...healthRecs, ...errorRecs];
+
+    // Sort: critical first, then warning, then info
+    const priorityOrder = { critical: 0, warning: 1, info: 2 };
+    allRecs.sort((a, b) => (priorityOrder[a.priority] || 3) - (priorityOrder[b.priority] || 3));
+
+    if (allRecs.length === 0) {
       panel.classList.add('hidden');
       return;
     }
     panel.classList.remove('hidden');
 
     let html = '';
-    for (const rec of healthData.recommendations) {
+    for (const rec of allRecs) {
       const tokensLine = rec.tokens_recoverable > 0
         ? '<div class="rec-tokens">' + fmt(rec.tokens_recoverable) + ' tokens recoverable</div>'
         : '';
@@ -2825,15 +3088,27 @@ html, body {
       ? ' <span style="color:var(--text-muted)">(' + fmt(Math.round(msg.size_chars / 4)) + ' tok)</span>'
       : '';
     const truncNote = msg.is_truncated ? ' <span style="color:var(--danger)">[truncated]</span>' : '';
-    const errorNote = msg.is_error ? ' <span style="color:var(--danger)">[ERROR]</span>' : '';
+    const errorNote = msg.is_error ? ' <span class="badge-err" style="margin-left:4px">ERR</span>' : '';
+
+    // Error-related badges for modal view
+    let extraBadges = '';
+    if (msg.is_retry) {
+      extraBadges += ' <span class="badge-retry" style="margin-left:4px">RETRY</span>';
+    }
+    if (msg.is_self_correction) {
+      extraBadges += ' <span class="badge-fix" style="margin-left:4px">FIX</span>';
+    }
 
     const content = msg.content || '';
     const lines = content.split('\n');
     const isLong = lines.length > COLLAPSE_LINES;
 
+    // Error tool_result blocks: don't collapse (display prominently)
+    const isErrorResult = msg.is_error && type === 'tool_result';
+
     // For user messages and short assistant text, show fully
-    // For tool_use, tool_result, thinking, and long content — collapse
-    const shouldCollapse = isLong && (type !== 'user' && type !== 'user_text');
+    // For tool_use, tool_result (non-error), thinking, and long content — collapse
+    const shouldCollapse = isLong && !isErrorResult && (type !== 'user' && type !== 'user_text');
 
     let contentHtml;
     if (shouldCollapse) {
@@ -2859,9 +3134,20 @@ html, body {
       imageStripHtml = renderImageStrip(msg.images, convTurn, msgIndex);
     }
 
-    return '<div style="margin-bottom:12px;border-left:3px solid ' + getBadgeColor(type) + ';padding-left:10px;">' +
+    // Determine border and background styling for error/self-correction
+    let borderColor = getBadgeColor(type);
+    let bgStyle = '';
+    if (msg.is_error) {
+      borderColor = '#ef4444';
+      bgStyle = 'background:rgba(239,68,68,0.04);';
+    } else if (msg.is_self_correction) {
+      borderColor = '#d97706';
+      bgStyle = 'background:rgba(245,158,11,0.04);';
+    }
+
+    return '<div style="margin-bottom:12px;border-left:3px solid ' + borderColor + ';padding-left:10px;' + bgStyle + '">' +
       '<div style="margin-bottom:4px;"><span class="block-badge ' + badgeCls + '">' + escapeHtml(type) + '</span>' +
-      toolInfo + sizeInfo + truncNote + errorNote + '</div>' +
+      toolInfo + sizeInfo + truncNote + errorNote + extraBadges + '</div>' +
       contentHtml +
       imageStripHtml +
       '</div>';
@@ -2955,10 +3241,16 @@ html, body {
     }
     buildGrowthChart();
 
+    // Re-apply staleness overlay if available
+    if (turnsData) rebuildGrowthChartWithStaleness();
+
     // Update turn marker to current position
     growthChart.options.plugins.annotation.annotations.turnMarker.xMin = currentTurn;
     growthChart.options.plugins.annotation.annotations.turnMarker.xMax = currentTurn;
     growthChart.update('none');
+
+    // Re-apply error annotations
+    addErrorAnnotationsToGrowthChart();
 
     // Recalculate health dot and peak context label
     renderScorecards();
@@ -3078,6 +3370,8 @@ html, body {
     buildChurnChart();
     // If turnsData arrived before chart was built, apply staleness now
     if (turnsData) rebuildGrowthChartWithStaleness();
+    // If errorData arrived before chart was built, apply annotations now
+    if (errorData) addErrorAnnotationsToGrowthChart();
     wireControls();
 
     // Initial turn details
