@@ -623,6 +623,49 @@ html, body {
   pointer-events: none;
 }
 
+/* Token breakdown */
+.token-breakdown-body {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.token-donut-wrap {
+  flex-shrink: 0;
+  width: 100px;
+  height: 100px;
+}
+
+#token-breakdown-legend {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  overflow: hidden;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.legend-pct {
+  color: var(--text);
+  font-weight: 600;
+  min-width: 32px;
+  text-align: right;
+}
+
 /* Nav links */
 .nav-link {
   font-family: var(--mono);
@@ -857,6 +900,13 @@ html, body {
         <div class="bottom-card-title">Composition (Cumulative)</div>
         <div id="comp-bars"></div>
         <div id="comp-delta"></div>
+        <div class="token-breakdown">
+          <div class="bottom-card-title" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);" id="token-breakdown-title">Token Breakdown</div>
+          <div class="token-breakdown-body">
+            <div class="token-donut-wrap"><canvas id="token-donut" width="100" height="100"></canvas></div>
+            <div id="token-breakdown-legend"></div>
+          </div>
+        </div>
       </div>
       <!-- Col 2: Top Growth Turns -->
       <div class="bottom-card" id="col-growth">
@@ -1055,6 +1105,7 @@ html, body {
     computeTopGrowth();
     renderScorecards();
     renderChurnStats();
+    renderTokenBreakdown();
     buildGrowthChart();
     buildChurnChart();
     updateScrubberLabel();
@@ -1553,32 +1604,31 @@ html, body {
       else skillTokens += b.tokens;
     }
 
-    // Working set = resident - pinned prefix
+    // Working set = API-reported resident - pinned prefix
     const workingSet = Math.max(0, resident - pinnedTokens);
 
-    // Count conversation vs tool I/O from blocks present at this turn
-    let convTokens = 0;
-    let toolTokens = 0;
-    let convCount = 0;
-    let toolCount = 0;
+    // Use block type RATIOS to split working set (API-reported) into conv vs tool
+    // Block token estimates are inflated, but ratios between types are reliable
     const convTypes = new Set(['user', 'assistant', 'assistant_text', 'user_text', 'thinking']);
     const toolTypes = new Set(['tool_call', 'tool_result', 'tool_use']);
+    let convEst = 0, toolEst = 0, convCount = 0, toolCount = 0;
     for (const b of blocks) {
-      if (b.cached) continue;  // skip pinned prefix blocks
-      if (b.enter > currentTurn) continue;  // hasn't entered yet
-      if (b.exit !== null && b.exit !== undefined && b.exit <= currentTurn) continue;  // already exited
-      if (convTypes.has(b.type)) {
-        convTokens += b.tokens;
-        convCount++;
-      } else if (toolTypes.has(b.type)) {
-        toolTokens += b.tokens;
-        toolCount++;
-      }
+      if (b.cached) continue;
+      if (b.enter > currentTurn) continue;
+      if (b.exit !== null && b.exit !== undefined && b.exit <= currentTurn) continue;
+      if (convTypes.has(b.type)) { convEst += b.tokens; convCount++; }
+      else if (toolTypes.has(b.type)) { toolEst += b.tokens; toolCount++; }
     }
 
-    // Fallback: if no blocks match, attribute working set as conversation
-    if (convTokens === 0 && toolTokens === 0 && workingSet > 0) {
+    // Apply ratio to API-reported working set
+    const totalEst = convEst + toolEst;
+    let convTokens, toolTokens;
+    if (totalEst > 0) {
+      convTokens = Math.round(workingSet * (convEst / totalEst));
+      toolTokens = workingSet - convTokens;
+    } else {
       convTokens = workingSet;
+      toolTokens = 0;
     }
 
     const buffer = Math.max(0, BUDGET - resident);
@@ -1610,26 +1660,19 @@ html, body {
       const prevResident = residentData[currentTurn - 1];
       const delta = resident - prevResident;
 
-      // Try to split delta into conv/tool
-      let prevConv = 0, prevTool = 0;
-      const prevC = churn[currentTurn - 1];
-      const prevWs = blocks.find(b => b.enter === prevC.turn && b.exit !== null && b.exit !== undefined);
-      if (prevWs) {
-        const prevContent = prevWs.content || '';
-        const prevLines = prevContent.split('\n').filter(l => l.trim());
-        for (const line of prevLines.slice(1)) {
-          const match = line.match(/^(\w+):\s+(.+?)\s*\(([0-9,]+)\s*tok\)\s*$/);
-          if (match) {
-            const type = match[1];
-            const tokens = parseInt(match[3].replace(/,/g, ''), 10);
-            if (type === 'user' || type === 'assistant' || type === 'assistant_text' || type === 'user_text' || type === 'thinking') {
-              prevConv += tokens;
-            } else {
-              prevTool += tokens;
-            }
-          }
-        }
+      // Split delta using current vs previous conv/tool ratios
+      const prevWorkingSet = Math.max(0, prevResident - pinnedTokens);
+      let prevConvEst = 0, prevToolEst = 0;
+      for (const b of blocks) {
+        if (b.cached) continue;
+        if (b.enter > currentTurn - 1) continue;
+        if (b.exit !== null && b.exit !== undefined && b.exit <= currentTurn - 1) continue;
+        if (convTypes.has(b.type)) prevConvEst += b.tokens;
+        else if (toolTypes.has(b.type)) prevToolEst += b.tokens;
       }
+      const prevTotalEst = prevConvEst + prevToolEst;
+      const prevConv = prevTotalEst > 0 ? Math.round(prevWorkingSet * (prevConvEst / prevTotalEst)) : prevWorkingSet;
+      const prevTool = prevTotalEst > 0 ? prevWorkingSet - prevConv : 0;
 
       const deltaConv = convTokens - prevConv;
       const deltaTool = toolTokens - prevTool;
@@ -1638,7 +1681,7 @@ html, body {
 
       deltaEl.innerHTML =
         '<div class="delta-section">' +
-          '<div class="delta-title">This Turn</div>' +
+          '<div class="delta-title">This Call</div>' +
           '<div class="delta-row"><span class="delta-name">Conversation</span><span class="delta-val">' + fmtDelta(deltaConv) + '</span></div>' +
           '<div class="delta-row"><span class="delta-name">Tool I/O</span><span class="delta-val">' + fmtDelta(deltaTool) + '</span></div>' +
           '<div class="delta-row total"><span class="delta-name">Total</span><span class="delta-val">' + fmtDelta(delta) + '</span></div>' +
@@ -1646,6 +1689,116 @@ html, body {
     } else {
       deltaEl.innerHTML = '';
     }
+  }
+
+  // ===== TOKEN BREAKDOWN DONUT =====
+  let tokenDonutChart = null;
+
+  function renderTokenBreakdown() {
+    const legendEl = document.getElementById('token-breakdown-legend');
+    const ctx = document.getElementById('token-donut').getContext('2d');
+
+    // Use API-reported resident tokens as the total (ground truth)
+    const apiResident = residentData[currentTurn] || 0;
+    if (apiResident === 0) {
+      legendEl.innerHTML = '<div class="empty-state">No data at this turn</div>';
+      if (tokenDonutChart) { tokenDonutChart.destroy(); tokenDonutChart = null; }
+      return;
+    }
+
+    // System prefix is always pinned (cached)
+    const systemTokens = blocks.filter(b => b.type === 'system' && b.cached).reduce((s, b) => s + b.tokens, 0);
+    const skillTokens = blocks.filter(b => b.type === 'skill' && b.cached).reduce((s, b) => s + b.tokens, 0);
+    const prefixTokens = systemTokens + skillTokens;
+
+    // Working set = API resident - prefix
+    const workingSet = Math.max(0, apiResident - prefixTokens);
+
+    // Count blocks by type that entered up to this turn to get RATIOS
+    // (block token estimates are inflated, but ratios between types are useful)
+    const convTypes = new Set(['user', 'assistant', 'thinking']);
+    const toolTypes = new Set(['tool_call', 'tool_result', 'tool_use']);
+    let convEst = 0, toolEst = 0;
+    for (const b of blocks) {
+      if (b.cached) continue;
+      if (b.enter > currentTurn) continue;
+      if (b.exit !== null && b.exit !== undefined && b.exit <= currentTurn) continue;
+      if (convTypes.has(b.type)) convEst += b.tokens;
+      else if (toolTypes.has(b.type)) toolEst += b.tokens;
+    }
+
+    // Apply ratio to the API-reported working set
+    const totalEst = convEst + toolEst;
+    let convActual, toolActual;
+    if (totalEst > 0) {
+      convActual = Math.round(workingSet * (convEst / totalEst));
+      toolActual = workingSet - convActual;
+    } else {
+      convActual = workingSet;
+      toolActual = 0;
+    }
+
+    const entries = [
+      { name: 'Tool I/O', color: '#ef4444', tokens: toolActual },
+      { name: 'Conversation', color: '#3b82f6', tokens: convActual },
+      { name: 'CLAUDE.md + Skills', color: '#ec4899', tokens: skillTokens },
+      { name: 'System Prompt', color: '#f97316', tokens: systemTokens },
+    ].filter(e => e.tokens > 0);
+
+    entries.sort((a, b) => b.tokens - a.tokens);
+
+    const total = entries.reduce((s, e) => s + e.tokens, 0);
+
+    // Update title with turn info
+    const titleEl = document.getElementById('token-breakdown-title');
+    if (titleEl) titleEl.textContent = 'Context at Call ' + (currentTurn + 1) + ' (' + fmt(apiResident) + ' tokens)';
+
+    if (total === 0) {
+      legendEl.innerHTML = '<div class="empty-state">No data at this turn</div>';
+      if (tokenDonutChart) { tokenDonutChart.destroy(); tokenDonutChart = null; }
+      return;
+    }
+
+    // Build donut chart
+    if (tokenDonutChart) tokenDonutChart.destroy();
+    tokenDonutChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: entries.map(e => e.name),
+        datasets: [{
+          data: entries.map(e => e.tokens),
+          backgroundColor: entries.map(e => e.color),
+          borderWidth: 0,
+          hoverOffset: 4,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        cutout: '60%',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#1a1d23',
+            titleFont: { family: 'JetBrains Mono', size: 11 },
+            bodyFont: { family: 'JetBrains Mono', size: 11 },
+            callbacks: {
+              label: item => item.label + ': ' + fmt(item.raw) + ' (' + (item.raw / total * 100).toFixed(1) + '%)',
+            },
+          },
+        },
+      },
+    });
+
+    // Build legend
+    legendEl.innerHTML = entries.map(e => {
+      const pct = (e.tokens / total * 100).toFixed(1);
+      return '<div class="legend-row">' +
+        '<span class="legend-dot" style="background:' + e.color + '"></span>' +
+        '<span class="legend-pct">' + pct + '%</span>' +
+        '<span>' + e.name + ' (' + fmt(e.tokens) + ')</span>' +
+        '</div>';
+    }).join('');
   }
 
   // ===== TOP GROWTH TURNS (COL 2) =====
@@ -2023,6 +2176,7 @@ html, body {
   // ===== RENDER ALL BOTTOM COLUMNS =====
   function renderTurnDetails() {
     renderComposition();
+    renderTokenBreakdown();
     renderTopGrowth();
     renderMessages();
   }
@@ -2030,9 +2184,9 @@ html, body {
   // ===== SCRUBBER =====
   function updateScrubberLabel() {
     const ct = getConvTurnForCall(currentTurn);
-    let label = 'API Call ' + currentTurn + ' / ' + maxTurn;
+    let label = 'API Call ' + (currentTurn + 1) + ' / ' + (maxTurn + 1);
     if (ct) {
-      label += ' \u00b7 Conv Turn ' + ct.conv_turn + ' / ' + turnMap.length;
+      label += ' \u00b7 Turn ' + ct.conv_turn + ' / ' + turnMap.length;
     }
     document.getElementById('scrubber-label').textContent = label;
   }
@@ -2225,6 +2379,7 @@ html, body {
 
     renderScorecards();
     renderChurnStats();
+    renderTokenBreakdown();
     buildGrowthChart();
     buildChurnChart();
     wireControls();
