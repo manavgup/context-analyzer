@@ -2708,16 +2708,31 @@ html, body {
   function openLightbox(src, metaText) {
     const overlay = document.createElement('div');
     overlay.className = 'lightbox-overlay';
-    overlay.innerHTML =
-      '<button class="lightbox-close">&times;</button>' +
-      '<img class="lightbox-img" src="' + src + '" alt="Image">' +
-      (metaText ? '<div class="lightbox-meta">' + escapeHtml(metaText) + '</div>' : '');
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'lightbox-close';
+    closeBtn.textContent = '\u00d7';
+    overlay.appendChild(closeBtn);
+
+    const img = document.createElement('img');
+    img.className = 'lightbox-img';
+    img.src = src;
+    img.alt = 'Image';
+    overlay.appendChild(img);
+
+    if (metaText) {
+      const metaDiv = document.createElement('div');
+      metaDiv.className = 'lightbox-meta';
+      metaDiv.textContent = metaText;
+      overlay.appendChild(metaDiv);
+    }
     document.body.appendChild(overlay);
 
     // Close on click outside image
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay || e.target.classList.contains('lightbox-close')) {
         overlay.remove();
+        document.removeEventListener('keydown', escHandler);
       }
     });
 
@@ -2749,7 +2764,7 @@ html, body {
     html += '</div>';
     // Summary line
     const parts = images.map(function(img) {
-      return img.width + 'x' + img.height + ' ' + (img.media_type || '').replace('image/', '') + ' (' + img.tokens + ' tok)';
+      return escapeHtml(img.width + 'x' + img.height + ' ' + (img.media_type || '').replace('image/', '') + ' (' + img.tokens + ' tok)');
     });
     html += '<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">' +
       images.length + ' image' + (images.length > 1 ? 's' : '') + ' -- ' + parts.join(' + ') +

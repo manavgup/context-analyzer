@@ -40,10 +40,10 @@ def image_dimensions(b64_data: str, media_type: str) -> tuple[int, int]:
             except struct.error:
                 pass
     elif media_type in ("image/jpeg", "image/jpg"):
-        # Scan for SOF0 marker (0xFF 0xC0)
+        # Scan for SOF markers (SOF0-SOF3: baseline, extended, progressive, lossless)
         i = 0
         while i < len(raw) - 8:
-            if raw[i] == 0xFF and raw[i + 1] == 0xC0:
+            if raw[i] == 0xFF and raw[i + 1] in (0xC0, 0xC1, 0xC2, 0xC3):
                 try:
                     h = struct.unpack(">H", raw[i + 5 : i + 7])[0]
                     w = struct.unpack(">H", raw[i + 7 : i + 9])[0]

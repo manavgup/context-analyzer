@@ -117,16 +117,11 @@ def _extract_content_blocks_with_images(
     content: str | list,
     entry_type: str,
     timestamp: str,
-    item: dict | None = None,
 ) -> list[dict]:
     """Extract message dicts from raw content, including image metadata.
 
     This shared helper is used by both get_call_content and
     get_conv_turn_content to ensure consistent flattening order.
-
-    When item is provided, it's the top-level content block dict (e.g.,
-    a tool_result or image block). When content is a string or list,
-    item can be None and we process the content directly.
 
     Returns a list of message dicts ready for the API response.
     """
