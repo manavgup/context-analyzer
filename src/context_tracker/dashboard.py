@@ -818,6 +818,56 @@ def create_app(
         # Ensure session is ingested into DB (v3 may load via /data without DB)
         _ensure_ingested(session_id, trace_dir, db_path, transcript_dir)
 
+        # Build agent_id -> launch conv_turn mapping from transcript.
+        # Match Agent tool_use blocks in the transcript to SubagentRecords
+        # by description text (tool_use_id != agent_id, so we can't match by ID).
+        agent_launch_turns: dict[str, int] = {}
+        transcript_path = _find_transcript(session_id, transcript_dir)
+        if transcript_path and transcript_path.exists():
+            from context_tracker.ccscope.parse_transcript import build_turn_map
+
+            turn_map_data = build_turn_map(transcript_path)
+            # Collect all Agent tool_use blocks with their descriptions and conv_turns
+            agent_launches: list[dict[str, object]] = []
+            api_call_idx = -1
+            with open(transcript_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if entry.get("type") != "assistant":
+                        continue
+                    message = entry.get("message", {})
+                    if message.get("stop_reason") is None:
+                        continue
+                    usage = message.get("usage", {})
+                    if usage.get("output_tokens", 0) == 0:
+                        continue
+                    if message.get("model") == "synthetic":
+                        continue
+                    api_call_idx += 1
+                    content = message.get("content", [])
+                    if not isinstance(content, list):
+                        continue
+                    for block_item in content:
+                        if not isinstance(block_item, dict):
+                            continue
+                        if block_item.get("type") == "tool_use" and block_item.get("name") in ("Agent", "Task"):
+                            inp = block_item.get("input", {})
+                            desc = inp.get("description", inp.get("prompt", "")) if isinstance(inp, dict) else ""
+                            # Find conv_turn for this api_call_idx
+                            conv_turn = None
+                            for tm in turn_map_data:
+                                if tm["first_call"] <= api_call_idx <= tm["last_call"]:
+                                    conv_turn = tm["conv_turn"]
+                                    break
+                            if conv_turn is not None:
+                                agent_launches.append({"desc": str(desc)[:80], "conv_turn": conv_turn})
+
         engine = get_engine(db_path)
         factory = get_session_factory(engine)
         with factory() as db:
@@ -850,6 +900,16 @@ def create_app(
 
                 total_peak += sa.peak_resident
 
+                # Match this subagent to its launch turn by description
+                launch_turn = agent_launch_turns.get(sa.agent_id)
+                if launch_turn is None and agent_launches:
+                    sa_desc = (sa.description or "")[:80]
+                    for al in agent_launches:
+                        if sa_desc and al["desc"] and sa_desc in str(al["desc"]):
+                            launch_turn = int(str(al["conv_turn"]))
+                            agent_launches.remove(al)
+                            break
+
                 subagents_out.append(
                     {
                         "agent_id": sa.agent_id,
@@ -860,6 +920,7 @@ def create_app(
                         "total_api_calls": sa.total_api_calls,
                         "total_output_tokens": computed_output or sa.total_output_tokens,
                         "churn": churn_data,
+                        "launch_turn": launch_turn,
                     }
                 )
 
