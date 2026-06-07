@@ -19,30 +19,35 @@ Subagents, MCP server tool calls, and skill invocations are significant parts of
 
 ### Tool Classification
 
-Classify tool calls by parsing `tool_name` from existing `ContextBlock` and `ContentBlock` data:
+Classify tool calls by parsing `tool_name` from `TOOL_USE` blocks only. `TOOL_RESULT` blocks do not carry `tool_name` -- they must be classified by following `parent_block_id` to the originating `TOOL_USE` block, or by building a `tool_use_id -> tool_name` lookup map during the classification pass.
 
 | Pattern | Category | Example |
 |---------|----------|---------|
 | `tool_name.startswith("mcp__")` | MCP | `mcp__serena__find_symbol` |
-| `tool_name == "Skill"` | Skill | Skill tool with `input.skill = "codex"` |
-| `tool_name == "Agent"` | Agent | Agent tool with `input.prompt = "..."` |
+| `tool_name == "Skill"` | Skill | Skill tool (see note on skill name extraction below) |
+| `tool_name == "Agent"` | Agent | Agent tool |
 | `tool_name == "Task"` | Task | Task tool (grouped with Agent) |
 | Everything else | Builtin | Read, Write, Bash, Edit, Grep, Glob |
 
-MCP tool names are further split: `mcp__<server>__<function>` parsed via splitting on `__` (take index 1 as server, index 2+ joined as function).
+**MCP name parsing:** Split `tool_name` on `__` with `maxsplit=2` (not unlimited split), yielding `["mcp", server, function]`. This handles function names containing `__`. If server names contain `__` (unlikely but possible), the first segment after `mcp` is taken as server. Formally: `parts = tool_name.split("__", 2); server = parts[1]; function = parts[2]`.
 
-No new database fields or schema changes. Classification is computed at query time from existing `tool_name` strings.
+**Skill name extraction:** `ContextBlock` does not carry `tool_input` -- it only has `tool_name`, `tool_use_id`, `resource`, and `resource_type`. To get the skill name (e.g., "codex"), the `/tool-intelligence` endpoint must re-read the raw transcript `tool_use` block content via `ContentStore` or by re-parsing the transcript entry. Specifically, look up the `TOOL_USE` block's content in `content_store`, parse the JSON `tool_input`, and extract `tool_input["skill"]`. This is the same pattern used by `extract_resource()` in `reconstruction.py`.
+
+**Skill invocations vs skill prefix content:** Skill *invocations* are `tool_use` blocks with `name="Skill"` in the raw transcript. Skill *prefix content* (the skill instruction text that gets injected into the context) is categorized as pinned system content ("System Prefix"). These are distinct: the donut's "Skills" category counts only invocation tokens, not the cached prefix.
+
+No new database fields or schema changes. Classification is computed at query time.
 
 ### Data Sources
 
 | Data | Source | Already Exists? |
 |------|--------|----------------|
-| Tool call counts | `ContextBlock.tool_name` in `block_registry` | Yes |
+| Tool call counts | `ContextBlock.tool_name` on `TOOL_USE` blocks in `block_registry` | Yes |
+| Tool result pairing | `ContextBlock.parent_block_id` on `TOOL_RESULT` -> originating `TOOL_USE` | Yes |
 | Tool token cost | `ContextBlock.size_chars` (proportioned to tokens) | Yes |
 | Subagent stats | `SubagentRecord` + `SubagentApiCallRecord` in DB | Yes |
 | Subagent per-call churn | `SubagentApiCallRecord.{input,output,cache_read,cache_creation}` | Yes |
-| Skill name | `ContentBlock.tool_input["skill"]` | Yes (in transcript) |
-| MCP server/function | Parsed from `tool_name` string | Yes (derivable) |
+| Skill name | `content_store` -> parse `tool_input` JSON -> `["skill"]` | Yes (in transcript) |
+| MCP server/function | Parsed from `tool_name` string via `split("__", 2)` | Yes (derivable) |
 
 ## Components
 
@@ -57,7 +62,7 @@ Replaces the current 3-category donut (System+Skills / Conversation / Tool I/O) 
 - **Skills** — tool_use + tool_result where `tool_name == "Skill"`
 - **Agent Spawns** — tool_use + tool_result where `tool_name in ("Agent", "Task")`
 
-Token proportioning uses the existing block-ratio approach: sum `size_chars` per category from `block_registry`, compute ratios, apply to API-reported working set tokens.
+Token proportioning: The existing frontend donut computes composition from `blocks` returned by `/data` (ccscope.reconcile output), not from `block_registry`. The new `/tool-intelligence` backend endpoint replaces this frontend calculation entirely, providing pre-classified token totals. The frontend donut renders directly from the endpoint response -- no client-side block iteration needed. This eliminates the risk of two inconsistent composition models.
 
 The prefix breakdown bar below the donut stays as-is.
 
@@ -152,7 +157,7 @@ Returns the classified tool breakdown for the composition donut and tools tab:
 }
 ```
 
-Implementation: Reconstruct session, iterate `block_registry`, classify each `TOOL_USE` and `TOOL_RESULT` block by `tool_name` pattern matching.
+Implementation: Reconstruct session. First pass: iterate `block_registry` for `TOOL_USE` blocks, classify by `tool_name`, build a `tool_use_id -> category` lookup map. For Skill blocks, read `content_store` to extract the skill name from `tool_input`. Second pass: iterate `TOOL_RESULT` blocks, classify by following `parent_block_id` to the originating `TOOL_USE` block (or via the `tool_use_id` lookup map). Sum `size_chars` per category, proportion against API-reported token totals.
 
 ### New endpoint: `GET /api/session/{session_id}/subagents`
 
@@ -180,11 +185,18 @@ Exposes existing `SubagentRecord` + `SubagentApiCallRecord` data from DB:
 }
 ```
 
-Implementation: Query `SubagentRecord` + `SubagentApiCallRecord` from DB. No reconstruction needed — pure DB read.
+Implementation: First call `_ensure_ingested(session_id)` (or equivalent) to guarantee the session has been ingested into the DB. The v3 dashboard may load sessions via `/data` (ccscope.reconcile) without triggering DB ingestion, so a pure DB query would return empty. After ensuring ingestion, query `SubagentRecord` + `SubagentApiCallRecord`. Compute `total_output_tokens` from `sum(SubagentApiCallRecord.output_tokens)` since `parse_subagents()` does not currently populate this field in the ingestion path.
 
 ### Extend existing: `GET /api/session/{id}/conv_turn/{n}/content`
 
-Add `tool_category` field to each message in the response:
+Add `tool_category` and `tool_display_name` fields to each message in the response. These must be computed server-side because:
+
+1. `tool_result` messages have `tool_use_id` but no `tool_name` -- the backend must look up the originating `tool_use` block to classify results.
+2. Skill display names require parsing `tool_input` from the raw transcript entry, which is not currently returned by the endpoint.
+
+For `tool_use` blocks: classify by `tool_name` string, extract display name (MCP: `server.function`, Skill: `tool_input["skill"]`, Agent: first 40 chars of `tool_input["prompt"]`).
+
+For `tool_result` blocks: build a `tool_use_id -> {category, display_name}` map from the preceding `tool_use` blocks in the same turn, then apply to each result.
 
 ```json
 {
@@ -196,7 +208,18 @@ Add `tool_category` field to each message in the response:
 }
 ```
 
-Categories: `"mcp"`, `"skill"`, `"agent"`, `"builtin"`. Computed from `tool_name` string.
+```json
+{
+  "type": "tool_result",
+  "tool_use_id": "toolu_01XYZ",
+  "tool_category": "mcp",
+  "tool_display_name": "serena.find_symbol",
+  "content": "...",
+  "is_error": false
+}
+```
+
+Categories: `"mcp"`, `"skill"`, `"agent"`, `"builtin"`.
 
 ## Frontend Changes
 
@@ -268,5 +291,21 @@ None. All changes go into existing files.
 
 - Cross-session tool usage analytics (future: requires multi-session aggregation)
 - Tool usage timeline overlay on growth chart (deferred as optional enhancement)
-- Task tool lifecycle tracking (low value — tasks are ephemeral)
+- Task tool lifecycle tracking (low value -- tasks are ephemeral)
 - MCP server health/error tracking (better suited for issue #41 error highlighting)
+
+## Codex Review Findings (2026-06-07)
+
+Independent review via `/codex` identified 5 P1 and 4 P2 findings. All addressed in this revision:
+
+| # | Severity | Finding | Resolution |
+|---|----------|---------|------------|
+| 1 | P1 | `ContextBlock.tool_name` only on `TOOL_USE`, not `TOOL_RESULT` | Added parent_block_id pairing logic and tool_use_id lookup map |
+| 2 | P1 | `tool_input` not on `ContextBlock` | Changed to read from `content_store` + parse JSON |
+| 3 | P1 | conv_turn endpoint drops `tool_input` | Made tool_category/display_name server-computed |
+| 4 | P1 | tool_result badges need pairing logic | Added tool_use_id -> category map for results |
+| 5 | P1 | `/subagents` fragile for non-ingested sessions | Added `_ensure_ingested()` requirement |
+| 6 | P2 | `total_output_tokens` not populated | Changed to compute from churn sum |
+| 7 | P2 | Composition donut wrong data path | Clarified backend replaces frontend calculation |
+| 8 | P2 | MCP `split("__")` underspecified | Changed to `split("__", 2)` with maxsplit |
+| 9 | P2 | Skill invocations vs prefix content | Added explicit distinction section |
