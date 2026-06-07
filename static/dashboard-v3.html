@@ -666,6 +666,58 @@ html, body {
   text-align: right;
 }
 
+/* Prefix breakdown */
+.prefix-breakdown {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.prefix-stacked-bar {
+  display: flex;
+  height: 14px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 8px 0 10px;
+  background: #e5e7eb;
+}
+
+.prefix-segment {
+  height: 100%;
+  transition: opacity 0.15s;
+  cursor: default;
+  position: relative;
+}
+
+.prefix-segment:hover {
+  opacity: 0.8;
+}
+
+.prefix-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+.prefix-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.prefix-legend-pct {
+  color: var(--text);
+  font-weight: 600;
+  min-width: 32px;
+  text-align: right;
+}
+
 /* Nav links */
 .nav-link {
   font-family: var(--mono);
@@ -907,6 +959,11 @@ html, body {
             <div id="token-breakdown-legend"></div>
           </div>
         </div>
+        <div class="prefix-breakdown" id="prefix-breakdown">
+          <div class="bottom-card-title" id="prefix-breakdown-title">Prefix Breakdown</div>
+          <div id="prefix-stacked-bar" class="prefix-stacked-bar"></div>
+          <div id="prefix-legend"></div>
+        </div>
       </div>
       <!-- Col 2: Top Growth Turns -->
       <div class="bottom-card" id="col-growth">
@@ -1084,6 +1141,8 @@ html, body {
     // Clear caches
     callContentCache = {};
     convTurnContentCache = {};
+    prefixBreakdownData = null;
+    prefixBreakdownLoading = false;
 
     // Destroy existing charts
     if (growthChart) { growthChart.destroy(); growthChart = null; }
@@ -1123,6 +1182,9 @@ html, body {
 
     // Update header model
     document.getElementById('header-model').textContent = meta.model || '';
+
+    // Fetch prefix breakdown for the new session (async, non-blocking)
+    fetchPrefixBreakdown();
 
     // Update picker selection
     picker.value = sessionId;
@@ -1801,6 +1863,72 @@ html, body {
     }).join('');
   }
 
+  // ===== PREFIX BREAKDOWN =====
+  const PREFIX_COLORS = {
+    'System Prompt':    '#f97316',  // orange
+    'System Tools':     '#8b5cf6',  // purple
+    'Skills':           '#ec4899',  // pink
+    'Memory Files':     '#10b981',  // green
+    'Custom Agents':    '#3b82f6',  // blue
+    'System Reminders': '#f59e0b',  // amber
+  };
+
+  let prefixBreakdownData = null;  // cached per session
+  let prefixBreakdownLoading = false;
+
+  async function fetchPrefixBreakdown() {
+    if (prefixBreakdownData !== null || prefixBreakdownLoading) return;
+    if (!meta.session_id) return;
+
+    prefixBreakdownLoading = true;
+    try {
+      const resp = await fetch('/api/session/' + encodeURIComponent(meta.session_id) + '/prefix-breakdown');
+      if (resp.ok) {
+        prefixBreakdownData = await resp.json();
+      }
+    } catch(e) {
+      // Silently fail — prefix breakdown is optional
+    }
+    prefixBreakdownLoading = false;
+    renderPrefixBreakdown();
+  }
+
+  function renderPrefixBreakdown() {
+    const container = document.getElementById('prefix-breakdown');
+    const barEl = document.getElementById('prefix-stacked-bar');
+    const legendEl = document.getElementById('prefix-legend');
+    const titleEl = document.getElementById('prefix-breakdown-title');
+
+    if (!prefixBreakdownData || !prefixBreakdownData.categories || prefixBreakdownData.categories.length === 0) {
+      container.style.display = 'none';
+      return;
+    }
+
+    container.style.display = 'block';
+    const cats = prefixBreakdownData.categories;
+    const totalTokens = prefixBreakdownData.total_prefix_tokens || 1;
+
+    titleEl.textContent = 'Prefix Breakdown (' + fmt(totalTokens) + ' tokens)';
+
+    // Build stacked bar
+    barEl.innerHTML = cats.map(c => {
+      const pct = Math.max(0.5, (c.tokens / totalTokens) * 100);
+      const color = PREFIX_COLORS[c.name] || '#6b7280';
+      return '<div class="prefix-segment" style="width:' + pct.toFixed(1) + '%;background:' + color + '" title="' + c.name + ': ' + fmt(c.tokens) + ' tokens (' + (c.tokens / totalTokens * 100).toFixed(1) + '%)"></div>';
+    }).join('');
+
+    // Build legend
+    legendEl.innerHTML = cats.map(c => {
+      const pct = (c.tokens / totalTokens * 100).toFixed(1);
+      const color = PREFIX_COLORS[c.name] || '#6b7280';
+      return '<div class="prefix-legend-row">' +
+        '<span class="prefix-legend-dot" style="background:' + color + '"></span>' +
+        '<span class="prefix-legend-pct">' + pct + '%</span>' +
+        '<span>' + c.name + ' (' + fmt(c.tokens) + ')</span>' +
+        '</div>';
+    }).join('');
+  }
+
   // ===== TOP GROWTH TURNS (COL 2) =====
   let topGrowthData = []; // pre-computed
 
@@ -2402,6 +2530,9 @@ html, body {
       'Prefix ' + fmt(pinnedTokens) + ' tok \u00b7 ' + churn.length + ' calls';
     document.getElementById('churn-hint').textContent =
       'Total re-read: ' + fmt(cumulativeRead[cumulativeRead.length - 1] || 0);
+
+    // Fetch prefix breakdown (async, non-blocking)
+    fetchPrefixBreakdown();
 
     // Populate session picker (async, non-blocking)
     populateSessionPicker();

@@ -75,6 +75,168 @@ def _ensure_ingested(
     )
 
 
+def _parse_prefix_categories(text: str) -> list[dict]:
+    """Parse a system prompt text into prefix categories.
+
+    Uses regex heuristics to identify sections of the Claude Code system
+    prompt: tool definitions, skills, memory files, custom agents, and
+    the base system prompt.
+
+    Each character position is assigned to at most one category (priority
+    order: tools > skills > memory > agents > system prompt) to avoid
+    double-counting overlapping regions.
+
+    Returns a list of dicts with keys: name, chars, tokens.
+    """
+    import re as _re
+
+    n = len(text)
+    if n == 0:
+        return []
+
+    # Assign each character position to a category.
+    # Default is 0 (system prompt); higher numbers = higher priority.
+    CAT_SYSTEM = 0
+    CAT_AGENTS = 1
+    CAT_MEMORY = 2
+    CAT_SKILLS = 3
+    CAT_TOOLS = 4
+
+    # Use a bytearray for speed — one byte per char position
+    assignment = bytearray(n)
+
+    def mark(start: int, end: int, cat: int) -> None:
+        """Mark character range [start, end) with the given category."""
+        for i in range(max(0, start), min(n, end)):
+            if cat > assignment[i]:
+                assignment[i] = cat
+
+    # 1. Tool definitions: <functions>...</functions>
+    for m in _re.finditer(r'<functions>.*?</functions>', text, _re.DOTALL):
+        mark(m.start(), m.end(), CAT_TOOLS)
+
+    # 2. Skills
+    # available-deferred-tools block
+    for m in _re.finditer(
+        r'<available-deferred-tools>.*?</available-deferred-tools>',
+        text, _re.DOTALL,
+    ):
+        mark(m.start(), m.end(), CAT_SKILLS)
+    # Skill list inside system-reminder (- skillname: description lines)
+    # Match blocks of "- name: description\n  continuation..." lines
+    for m in _re.finditer(
+        r'(?:^|\n)(- [\w-]+(?::[\w-]+)?:.*(?:\n  .*)*)',
+        text,
+    ):
+        # Only mark if this is inside a system-reminder block
+        start = m.start(1)
+        preceding = text[max(0, start - 5000):start]
+        if '<system-reminder>' in preceding:
+            mark(start, m.end(), CAT_SKILLS)
+
+    # 3. Memory files
+    # Contents of ... memory/ or CLAUDE.md blocks
+    for m in _re.finditer(
+        r'Contents of\s+\S*(?:memory/|CLAUDE\.md|\.claude/).*?(?=\nContents of |\n# |\Z)',
+        text, _re.DOTALL,
+    ):
+        mark(m.start(), m.end(), CAT_MEMORY)
+    # # claudeMd section headers + content
+    for m in _re.finditer(
+        r'(?:^|\n)# claudeMd\n.*?(?=\n# |\Z)', text, _re.DOTALL,
+    ):
+        mark(m.start(), m.end(), CAT_MEMORY)
+
+    # 4. Custom agents
+    for m in _re.finditer(
+        r'(?:Available agent types|agent type).*?(?=\n# |\Z)',
+        text, _re.DOTALL | _re.IGNORECASE,
+    ):
+        mark(m.start(), m.end(), CAT_AGENTS)
+
+    # Count chars per category
+    cat_names = {
+        CAT_SYSTEM: "System Prompt",
+        CAT_AGENTS: "Custom Agents",
+        CAT_MEMORY: "Memory Files",
+        CAT_SKILLS: "Skills",
+        CAT_TOOLS: "System Tools",
+    }
+    counts: dict[int, int] = {}
+    for byte_val in assignment:
+        counts[byte_val] = counts.get(byte_val, 0) + 1
+
+    # Convert to list of dicts (only non-zero categories)
+    result = []
+    for cat_id, name in cat_names.items():
+        chars = counts.get(cat_id, 0)
+        if chars > 0:
+            result.append({
+                "name": name,
+                "chars": chars,
+                "tokens": max(1, chars // 4),
+            })
+
+    # Sort by tokens descending
+    result.sort(key=lambda x: x["tokens"], reverse=True)
+    return result
+
+
+def _extract_first_user_text(transcript_path: Path) -> str:
+    """Extract all user text content from before the first completed API call.
+
+    In Claude Code transcripts, the system prompt components (tool definitions,
+    skills, memory, etc.) are injected as user message content before the first
+    assistant response.  This function concatenates all such text.
+    """
+    import json as _json
+
+    text_parts: list[str] = []
+
+    with open(transcript_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = _json.loads(line)
+            except _json.JSONDecodeError:
+                continue
+
+            etype = entry.get("type", "")
+
+            # Skip non-message types
+            if etype in (
+                "file-history-snapshot", "last-prompt",
+                "pr-link", "queue-operation", "system", "attachment",
+            ):
+                continue
+
+            # Once we hit a completed assistant message, stop
+            if etype == "assistant":
+                msg = entry.get("message", {})
+                stop_reason = msg.get("stop_reason")
+                output_tokens = msg.get("usage", {}).get("output_tokens", 0)
+                model = msg.get("model", "")
+                if stop_reason is not None and output_tokens > 0 and model != "synthetic":
+                    break
+                continue
+
+            if etype == "user":
+                msg = entry.get("message", {})
+                content = msg.get("content", "")
+                if isinstance(content, str) and content.strip():
+                    text_parts.append(content)
+                elif isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            text = block.get("text", "")
+                            if text.strip():
+                                text_parts.append(text)
+
+    return "\n".join(text_parts)
+
+
 def create_app(
     trace_dir: Path = DEFAULT_TRACE_DIR,
     transcript_dir: Path = DEFAULT_TRANSCRIPT_DIR,
@@ -82,6 +244,9 @@ def create_app(
     db_path: Path = DEFAULT_DB_PATH,
 ) -> FastAPI:
     app = FastAPI(title="Context Analyzer", version="0.4.0")
+
+    # Cache for prefix breakdown results (session_id -> breakdown dict)
+    _prefix_cache: dict[str, dict] = {}
 
     @app.get("/api/health")
     def health_check():
@@ -862,6 +1027,57 @@ def create_app(
             "messages": messages_out,
             "usage": total_usage,
         }
+
+    @app.get("/api/session/{session_id}/prefix-breakdown")
+    def get_prefix_breakdown(session_id: str):
+        """Granular breakdown of the system prefix into sub-categories.
+
+        Parses the first user message(s) in the transcript to identify
+        system prompt components: base instructions, tool definitions,
+        skills, memory files, and custom agents.
+
+        The result is cached per session (the prefix is fixed for the
+        entire session).
+        """
+        _validate_session_id(session_id)
+
+        # Return cached result if available
+        if session_id in _prefix_cache:
+            return _prefix_cache[session_id]
+
+        transcript_path = _find_transcript(session_id, transcript_dir)
+        if transcript_path is None:
+            raise HTTPException(status_code=404, detail="Transcript not found")
+
+        # Extract all user text before the first completed API call
+        first_text = _extract_first_user_text(transcript_path)
+
+        if not first_text:
+            # No parseable user text — return a single "System" bucket
+            # using the prefix tokens from the blocks data
+            result = {
+                "session_id": session_id,
+                "total_prefix_chars": 0,
+                "total_prefix_tokens": 0,
+                "categories": [],
+                "source": "no_user_text",
+            }
+            _prefix_cache[session_id] = result
+            return result
+
+        categories = _parse_prefix_categories(first_text)
+        total_chars = sum(c["chars"] for c in categories)
+        total_tokens = sum(c["tokens"] for c in categories)
+
+        result = {
+            "session_id": session_id,
+            "total_prefix_chars": total_chars,
+            "total_prefix_tokens": total_tokens,
+            "categories": categories,
+            "source": "transcript_parse",
+        }
+        _prefix_cache[session_id] = result
+        return result
 
     @app.get("/sessions")
     def serve_sessions_page():
