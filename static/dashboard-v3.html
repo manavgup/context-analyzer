@@ -956,6 +956,188 @@ html, body {
 }
 .scorecard-value.has-errors { color: #ef4444; }
 
+/* ===== TOOL INTELLIGENCE TABS (left column) ===== */
+.left-tab-toggle {
+  display: flex;
+  gap: 0;
+  margin-bottom: 12px;
+}
+.left-tab-btn {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.left-tab-btn:hover { color: var(--text-secondary); }
+.left-tab-btn.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.left-tab-content { display: none; }
+.left-tab-content.active { display: block; }
+
+/* Tool rows (Tools tab) */
+.tool-section-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  margin: 10px 0 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.tool-section-title:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+
+.tool-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 11px;
+  border-bottom: 1px solid rgba(229,231,235,0.5);
+}
+.tool-row:last-child { border-bottom: none; }
+.tool-row-name {
+  font-family: var(--mono);
+  color: var(--text-secondary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.tool-row-bar {
+  width: 50px;
+  height: 4px;
+  background: #e5e7eb;
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.tool-row-bar-fill { height: 100%; border-radius: 2px; }
+.tool-row-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  min-width: 22px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.tool-row-tokens {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text);
+  min-width: 36px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Expandable MCP server */
+.mcp-fn-list {
+  display: none;
+  padding-left: 14px;
+  margin-bottom: 4px;
+}
+.mcp-fn-list.open { display: block; }
+.mcp-fn-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+.mcp-fn-row-name { flex: 1; }
+.mcp-fn-row-count { min-width: 22px; text-align: right; }
+.mcp-expand-icon {
+  font-size: 8px;
+  color: var(--text-muted);
+  transition: transform 0.15s;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.mcp-expand-icon.open { transform: rotate(90deg); }
+
+/* Agent cards (Agents tab) */
+.agents-summary {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+.agent-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.agent-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.agent-type-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(52,211,153,0.12);
+  color: #059669;
+  white-space: nowrap;
+}
+.agent-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 6px;
+}
+.agent-stats {
+  display: flex;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.agent-stats b { color: var(--text); font-weight: 600; }
+.agent-mini-chart {
+  width: 100%;
+  height: 40px;
+}
+
+/* Tool category badges (messages pane) */
+.tool-cat-badge {
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.tool-cat-badge-mcp { background: rgba(236,72,153,0.12); color: #ec4899; }
+.tool-cat-badge-skill { background: rgba(245,158,11,0.12); color: #f59e0b; }
+.tool-cat-badge-agent { background: rgba(52,211,153,0.12); color: #34d399; }
+.tool-cat-badge-builtin { background: rgba(99,102,241,0.12); color: #6366f1; }
+
 /* Custom scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -1200,17 +1382,32 @@ html, body {
 
     <!-- Section 5: Three-Column Bottom -->
     <div class="bottom-grid">
-      <!-- Col 1: Composition -->
+      <!-- Col 1: Composition / Tools / Agents (tabbed) -->
       <div class="bottom-card" id="col-composition">
-        <div class="bottom-card-title">Composition (Cumulative)</div>
-        <div id="comp-bars"></div>
-        <div id="comp-delta"></div>
-        <div class="token-breakdown">
-          <div class="bottom-card-title" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);" id="token-breakdown-title">Token Breakdown</div>
-          <div class="token-breakdown-body">
-            <div class="token-donut-wrap"><canvas id="token-donut" width="100" height="100"></canvas></div>
-            <div id="token-breakdown-legend"></div>
+        <div class="left-tab-toggle">
+          <button class="left-tab-btn active" data-tab="comp" onclick="switchLeftTab('comp')">Composition</button>
+          <button class="left-tab-btn" data-tab="tools" onclick="switchLeftTab('tools')">Tools</button>
+          <button class="left-tab-btn" data-tab="agents" onclick="switchLeftTab('agents')">Agents</button>
+        </div>
+        <!-- Composition tab -->
+        <div class="left-tab-content active" id="left-tab-comp">
+          <div id="comp-bars"></div>
+          <div id="comp-delta"></div>
+          <div class="token-breakdown">
+            <div class="bottom-card-title" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);" id="token-breakdown-title">Token Breakdown</div>
+            <div class="token-breakdown-body">
+              <div class="token-donut-wrap"><canvas id="token-donut" width="100" height="100"></canvas></div>
+              <div id="token-breakdown-legend"></div>
+            </div>
           </div>
+        </div>
+        <!-- Tools tab -->
+        <div class="left-tab-content" id="left-tab-tools">
+          <div id="tools-tab-content"><div class="empty-state">Loading tool data...</div></div>
+        </div>
+        <!-- Agents tab -->
+        <div class="left-tab-content" id="left-tab-agents">
+          <div id="agents-tab-content"><div class="empty-state">Loading agent data...</div></div>
         </div>
       </div>
       <!-- Col 2: Top Growth Turns / Dead Weight -->
@@ -1272,6 +1469,8 @@ html, body {
   let errorData = null;        // from /api/session/{id}/errors
   let errorTurnSet = new Set(); // conv_turn numbers with errors (O(1) lookup)
   let selfCorrectionTurnSet = new Set(); // turns with self-corrections
+  let toolIntelData = null;    // from /api/session/{id}/tool-intelligence
+  let subagentData = null;     // from /api/session/{id}/subagents
 
   // Derived data (computed once)
   let labels = [];
@@ -1392,6 +1591,8 @@ html, body {
       fetchHealthData(sessionId);
       fetchDeadWeightData(sessionId);
       fetchErrorData(sessionId);
+      fetchToolIntelData(sessionId);
+      fetchSubagentData(sessionId);
 
       return true;
     } catch(e) {
@@ -1419,6 +1620,8 @@ html, body {
     errorData = null;
     errorTurnSet = new Set();
     selfCorrectionTurnSet = new Set();
+    toolIntelData = null;
+    subagentData = null;
 
     // Destroy existing charts
     if (growthChart) { growthChart.destroy(); growthChart = null; }
@@ -1652,7 +1855,7 @@ html, body {
         labels: labels,
         datasets: [
           {
-            label: 'System + Skills',
+            label: 'System Prefix',
             data: systemData,
             fill: true,
             backgroundColor: 'rgba(167, 139, 250, 0.35)',
@@ -2030,6 +2233,10 @@ html, body {
   let tokenDonutChart = null;
 
   function renderTokenBreakdown() {
+    // If tool intelligence data is loaded, the composition donut is managed
+    // by renderCompositionTab() — skip the old per-turn calculation.
+    if (toolIntelData) return;
+
     const legendEl = document.getElementById('token-breakdown-legend');
     const ctx = document.getElementById('token-donut').getContext('2d');
 
@@ -2268,8 +2475,6 @@ html, body {
                          (type === 'assistant' || type === 'assistant_text' || type === 'thinking') ? 'asst' : 'tool';
       const roleLabel = roleClass === 'user' ? 'USER' : roleClass === 'asst' ? 'ASSIS' : 'TOOL';
       const isConv = (type === 'user' || type === 'assistant' || type === 'user_text' || type === 'assistant_text' || type === 'thinking');
-      const catColor = isConv ? '#3b82f6' : '#10b981';
-      const catLabel = isConv ? 'Conv' : 'Tool';
       const preview = (msg.content || '').replace(/\s+/g, ' ').substring(0, 80);
       const sizeChars = msg.size_chars || 0;
       const sizeTok = Math.round(sizeChars / 4);
@@ -2277,7 +2482,7 @@ html, body {
       const barColor = getBadgeColor(type);
       const borderColor = getBadgeColor(type);
 
-      // Error badges (server-computed flags)
+      // Error badges (server-computed flags) (#41)
       let badges = '';
       let rowClasses = 'msg-row';
       if (msg.is_error) {
@@ -2292,15 +2497,32 @@ html, body {
         rowClasses += ' is-self-correct';
       }
 
-      // Image badge
+      // Tool category badge (#43 - from server-side classification or client-side fallback)
+      let catBadgeHtml = '';
+      if (type === 'tool_use' || type === 'tool_result') {
+        const toolCat = msg.tool_category;
+        if (toolCat) {
+          const badgeCls = 'tool-cat-badge-' + toolCat;
+          const cls = classifyTool(msg.tool_name || '');
+          catBadgeHtml = '<span class="tool-cat-badge ' + badgeCls + '">' + cls.badge + '</span> ';
+        } else if (msg.tool_name) {
+          const cls = classifyTool(msg.tool_name);
+          const badgeCls = 'tool-cat-badge-' + cls.category;
+          catBadgeHtml = '<span class="tool-cat-badge ' + badgeCls + '">' + cls.badge + '</span> ';
+        }
+      }
+
+      // Image badge (#40)
       const imgCount = (msg.images && msg.images.length) || 0;
       const imgBadge = imgCount > 0
         ? '<span class="msg-img-badge">' + imgCount + ' img</span>'
         : '';
 
+      // Badge ordering: [ROLE] [ERR] [RETRY/FIX] [TOOL_TYPE] [preview] [IMG] [SIZE]
       html += '<div class="' + rowClasses + '" data-idx="' + i + '" style="border-left-color:' + borderColor + '">' +
         '<span class="msg-role ' + roleClass + '">' + roleLabel + '</span>' +
         badges +
+        catBadgeHtml +
         '<span class="msg-content-preview">' + escapeHtml(preview) + '</span>' +
         imgBadge +
         '<span class="msg-size-bar"><span class="msg-size-fill" style="width:' + barPct.toFixed(0) + '%;background:' + barColor + '"></span></span>' +
@@ -2505,6 +2727,24 @@ html, body {
     return TYPE_COLORS[type] || '#6b7280';
   }
 
+  // Tool classification for messages pane badges
+  function classifyTool(toolName) {
+    if (!toolName) return { category: 'builtin', badge: 'TOOL', color: '#6366f1' };
+    if (toolName.startsWith('mcp__')) return { category: 'mcp', badge: 'MCP', color: '#ec4899' };
+    if (toolName === 'Skill') return { category: 'skill', badge: 'SKILL', color: '#f59e0b' };
+    if (toolName === 'Agent' || toolName === 'Task') return { category: 'agent', badge: 'AGENT', color: '#34d399' };
+    return { category: 'builtin', badge: 'TOOL', color: '#6366f1' };
+  }
+
+  function toolDisplayName(toolName) {
+    if (!toolName) return '';
+    if (toolName.startsWith('mcp__')) {
+      const parts = toolName.split('__', 3);
+      return (parts[1] || 'unknown') + '.' + (parts[2] || 'unknown');
+    }
+    return toolName;
+  }
+
   // Staleness label colors
   const STALENESS_COLORS = {
     active: '#34d399',
@@ -2513,6 +2753,257 @@ html, body {
     dead_weight: '#f87171',
     pinned: '#6366f1',
   };
+
+  // ===== TOOL INTELLIGENCE FETCHING + RENDERING =====
+  async function fetchToolIntelData(sessionId) {
+    try {
+      const resp = await fetch('/api/session/' + encodeURIComponent(sessionId) + '/tool-intelligence');
+      if (!resp.ok) return;
+      toolIntelData = await resp.json();
+      renderCompositionTab();
+      renderToolsTab();
+    } catch(e) { /* non-blocking */ }
+  }
+
+  async function fetchSubagentData(sessionId) {
+    try {
+      const resp = await fetch('/api/session/' + encodeURIComponent(sessionId) + '/subagents');
+      if (!resp.ok) return;
+      subagentData = await resp.json();
+      renderAgentsTab();
+    } catch(e) { /* non-blocking */ }
+  }
+
+  function renderCompositionTab() {
+    if (!toolIntelData || !toolIntelData.composition) return;
+    const comp = toolIntelData.composition;
+
+    const legendEl = document.getElementById('token-breakdown-legend');
+    const ctx = document.getElementById('token-donut').getContext('2d');
+
+    const entries = [
+      { name: 'System Prefix', color: '#f97316', tokens: comp.system_prefix_tokens },
+      { name: 'Conversation', color: '#3b82f6', tokens: comp.conversation_tokens },
+      { name: 'Regular Tools', color: '#ef4444', tokens: comp.regular_tool_tokens },
+      { name: 'MCP Tools', color: '#ec4899', tokens: comp.mcp_tool_tokens },
+      { name: 'Skills', color: '#f59e0b', tokens: comp.skill_tokens },
+      { name: 'Agent Spawns', color: '#34d399', tokens: comp.agent_tokens },
+    ].filter(e => e.tokens > 0);
+
+    entries.sort((a, b) => b.tokens - a.tokens);
+    const total = entries.reduce((s, e) => s + e.tokens, 0);
+
+    const titleEl = document.getElementById('token-breakdown-title');
+    if (titleEl) titleEl.textContent = 'Token Breakdown (' + fmt(total) + ' tokens)';
+
+    if (total === 0) {
+      legendEl.innerHTML = '<div class="empty-state">No data</div>';
+      if (tokenDonutChart) { tokenDonutChart.destroy(); tokenDonutChart = null; }
+      return;
+    }
+
+    if (tokenDonutChart) tokenDonutChart.destroy();
+    tokenDonutChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: entries.map(e => e.name),
+        datasets: [{
+          data: entries.map(e => e.tokens),
+          backgroundColor: entries.map(e => e.color),
+          borderWidth: 0,
+          hoverOffset: 4,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        cutout: '60%',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#1a1d23',
+            titleFont: { family: 'JetBrains Mono', size: 11 },
+            bodyFont: { family: 'JetBrains Mono', size: 11 },
+            callbacks: {
+              label: item => item.label + ': ' + fmt(item.raw) + ' (' + (item.raw / total * 100).toFixed(1) + '%)',
+            },
+          },
+        },
+      },
+    });
+
+    legendEl.innerHTML = entries.map(e => {
+      const pct = (e.tokens / total * 100).toFixed(1);
+      return '<div class="legend-row">' +
+        '<span class="legend-dot" style="background:' + e.color + '"></span>' +
+        '<span class="legend-pct">' + pct + '%</span>' +
+        '<span>' + e.name + ' (' + fmt(e.tokens) + ')</span>' +
+        '</div>';
+    }).join('');
+  }
+
+  function renderToolsTab() {
+    const el = document.getElementById('tools-tab-content');
+    if (!toolIntelData) {
+      el.innerHTML = '<div class="empty-state">No tool data</div>';
+      return;
+    }
+
+    const maxTokens = Math.max(1, ...[
+      ...toolIntelData.mcp_servers.map(s => s.total_tokens),
+      ...toolIntelData.skills.map(s => s.tokens),
+      ...toolIntelData.regular_tools.map(t => t.tokens),
+      ...toolIntelData.agents.map(a => a.tokens),
+    ]);
+
+    let html = '';
+
+    // MCP Servers
+    if (toolIntelData.mcp_servers.length > 0) {
+      html += '<div class="tool-section-title">MCP Servers</div>';
+      for (const srv of toolIntelData.mcp_servers) {
+        const barPct = Math.max(2, (srv.total_tokens / maxTokens) * 100);
+        const srvId = 'mcp-' + srv.server.replace(/[^a-z0-9]/gi, '_');
+        html += '<div class="tool-row" style="cursor:pointer" onclick="toggleMcpFn(\'' + srvId + '\',this)">' +
+          '<span class="mcp-expand-icon" id="icon-' + srvId + '">&#9654;</span>' +
+          '<span class="tool-row-name" style="font-weight:500;color:var(--text)">' + escapeHtml(srv.server) + '</span>' +
+          '<span class="tool-row-bar"><span class="tool-row-bar-fill" style="width:' + barPct.toFixed(0) + '%;background:#ec4899"></span></span>' +
+          '<span class="tool-row-count">' + srv.call_count + 'x</span>' +
+          '<span class="tool-row-tokens">' + fmt(srv.total_tokens) + '</span>' +
+          '</div>';
+        html += '<div class="mcp-fn-list" id="' + srvId + '">';
+        for (const fn of srv.functions) {
+          html += '<div class="mcp-fn-row">' +
+            '<span class="mcp-fn-row-name">' + escapeHtml(fn.name) + '</span>' +
+            '<span class="mcp-fn-row-count">' + fn.count + 'x</span>' +
+            '</div>';
+        }
+        html += '</div>';
+      }
+    }
+
+    // Skills
+    if (toolIntelData.skills.length > 0) {
+      html += '<div class="tool-section-title">Skills</div>';
+      for (const sk of toolIntelData.skills) {
+        const barPct = Math.max(2, (sk.tokens / maxTokens) * 100);
+        html += '<div class="tool-row">' +
+          '<span class="tool-row-name">' + escapeHtml(sk.name) + '</span>' +
+          '<span class="tool-row-bar"><span class="tool-row-bar-fill" style="width:' + barPct.toFixed(0) + '%;background:#f59e0b"></span></span>' +
+          '<span class="tool-row-count">' + sk.count + 'x</span>' +
+          '<span class="tool-row-tokens">' + fmt(sk.tokens) + '</span>' +
+          '</div>';
+      }
+    }
+
+    // Regular Tools
+    if (toolIntelData.regular_tools.length > 0) {
+      html += '<div class="tool-section-title">Builtin Tools</div>';
+      for (const t of toolIntelData.regular_tools) {
+        const barPct = Math.max(2, (t.tokens / maxTokens) * 100);
+        html += '<div class="tool-row">' +
+          '<span class="tool-row-name">' + escapeHtml(t.name) + '</span>' +
+          '<span class="tool-row-bar"><span class="tool-row-bar-fill" style="width:' + barPct.toFixed(0) + '%;background:#6366f1"></span></span>' +
+          '<span class="tool-row-count">' + t.count + 'x</span>' +
+          '<span class="tool-row-tokens">' + fmt(t.tokens) + '</span>' +
+          '</div>';
+      }
+    }
+
+    // Agents
+    if (toolIntelData.agents.length > 0) {
+      html += '<div class="tool-section-title">Agent / Task</div>';
+      for (const a of toolIntelData.agents) {
+        const barPct = Math.max(2, (a.tokens / maxTokens) * 100);
+        html += '<div class="tool-row">' +
+          '<span class="tool-row-name">' + escapeHtml(a.name) + ' <span class="tool-cat-badge tool-cat-badge-agent">AGENT</span></span>' +
+          '<span class="tool-row-bar"><span class="tool-row-bar-fill" style="width:' + barPct.toFixed(0) + '%;background:#34d399"></span></span>' +
+          '<span class="tool-row-count">' + a.count + 'x</span>' +
+          '<span class="tool-row-tokens">' + fmt(a.tokens) + '</span>' +
+          '</div>';
+      }
+    }
+
+    if (!html) html = '<div class="empty-state">No tool calls in this session</div>';
+    el.innerHTML = html;
+  }
+
+  function toggleMcpFn(id) {
+    const list = document.getElementById(id);
+    const icon = document.getElementById('icon-' + id);
+    if (list) {
+      list.classList.toggle('open');
+    }
+    if (icon) {
+      icon.classList.toggle('open');
+    }
+  }
+  window.toggleMcpFn = toggleMcpFn;
+
+  function renderAgentsTab() {
+    const el = document.getElementById('agents-tab-content');
+    if (!subagentData || subagentData.count === 0) {
+      el.innerHTML = '<div class="empty-state">No subagents in this session</div>';
+      return;
+    }
+
+    let html = '<div class="agents-summary">' +
+      subagentData.count + ' subagent' + (subagentData.count !== 1 ? 's' : '') +
+      ' &mdash; Total: ' + fmt(subagentData.total_peak_tokens) + ' tok peak' +
+      '</div>';
+
+    for (const sa of subagentData.subagents) {
+      const desc = sa.description ? escapeHtml(sa.description.substring(0, 60)) + (sa.description.length > 60 ? '...' : '') : '';
+
+      // Build mini SVG growth chart from churn data
+      let miniChart = '';
+      if (sa.churn && sa.churn.length > 1) {
+        const points = sa.churn.map((c, i) => {
+          return { x: i, y: c.input_tokens + c.cache_read + c.cache_creation };
+        });
+        const maxY = Math.max(1, ...points.map(p => p.y));
+        const w = 200;
+        const h = 36;
+        const xStep = w / Math.max(1, points.length - 1);
+        let pathD = '';
+        let areaD = 'M0,' + h;
+        for (let i = 0; i < points.length; i++) {
+          const px = Math.round(i * xStep);
+          const py = Math.round(h - (points[i].y / maxY) * h);
+          if (i === 0) {
+            pathD += 'M' + px + ',' + py;
+            areaD += ' L' + px + ',' + py;
+          } else {
+            pathD += ' L' + px + ',' + py;
+            areaD += ' L' + px + ',' + py;
+          }
+        }
+        areaD += ' L' + Math.round((points.length - 1) * xStep) + ',' + h + ' Z';
+
+        miniChart = '<svg class="agent-mini-chart" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">' +
+          '<path d="' + areaD + '" fill="rgba(52,211,153,0.15)" />' +
+          '<path d="' + pathD + '" fill="none" stroke="#34d399" stroke-width="1.5" />' +
+          '</svg>';
+      }
+
+      html += '<div class="agent-card">' +
+        '<div class="agent-card-header">' +
+          '<span class="agent-type-badge">' + escapeHtml(sa.agent_type) + '</span>' +
+          '<span style="font-family:var(--mono);font-size:10px;color:var(--text-muted)">' + sa.agent_id.substring(0, 10) + '...</span>' +
+        '</div>' +
+        (desc ? '<div class="agent-desc">' + desc + '</div>' : '') +
+        '<div class="agent-stats">' +
+          'Peak: <b>' + fmt(sa.peak_resident) + '</b>' +
+          ' &middot; Cache: <b>' + fmt(sa.total_cache_read) + '</b>' +
+          ' &middot; Calls: <b>' + sa.total_api_calls + '</b>' +
+          ' &middot; Output: <b>' + fmt(sa.total_output_tokens) + '</b>' +
+        '</div>' +
+        miniChart +
+        '</div>';
+    }
+
+    el.innerHTML = html;
+  }
 
   // ===== TURNS (STALENESS) FETCHING =====
   async function fetchTurnsData(sessionId) {
@@ -2937,6 +3428,17 @@ html, body {
     }
   }
   window.switchGrowthTab = switchGrowthTab;
+
+  // ===== LEFT COLUMN TABS =====
+  function switchLeftTab(tab) {
+    document.querySelectorAll('.left-tab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === tab);
+    });
+    document.querySelectorAll('.left-tab-content').forEach(el => {
+      el.classList.toggle('active', el.id === 'left-tab-' + tab);
+    });
+  }
+  window.switchLeftTab = switchLeftTab;
 
   const COLLAPSE_LINES = 8;
   let _collapseId = 0;

@@ -32,6 +32,7 @@ from context_tracker.db import (
     BlockRecord,
     HookEventRecord,
     SessionRecord,
+    SubagentApiCallRecord,
     SubagentRecord,
     TurnRecord,
     get_engine,
@@ -45,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 # Reuse the same session ID pattern as storage.py
 _SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+
 
 # L3: Self-correction regex patterns
 SELF_CORRECTION_HIGH = [
@@ -582,6 +584,281 @@ def create_app(
             "churn": churn,
             "meta": {"session_id": session_id},
             "turn_map": turn_map,
+        }
+
+    # ------------------------------------------------------------------
+    # Tool Intelligence endpoint
+    # ------------------------------------------------------------------
+    @app.get("/api/session/{session_id}/tool-intelligence")
+    def get_tool_intelligence(session_id: str):
+        """Classified tool breakdown for composition donut and tools tab."""
+        _validate_session_id(session_id)
+        transcript_path = _find_transcript(session_id, transcript_dir)
+        if transcript_path is None:
+            raise HTTPException(status_code=404, detail="Transcript not found")
+
+        messages, _ = parse_raw_transcript(transcript_path)
+        hook_events = read_events(session_id, trace_dir=trace_dir)
+        _turns, snapshots, content_store, _epochs, _, block_registry = reconstruct_session(messages, hook_events)
+
+        # ---- helpers ----
+        def _classify(tool_name: str) -> str:
+            if not tool_name:
+                return "builtin"
+            if tool_name.startswith("mcp__"):
+                return "mcp"
+            if tool_name == "Skill":
+                return "skill"
+            if tool_name in ("Agent", "Task"):
+                return "agent"
+            return "builtin"
+
+        def _parse_mcp(tool_name: str) -> tuple[str, str]:
+            parts = tool_name.split("__", 2)
+            server = parts[1] if len(parts) > 1 else "unknown"
+            func = parts[2] if len(parts) > 2 else "unknown"
+            return server, func
+
+        def _extract_skill_name(block_id: str) -> str:
+            raw = content_store.get_content(block_id)
+            if raw:
+                try:
+                    parsed = _json.loads(raw)
+                    if isinstance(parsed, dict):
+                        return parsed.get("skill", "unknown")
+                except (_json.JSONDecodeError, TypeError):
+                    pass
+            return "unknown"
+
+        # ---- first pass: classify TOOL_USE blocks ----
+        tool_use_id_map: dict[str, dict] = {}  # tool_use_id -> {category, tool_name, ...}
+        # Accumulators
+        category_chars: dict[str, int] = {
+            "system_prefix": 0,
+            "conversation": 0,
+            "regular_tool": 0,
+            "mcp_tool": 0,
+            "skill": 0,
+            "agent": 0,
+        }
+        mcp_servers: dict[str, dict] = {}  # server -> {total_chars, call_count, functions: {fn: count}}
+        skills: dict[str, dict] = {}  # skill_name -> {chars, count}
+        regular_tools: dict[str, dict] = {}  # tool_name -> {chars, count}
+        agents: dict[str, dict] = {}  # tool_name -> {chars, count}
+
+        for bid, block in block_registry.items():
+            if block.block_type == BlockType.TOOL_USE:
+                tn = block.tool_name or ""
+                cat = _classify(tn)
+                info: dict = {"category": cat, "tool_name": tn}
+
+                if cat == "mcp":
+                    srv, fn = _parse_mcp(tn)
+                    info["mcp_server"] = srv
+                    info["mcp_function"] = fn
+                    if srv not in mcp_servers:
+                        mcp_servers[srv] = {"total_chars": 0, "call_count": 0, "functions": {}}
+                    mcp_servers[srv]["total_chars"] += block.size_chars
+                    mcp_servers[srv]["call_count"] += 1
+                    mcp_servers[srv]["functions"][fn] = mcp_servers[srv]["functions"].get(fn, 0) + 1
+                    category_chars["mcp_tool"] += block.size_chars
+
+                elif cat == "skill":
+                    sname = _extract_skill_name(bid)
+                    info["skill_name"] = sname
+                    if sname not in skills:
+                        skills[sname] = {"chars": 0, "count": 0}
+                    skills[sname]["chars"] += block.size_chars
+                    skills[sname]["count"] += 1
+                    category_chars["skill"] += block.size_chars
+
+                elif cat == "agent":
+                    aname = tn  # "Agent" or "Task"
+                    if aname not in agents:
+                        agents[aname] = {"chars": 0, "count": 0}
+                    agents[aname]["chars"] += block.size_chars
+                    agents[aname]["count"] += 1
+                    category_chars["agent"] += block.size_chars
+
+                else:  # builtin
+                    if tn not in regular_tools:
+                        regular_tools[tn] = {"chars": 0, "count": 0}
+                    regular_tools[tn]["chars"] += block.size_chars
+                    regular_tools[tn]["count"] += 1
+                    category_chars["regular_tool"] += block.size_chars
+
+                if block.tool_use_id:
+                    tool_use_id_map[block.tool_use_id] = info
+
+            elif block.block_type == BlockType.TOOL_RESULT:
+                # Classify via parent_block_id lookup
+                parent = block_registry.get(block.parent_block_id or "") if block.parent_block_id else None
+                cat = "builtin"
+                tn = ""
+                if parent and parent.tool_name:
+                    tn = parent.tool_name
+                    cat = _classify(tn)
+                elif block.tool_use_id and block.tool_use_id in tool_use_id_map:
+                    info = tool_use_id_map[block.tool_use_id]
+                    cat = info["category"]
+                    tn = info.get("tool_name", "")
+
+                if cat == "mcp":
+                    srv, fn = _parse_mcp(tn)
+                    if srv in mcp_servers:
+                        mcp_servers[srv]["total_chars"] += block.size_chars
+                    category_chars["mcp_tool"] += block.size_chars
+                elif cat == "skill":
+                    sname = tool_use_id_map.get(block.tool_use_id or "", {}).get("skill_name", "unknown")
+                    if sname in skills:
+                        skills[sname]["chars"] += block.size_chars
+                    category_chars["skill"] += block.size_chars
+                elif cat == "agent":
+                    if tn in agents:
+                        agents[tn]["chars"] += block.size_chars
+                    category_chars["agent"] += block.size_chars
+                else:
+                    if tn in regular_tools:
+                        regular_tools[tn]["chars"] += block.size_chars
+                    category_chars["regular_tool"] += block.size_chars
+
+            elif block.is_pinned:
+                category_chars["system_prefix"] += block.size_chars
+
+            elif block.block_type in (BlockType.USER_PROMPT, BlockType.ASSISTANT_TEXT):
+                category_chars["conversation"] += block.size_chars
+
+            elif block.block_type == BlockType.SYSTEM:
+                category_chars["system_prefix"] += block.size_chars
+
+            elif block.block_type == BlockType.COMPACTION_SUMMARY:
+                category_chars["conversation"] += block.size_chars
+
+        # ---- proportion chars to tokens ----
+        total_chars = sum(category_chars.values())
+        # Use last snapshot's actual_context_tokens as total token reference
+        total_tokens = 0
+        if snapshots:
+            last_snap = snapshots[-1]
+            total_tokens = last_snap.actual_context_tokens or last_snap.total_tokens_est
+        if total_tokens == 0:
+            total_tokens = max(1, total_chars // 4)
+
+        def _chars_to_tokens(chars: int) -> int:
+            if total_chars == 0:
+                return 0
+            return round(chars / total_chars * total_tokens)
+
+        composition = {
+            "system_prefix_tokens": _chars_to_tokens(category_chars["system_prefix"]),
+            "conversation_tokens": _chars_to_tokens(category_chars["conversation"]),
+            "regular_tool_tokens": _chars_to_tokens(category_chars["regular_tool"]),
+            "mcp_tool_tokens": _chars_to_tokens(category_chars["mcp_tool"]),
+            "skill_tokens": _chars_to_tokens(category_chars["skill"]),
+            "agent_tokens": _chars_to_tokens(category_chars["agent"]),
+        }
+
+        mcp_list = sorted(
+            [
+                {
+                    "server": srv,
+                    "total_tokens": _chars_to_tokens(d["total_chars"]),
+                    "call_count": d["call_count"],
+                    "functions": [
+                        {"name": fn, "count": cnt} for fn, cnt in sorted(d["functions"].items(), key=lambda x: -x[1])
+                    ],
+                }
+                for srv, d in mcp_servers.items()
+            ],
+            key=lambda x: -x["total_tokens"],
+        )
+
+        skills_list = sorted(
+            [{"name": sn, "tokens": _chars_to_tokens(d["chars"]), "count": d["count"]} for sn, d in skills.items()],
+            key=lambda x: -x["tokens"],
+        )
+
+        regular_list = sorted(
+            [
+                {"name": tn, "tokens": _chars_to_tokens(d["chars"]), "count": d["count"]}
+                for tn, d in regular_tools.items()
+            ],
+            key=lambda x: -x["tokens"],
+        )
+
+        agents_list = sorted(
+            [{"name": tn, "tokens": _chars_to_tokens(d["chars"]), "count": d["count"]} for tn, d in agents.items()],
+            key=lambda x: -x["tokens"],
+        )
+
+        return {
+            "composition": composition,
+            "mcp_servers": mcp_list,
+            "skills": skills_list,
+            "regular_tools": regular_list,
+            "agents": agents_list,
+        }
+
+    # ------------------------------------------------------------------
+    # Subagents endpoint
+    # ------------------------------------------------------------------
+    @app.get("/api/session/{session_id}/subagents")
+    def get_subagents(session_id: str):
+        """Expose SubagentRecord + SubagentApiCallRecord data from DB."""
+        _validate_session_id(session_id)
+
+        # Ensure session is ingested into DB (v3 may load via /data without DB)
+        _ensure_ingested(session_id, trace_dir, db_path, transcript_dir)
+
+        engine = get_engine(db_path)
+        factory = get_session_factory(engine)
+        with factory() as db:
+            subagent_recs = db.query(SubagentRecord).filter_by(session_id=session_id).all()
+
+            subagents_out = []
+            total_peak = 0
+            for sa in subagent_recs:
+                # Load api calls
+                api_calls = (
+                    db.query(SubagentApiCallRecord)
+                    .filter_by(subagent_id=sa.id)
+                    .order_by(SubagentApiCallRecord.call_index)
+                    .all()
+                )
+
+                # Compute total_output_tokens from churn sum (not populated by parse_subagents)
+                computed_output = sum(c.output_tokens for c in api_calls)
+
+                churn_data = [
+                    {
+                        "call_index": c.call_index,
+                        "input_tokens": c.input_tokens,
+                        "output_tokens": c.output_tokens,
+                        "cache_read": c.cache_read,
+                        "cache_creation": c.cache_creation,
+                    }
+                    for c in api_calls
+                ]
+
+                total_peak += sa.peak_resident
+
+                subagents_out.append(
+                    {
+                        "agent_id": sa.agent_id,
+                        "agent_type": sa.agent_type or "unknown",
+                        "description": sa.description or "",
+                        "peak_resident": sa.peak_resident,
+                        "total_cache_read": sa.total_cache_read,
+                        "total_api_calls": sa.total_api_calls,
+                        "total_output_tokens": computed_output or sa.total_output_tokens,
+                        "churn": churn_data,
+                    }
+                )
+
+        return {
+            "count": len(subagents_out),
+            "total_peak_tokens": total_peak,
+            "subagents": subagents_out,
         }
 
     @app.get("/api/session/{session_id}/turns")
@@ -1291,6 +1568,43 @@ def create_app(
 
         return {"turn": turn_number, "messages": msgs_out}
 
+    # ------------------------------------------------------------------
+    # Tool classification helper (shared by call + conv_turn content)
+    # ------------------------------------------------------------------
+    def _classify_tool_name(tool_name: str) -> tuple[str, str]:
+        """Classify a tool name and return (category, display_name).
+
+        Categories: 'mcp', 'skill', 'agent', 'builtin'.
+        """
+        if not tool_name or tool_name == "unknown":
+            return "builtin", tool_name or "unknown"
+        if tool_name.startswith("mcp__"):
+            parts = tool_name.split("__", 2)
+            server = parts[1] if len(parts) > 1 else "unknown"
+            func = parts[2] if len(parts) > 2 else "unknown"
+            return "mcp", f"{server}.{func}"
+        if tool_name == "Skill":
+            return "skill", "Skill"
+        if tool_name in ("Agent", "Task"):
+            return "agent", tool_name
+        return "builtin", tool_name
+
+    def _enrich_tool_fields(
+        tool_name: str,
+        tool_input: dict | None,
+    ) -> dict:
+        """Return tool_category + tool_display_name for a tool_use block."""
+        cat, display = _classify_tool_name(tool_name)
+        if cat == "skill" and isinstance(tool_input, dict):
+            sname = tool_input.get("skill", "")
+            if sname:
+                display = sname
+        elif cat == "agent" and isinstance(tool_input, dict):
+            prompt = tool_input.get("prompt", "")
+            if prompt:
+                display = prompt[:40]
+        return {"tool_category": cat, "tool_display_name": display}
+
     @app.get("/api/session/{session_id}/call/{call_index}/content")
     def get_call_content(session_id: str, call_index: int):
         """Full message content for a specific API call (by call index 0-based).
@@ -1315,7 +1629,31 @@ def create_app(
 
         messages_out = _flatten_entries_to_messages(target_entries)
 
-        # Add server-computed error flags to messages
+        # Enrich tool_use / tool_result with category info (#43)
+        _tu_cat_map: dict[str, dict] = {}
+        for msg_item in messages_out:
+            if msg_item.get("type") == "tool_use":
+                tool_name = msg_item.get("tool_name", "unknown")
+                tool_input = None
+                try:
+                    raw = msg_item.get("content", "")
+                    tool_input = json.loads(raw) if raw else None
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                enriched = _enrich_tool_fields(tool_name, tool_input)
+                msg_item.update(enriched)
+                tu_id = msg_item.get("tool_use_id", "")
+                if tu_id:
+                    _tu_cat_map[tu_id] = enriched
+            elif msg_item.get("type") == "tool_result":
+                tu_id = msg_item.get("tool_use_id", "")
+                result_enriched = _tu_cat_map.get(
+                    tu_id,
+                    {"tool_category": "builtin", "tool_display_name": "unknown"},
+                )
+                msg_item.update(result_enriched)
+
+        # Add server-computed error flags to messages (#41)
         # Note: retry detection requires multi-turn context (comparing tool names
         # across consecutive turns), which is not available in this single-call
         # scope. All messages are marked is_retry=False here.
@@ -1398,7 +1736,31 @@ def create_app(
 
         messages_out = _flatten_entries_to_messages(entries_raw)
 
-        # --- Server-computed error flags ---
+        # Enrich tool_use / tool_result with category info (#43)
+        _ct_cat_map: dict[str, dict] = {}
+        for msg_item in messages_out:
+            if msg_item.get("type") == "tool_use":
+                tool_name = msg_item.get("tool_name", "unknown")
+                tool_input = None
+                try:
+                    raw = msg_item.get("content", "")
+                    tool_input = json.loads(raw) if raw else None
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                enriched = _enrich_tool_fields(tool_name, tool_input)
+                msg_item.update(enriched)
+                tu_id = msg_item.get("tool_use_id", "")
+                if tu_id:
+                    _ct_cat_map[tu_id] = enriched
+            elif msg_item.get("type") == "tool_result":
+                tu_id = msg_item.get("tool_use_id", "")
+                result_enriched = _ct_cat_map.get(
+                    tu_id,
+                    {"tool_category": "builtin", "tool_display_name": "unknown"},
+                )
+                msg_item.update(result_enriched)
+
+        # --- Server-computed error flags (#41) ---
         # Build tool_use_id -> tool_name map from tool_use entries
         tu_id_to_name: dict[str, str] = {}
         for msg_item in messages_out:
