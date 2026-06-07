@@ -320,7 +320,7 @@ def ingest_all(
     projects_dir: Path | None = None,
 ) -> list[str]:
     """Ingest all sessions. Returns list of session IDs that were ingested."""
-    sessions = list_sessions(trace_dir)
+    sessions = list_sessions(trace_dir, projects_dir=projects_dir)
     ingested = []
     for sid in sessions:
         result = ingest_session(

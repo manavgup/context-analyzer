@@ -429,7 +429,7 @@ def create_app(
     @app.get("/api/sessions")
     def get_sessions() -> list:
         """List all sessions with summary stats from SQLite."""
-        session_ids = list_sessions(trace_dir=trace_dir)
+        session_ids = list_sessions(trace_dir=trace_dir, projects_dir=transcript_dir)
         results = []
         engine = get_engine(db_path)
         factory = get_session_factory(engine)
@@ -517,7 +517,7 @@ def create_app(
     @app.get("/api/sessions/trends")
     def get_session_trends() -> dict:
         """Cross-session aggregation for trend analysis."""
-        session_ids = list_sessions(trace_dir=trace_dir)
+        session_ids = list_sessions(trace_dir=trace_dir, projects_dir=transcript_dir)
         engine = get_engine(db_path)
         factory = get_session_factory(engine)
 
