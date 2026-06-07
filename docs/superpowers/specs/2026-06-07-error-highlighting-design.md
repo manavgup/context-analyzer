@@ -8,8 +8,9 @@
 
 Claude Code sessions contain rich error signal data that is already captured but not surfaced in the dashboard:
 - `is_error: true` flag on tool_result blocks (parsed and stored in ContentBlock/ContextBlock)
-- `PostToolUseFailureEvent` hook events with tool_name, error_length, timestamp
 - `error_rate` and `error_rate_spike` in HealthSignals
+
+Note: `PostToolUseFailureEvent` hook events exist but are not used by this feature. The `/errors` endpoint relies solely on transcript-derived `is_error` flags from reconstruction, which is the authoritative source. Hook events may cover additional edge cases but introduce a second data path that complicates the implementation without clear benefit.
 
 Users cannot see where errors happened, whether Claude was struggling with a particular approach, or when Claude acknowledged its own mistakes.
 
@@ -64,6 +65,8 @@ SELF_CORRECTION_MEDIUM = [
 ```
 
 Detection: For each assistant text block in `block_registry` (where `block_type == ASSISTANT_TEXT`), retrieve content from `content_store`, test against patterns. Record `(turn_number, confidence, matched_pattern, preview)`.
+
+**Important:** Reconstruction maps both visible assistant text AND thinking blocks to `BlockType.ASSISTANT_TEXT`. Self-correction regexes should only scan user-visible text, not thinking content (which would false-positive heavily). Filter by checking the original content block type from the transcript -- `thinking` blocks have `"type": "thinking"` in the raw entry. Skip blocks where the original type was `thinking`.
 
 Note: `ContextBlock` does not carry `tool_input` or raw content. Assistant text content must be read from `content_store.get_content(block_id)` or by re-reading the transcript.
 
@@ -138,7 +141,18 @@ Chart tooltip enhanced: if `errorData` exists for this API call's conv_turn, app
 
 Legend addition at bottom-right: red dot = errors, amber triangle = self-corrections.
 
-### 5. Frontend: Messages Pane Badges (`dashboard-v3.html`)
+### 5. Backend: Server-Computed Row Flags in conv_turn (`dashboard.py`)
+
+The `/conv_turn/{n}/content` and `/call/{n}/content` endpoints must compute error badge flags server-side. Client-side joining between `/errors` block_ids and conv_turn tool_use_ids is fragile because the two responses use different identifiers and ordering.
+
+For each message in the conv_turn response, add:
+- `is_retry: bool` -- true if this tool_result's `tool_use_id` is part of a retry pattern (same tool_name errored 2+ times within 3 turns). Computed by building a `tool_use_id -> tool_name` map from tool_use blocks in the turn, then checking against the retry patterns from the `/errors` computation.
+- `is_self_correction: bool` -- true if this assistant text message matches a self-correction regex pattern. Only applies to visible assistant text, not thinking blocks.
+- `self_correction_confidence: str | null` -- "high" or "medium" when `is_self_correction` is true.
+
+This means the frontend can render badges purely from the conv_turn response without cross-referencing `/errors`. The `/errors` endpoint is used for chart annotations and scorecard, not for per-message badges.
+
+### 6. Frontend: Messages Pane Badges (`dashboard-v3.html`)
 
 Three badge types in `renderMessagesFromAPI()`:
 
@@ -160,13 +174,16 @@ Messages pane title: if turn has errors, append error count hint in red.
 
 ### 6. Frontend: Error Cluster Recommendations (`dashboard-v3.html`)
 
-`renderErrorClusterBanner()`: Injects error cluster cards and retry pattern cards into the existing recommendations grid (prepended so they appear first).
+Error cluster recommendations must be merged into the existing `renderRecommendations()` function, not rendered by a separate async function. The current `renderRecommendations()` replaces `rec-grid.innerHTML` entirely, so a separate renderer that prepends cards would be overwritten if health renders after errors (async race condition).
 
+Fix: modify `renderRecommendations()` to accept an optional `extraRecs` array parameter. `fetchErrorData()` stores error cluster/retry/self-correction recommendations in `errorData.recommendations` (same shape as health recommendations: `{priority, code, title, detail, action}`). When `renderRecommendations()` runs, it merges `healthData.recommendations` with `errorData.recommendations` (if available), sorts by priority (critical first), then renders all cards in one pass.
+
+Error recommendation types:
 - Error cluster cards (critical priority): "Error cluster: Turns N-M -- X tool errors across Y turns"
 - Retry pattern cards (warning priority): "Retry pattern: ToolName -- N errors within 3 turns"
 - Self-correction cards (warning priority): "Self-correction detected -- N patterns found (X high / Y medium confidence)"
 
-Called after `renderRecommendations()` to ensure rec-grid exists.
+If `errorData` arrives after `renderRecommendations()` already ran, call `renderRecommendations()` again (it's idempotent since it replaces innerHTML).
 
 ### 7. Frontend: Modal Error Styling (`dashboard-v3.html`)
 
@@ -184,13 +201,15 @@ let errorTurnSet = new Set(); // conv_turn numbers with errors (O(1) lookup)
 let selfCorrectionTurnSet = new Set(); // turns with self-corrections
 ```
 
-`fetchErrorData(sessionId)`: async fetch, builds lookup sets, calls `addErrorAnnotationsToGrowthChart()`, `renderErrorScorecard()`, `renderErrorClusterBanner()`.
+`fetchErrorData(sessionId)`: async fetch, builds lookup sets, calls `addErrorAnnotationsToGrowthChart()`, `renderErrorScorecard()`, and re-calls `renderRecommendations()` to merge error recs.
 
 Wired into `loadSessionFromApi()` and cleared in `switchSession()`.
 
+The error scorecard should reuse `error_rate_spike` from the existing `/health` response (`healthData.signals.error_rate_spike`) rather than recomputing it. The scorecard sub-label shows: "X% rate" + spike indicator if `error_rate_spike > 0.3`.
+
 ## Coordinate Space
 
-Growth chart x-axis = 0-based API call index. Error data = 1-based conv_turn. Bridge via `turnMap[].last_call`. Fallback: `conv_turn - 1` when turnMap unavailable.
+Growth chart x-axis = 0-based API call index. Error data = 1-based conv_turn. Bridge via `turnMap[].last_call`. `turnMap` is required for correct mapping -- do NOT fall back to `conv_turn - 1`, which is wrong for multi-call turns and merged prompts. If `turnMap` is not yet loaded when error annotations are requested, defer until `turnMap` is available (re-call from the turnMap fetch callback).
 
 ## Compatibility with Other Issues
 
@@ -214,16 +233,17 @@ None.
 
 1. **Backend: `/errors` endpoint** -- L1 per-turn error counts, L2 cluster + retry detection, L3 self-correction scanning
 2. **Backend: extend `/turns`** -- add `error_count`, `tool_result_count` per turn
-3. **Frontend CSS** -- `.msg-row.is-error`, `.msg-row.is-self-correct`, `.badge-err`, `.badge-retry`, `.badge-fix`
-4. **Frontend HTML** -- 6th scorecard `sc-errors`; update grid to `repeat(6, 1fr)`
-5. **Frontend JS state** -- `errorData`, `errorTurnSet`, `selfCorrectionTurnSet`
-6. **Frontend JS** -- `fetchErrorData()`, wire into `loadSessionFromApi()` and `switchSession()`
-7. **Frontend JS** -- `addErrorAnnotationsToGrowthChart()` (red dots, cluster bands, amber triangles)
-8. **Frontend JS** -- error badges in `renderMessagesFromAPI()` (ERR, RETRY, FIX)
-9. **Frontend JS** -- error count hint in messages pane title
-10. **Frontend JS** -- `renderErrorScorecard()`
-11. **Frontend JS** -- `renderErrorClusterBanner()`
-12. **Frontend JS** -- modal error styling in `renderMessageBlock()`
+3. **Backend: extend conv_turn** -- add `is_retry`, `is_self_correction`, `self_correction_confidence` server-computed flags
+4. **Frontend CSS** -- `.msg-row.is-error`, `.msg-row.is-self-correct`, `.badge-err`, `.badge-retry`, `.badge-fix`
+5. **Frontend HTML** -- 6th scorecard `sc-errors`; update grid to `repeat(6, 1fr)`
+6. **Frontend JS state** -- `errorData`, `errorTurnSet`, `selfCorrectionTurnSet`
+7. **Frontend JS** -- `fetchErrorData()`, wire into `loadSessionFromApi()` and `switchSession()`
+8. **Frontend JS** -- `addErrorAnnotationsToGrowthChart()` (red dots, cluster bands, amber triangles; requires turnMap)
+9. **Frontend JS** -- error badges in `renderMessagesFromAPI()` (ERR from `is_error`, RETRY from `is_retry`, FIX from `is_self_correction`)
+10. **Frontend JS** -- error count hint in messages pane title
+11. **Frontend JS** -- `renderErrorScorecard()` (reuse error_rate_spike from /health)
+12. **Frontend JS** -- merge error recs into `renderRecommendations()` via extraRecs
+13. **Frontend JS** -- modal error styling in `renderMessageBlock()`
 
 ## Out of Scope
 
@@ -231,3 +251,17 @@ None.
 - Error categorization by type (syntax error, permission error, etc.) -- future enhancement
 - Cross-session error trend analysis
 - Automatic error remediation suggestions
+- PostToolUseFailureEvent hook events (transcript is_error is the authoritative source)
+
+## Codex Review Findings (2026-06-07)
+
+Independent review via `/codex` identified 1 P1 and 5 P2 findings. All addressed in this revision:
+
+| # | Severity | Finding | Resolution |
+|---|----------|---------|------------|
+| 1 | P1 | RETRY/FIX badges need stable join keys between /errors and /conv_turn | Added server-computed `is_retry`, `is_self_correction` flags in conv_turn response |
+| 2 | P2 | Spec claims PostToolUseFailureEvent but /errors ignores it | Removed claim, clarified transcript is_error is sole source |
+| 3 | P2 | L3 scans thinking blocks (false positives) | Added filter to skip original `thinking` type blocks |
+| 4 | P2 | Error cluster recs dropped by async race with renderRecommendations | Merged into single render path via extraRecs parameter |
+| 5 | P2 | conv_turn - 1 fallback unsafe for multi-call turns | Removed fallback, require turnMap, defer if unavailable |
+| 6 | P2 | error_rate_spike exists but /errors omits it | Scorecard reuses /health data instead of recomputing |
