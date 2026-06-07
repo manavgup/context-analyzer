@@ -36,6 +36,12 @@ Toggle budget thresholds (200K / 500K / 700K / 1M) to see where your context usa
 
 ![Budget line at 500K](docs/screenshots/dashboard-budget-500k.png)
 
+### Token Breakdown + Composition
+
+The composition panel shows where tokens go at each API call, using API-reported numbers as ground truth. The donut chart breaks down Tool I/O vs Conversation vs System prefix — updating live as you scrub through the session.
+
+![Composition and donut](docs/screenshots/dashboard-composition.png)
+
 ### Message Inspector
 
 Click "View All" on any conversation turn to see the full content — user prompts, tool calls with inputs, tool results, and assistant responses. Long content blocks collapse by default with "Show N more lines".
@@ -56,7 +62,10 @@ The `/sessions` page shows all your sessions with sortable stats, a cost/call vs
 - Cache-Read Churn chart showing per-call re-read cost
 - Session dropdown to switch between sessions without restarting
 - Message inspector with collapsible content blocks
-- Composition breakdown, top growth turns, scrubber with playback
+- Token breakdown donut chart (Tool I/O vs Conversation vs System) — updates per-turn
+- Composition breakdown with API-reported token counts (not estimates)
+- Unified color palette across all views (donut, composition bars, message badges)
+- Top growth turns, scrubber with playback
 
 **Cross-session analytics** (`/sessions`)
 - Summary cards: total sessions, API calls, cache read, cost, avg $/call
