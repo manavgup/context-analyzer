@@ -53,3 +53,6 @@ static/turn_map.json
 *.skill
 python-project-scaffold/
 python-project-scaffold-workspace/
+
+# Git worktrees
+.worktrees/
