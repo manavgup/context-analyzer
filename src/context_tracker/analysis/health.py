@@ -237,18 +237,20 @@ def build_health_signals(
 
     # --- Repeated reads ---
     read_window = config.repeated_read_rolling_window
-    recent_turns = turns[-read_window:] if turns else []
+    # Use snapshots (which have blocks_entered_ids populated) instead of
+    # ApiCall.blocks_entered (which is never populated by reconstruct_session)
+    recent_snap_start = max(0, len(snapshots) - read_window)
+    recent_snaps = snapshots[recent_snap_start:]
     resource_read_counts: dict[str, int] = defaultdict(int)
-    for turn in recent_turns:
-        for api_call in turn.api_calls:
-            for bid in api_call.blocks_entered:
-                block = block_registry.get(bid)
-                if (
-                    block
-                    and block.block_type == BlockType.TOOL_RESULT
-                    and block.resource
-                ):
-                    resource_read_counts[block.resource] += 1
+    for snap in recent_snaps:
+        for bid in snap.blocks_entered_ids:
+            block = block_registry.get(bid)
+            if (
+                block
+                and block.block_type == BlockType.TOOL_RESULT
+                and block.resource
+            ):
+                resource_read_counts[block.resource] += 1
     repeated_reads = {
         r: c for r, c in resource_read_counts.items() if c >= 2
     }

@@ -2321,9 +2321,9 @@ html, body {
     if (!turnsData || !turnsData.turns || turnsData.turns.length === 0) return;
 
     // Build a map from turn number → staleness breakdown
-    const turnMap = {};
+    const staleTurnMap = {};
     for (const t of turnsData.turns) {
-      turnMap[t.turn] = t;
+      staleTurnMap[t.turn] = t;
     }
 
     // Reset staleness arrays
@@ -2331,20 +2331,21 @@ html, body {
     staleData = [];
     deadWeightChartData = [];
 
-    // For each API call in churn, find the matching turn data
-    // The turns endpoint uses conversation turn numbers; we need to map API call → turn
-    // Strategy: for each churn entry, find the turns entry with the closest turn number
-    const turnEntries = turnsData.turns;
-    let turnIdx = 0;
+    // Build API call index → conversation turn number mapping
+    // Uses the session's turnMap (first_call/last_call ranges) for accurate mapping
+    const apiCallToTurn = {};
+    if (turnMap && turnMap.length > 0) {
+      for (const tm of turnMap) {
+        for (let c = tm.first_call; c <= tm.last_call; c++) {
+          apiCallToTurn[c] = tm.conv_turn;
+        }
+      }
+    }
 
     for (let i = 0; i < churn.length; i++) {
-      // Advance turnIdx to find the turn that covers this API call
-      while (turnIdx < turnEntries.length - 1 &&
-             turnEntries[turnIdx + 1].turn <= i + 1) {
-        turnIdx++;
-      }
-
-      const t = turnEntries[turnIdx];
+      // Look up the conversation turn for this API call, then find its staleness data
+      const convTurn = apiCallToTurn[i];
+      const t = convTurn != null ? staleTurnMap[convTurn] : null;
       if (t) {
         // Scale staleness tokens to match the actual resident tokens for this API call
         const resident = residentData[i] || 0;
