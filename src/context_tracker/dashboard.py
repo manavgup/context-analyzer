@@ -85,17 +85,6 @@ def _detect_self_corrections(
     return False, "", ""
 
 
-def _build_tool_use_id_to_name(
-    block_registry: dict[str, ContextBlock],
-) -> dict[str, str]:
-    """Build tool_use_id -> tool_name map from TOOL_USE blocks."""
-    mapping: dict[str, str] = {}
-    for block in block_registry.values():
-        if block.block_type == BlockType.TOOL_USE and block.tool_use_id and block.tool_name:
-            mapping[block.tool_use_id] = block.tool_name
-    return mapping
-
-
 def _validate_session_id(session_id: str) -> None:
     """Validate session ID format. Raises HTTPException(400) for invalid IDs."""
     if not _SESSION_ID_RE.match(session_id):
@@ -977,6 +966,12 @@ def create_app(
         # Iterate raw transcript messages to find assistant visible text
         # (skip thinking blocks)
         self_corrections: list[dict] = []
+        # Build a positional index of assistant messages for fallback turn assignment
+        assistant_indices: list[int] = []
+        for idx, msg in enumerate(messages):
+            if msg.entry_type == "assistant":
+                assistant_indices.append(idx)
+
         for msg in messages:
             if msg.entry_type != "assistant":
                 continue
@@ -988,7 +983,18 @@ def create_app(
                     if turn.timestamp <= msg.timestamp:
                         msg_turn = turn.turn_number
             if msg_turn == 0:
-                continue
+                # Fallback: if timestamp is null, infer turn from message position.
+                # Use the 1-based position among assistant messages, capped to turn count.
+                if msg.timestamp is None:
+                    pos = assistant_indices.index(messages.index(msg)) + 1
+                    msg_turn = min(pos, len(turns)) if turns else 0
+                    if msg_turn > 0:
+                        logger.warning(
+                            "Null timestamp on assistant message; inferred turn %d from position",
+                            msg_turn,
+                        )
+                if msg_turn == 0:
+                    continue
 
             for cb in msg.content_blocks:
                 # Only scan visible text, skip thinking blocks
@@ -1310,18 +1316,13 @@ def create_app(
         messages_out = _flatten_entries_to_messages(target_entries)
 
         # Add server-computed error flags to messages
-        call_tu_map: dict[str, str] = {}
+        # Note: retry detection requires multi-turn context (comparing tool names
+        # across consecutive turns), which is not available in this single-call
+        # scope. All messages are marked is_retry=False here.
         for msg_item in messages_out:
-            if msg_item.get("type") == "tool_use" and msg_item.get("tool_use_id"):
-                call_tu_map[msg_item["tool_use_id"]] = msg_item.get("tool_name", "unknown")
+            msg_item["is_retry"] = False
 
-        for msg_item in messages_out:
             msg_type = msg_item.get("type", "")
-            if msg_type == "tool_result":
-                msg_item["is_retry"] = False  # single-call scope, no retry detection
-            else:
-                msg_item["is_retry"] = False
-
             if msg_type == "assistant_text":
                 text = msg_item.get("content", "")
                 matched, confidence, _ = _detect_self_corrections(text)

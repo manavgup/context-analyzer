@@ -2224,14 +2224,12 @@ html, body {
 
     if (ct) {
       // Use conversation turn grouping
-      let titleText = 'Messages \u2014 Turn ' + ct.conv_turn;
-      if (errorTurnSet.has(ct.conv_turn)) {
-        const pt = errorData && errorData.per_turn ? errorData.per_turn.find(p => p.turn === ct.conv_turn) : null;
-        if (pt) titleText += ' (' + pt.error_count + ' error' + (pt.error_count > 1 ? 's' : '') + ')';
+      let titleHtml = escapeHtml('Messages \u2014 Turn ' + ct.conv_turn);
+      const pt = errorData && errorData.per_turn ? errorData.per_turn.find(e => e.turn === ct.conv_turn) : null;
+      if (pt && pt.error_count > 0) {
+        titleHtml += ' <span style="color:#ef4444;font-size:9px">(' + pt.error_count + ' error' + (pt.error_count > 1 ? 's' : '') + ')</span>';
       }
-      titleEl.innerHTML = errorTurnSet.has(ct.conv_turn)
-        ? escapeHtml(titleText.split('(')[0]) + '<span style="color:#ef4444;font-size:9px">(' + escapeHtml(titleText.split('(')[1] || '') + '</span>'
-        : escapeHtml(titleText);
+      titleEl.innerHTML = titleHtml;
       listEl.innerHTML = '<div class="empty-state" style="padding:16px">Loading messages...</div>';
       viewAllLink.onclick = () => openConvTurnModal(ct.conv_turn);
 
