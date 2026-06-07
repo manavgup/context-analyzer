@@ -11,6 +11,12 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from context_tracker.analysis.config import StalenessConfig
+from context_tracker.analysis.health import (
+    build_health_signals,
+    classify_recommendation,
+    compute_urgency,
+    generate_recommendations,
+)
 from context_tracker.analysis.models import BlockType, ContextBlock
 from context_tracker.analysis.reconstruction import reconstruct_session
 from context_tracker.analysis.staleness import (
@@ -451,6 +457,219 @@ def create_app(
             })
 
         return {"session_id": session_id, "blocks": blocks_out}
+
+    @app.get("/api/session/{session_id}/health")
+    def get_session_health(session_id: str):
+        """Context health score with signals and recommendations."""
+        _validate_session_id(session_id)
+        transcript_path = _find_transcript(session_id, transcript_dir)
+        if transcript_path is None:
+            raise HTTPException(status_code=404, detail="Transcript not found")
+
+        messages, _ = parse_raw_transcript(transcript_path)
+        hook_events = read_events(session_id, trace_dir=trace_dir)
+        turns, snapshots, content_store, epochs, _, block_registry = (
+            reconstruct_session(messages, hook_events)
+        )
+
+        # Detect model
+        model = "unknown"
+        for msg in messages:
+            if msg.model:
+                model = msg.model
+                break
+
+        from context_tracker.analysis.config import HealthConfig
+
+        health_config = HealthConfig()
+        staleness_config = StalenessConfig()
+
+        signals = build_health_signals(
+            turns=turns,
+            snapshots=snapshots,
+            block_registry=block_registry,
+            content_store=content_store,
+            model=model,
+            config=health_config,
+            staleness_config=staleness_config,
+        )
+
+        urgency = compute_urgency(signals, health_config)
+        classification = classify_recommendation(urgency, health_config)
+        health_score = round(1.0 - urgency, 4)
+
+        recommendations = generate_recommendations(
+            signals=signals,
+            block_registry=block_registry,
+            snapshots=snapshots,
+            config=health_config,
+            staleness_config=staleness_config,
+        )
+
+        return {
+            "health_score": health_score,
+            "urgency_score": round(urgency, 4),
+            "classification": classification,
+            "signals": {
+                "turn_number": signals.turn_number,
+                "dead_weight_ratio": signals.dead_weight_ratio,
+                "context_utilization": signals.context_utilization,
+                "cache_efficiency": signals.cache_efficiency,
+                "cache_efficiency_trend": signals.cache_efficiency_trend,
+                "repeated_reads": signals.repeated_reads,
+                "error_rate": signals.error_rate,
+                "error_rate_spike": signals.error_rate_spike,
+                "output_inflation": signals.output_inflation,
+                "edit_churn": signals.edit_churn,
+                "compaction_count": signals.compaction_count,
+                "cost_this_turn": signals.cost_this_turn,
+                "cost_cumulative": signals.cost_cumulative,
+            },
+            "recommendations": recommendations,
+        }
+
+    @app.get("/api/session/{session_id}/dead_weight")
+    def get_session_dead_weight(session_id: str):
+        """Per-turn dead weight data and top stale blocks."""
+        _validate_session_id(session_id)
+        transcript_path = _find_transcript(session_id, transcript_dir)
+        if transcript_path is None:
+            raise HTTPException(status_code=404, detail="Transcript not found")
+
+        messages, _ = parse_raw_transcript(transcript_path)
+        hook_events = read_events(session_id, trace_dir=trace_dir)
+        turns, snapshots, content_store, epochs, _, block_registry = (
+            reconstruct_session(messages, hook_events)
+        )
+
+        config = StalenessConfig()
+        task_boundaries = detect_task_boundaries(turns, config)
+
+        # Build assistant text by turn for reference scanning
+        assistant_texts_by_turn: dict[int, list[str]] = {}
+        for bid, blk in block_registry.items():
+            if blk.block_type == BlockType.ASSISTANT_TEXT:
+                tn = blk.turn_entered
+                if tn not in assistant_texts_by_turn:
+                    assistant_texts_by_turn[tn] = []
+                text = content_store.get_content(bid)
+                if text:
+                    assistant_texts_by_turn[tn].append(text)
+
+        resource_last_used: dict[str, int] = {}
+        blocks_seen_so_far: list[ContextBlock] = []
+
+        per_turn = []
+        all_stale_blocks: list[dict] = []
+
+        for snap in snapshots:
+            for bid in snap.blocks_entered_ids:
+                block = block_registry.get(bid)
+                if block:
+                    blocks_seen_so_far.append(block)
+                    if block.resource:
+                        resource_last_used[block.resource] = snap.turn_number
+
+            superseded = detect_superseded(blocks_seen_so_far)
+
+            active_tokens = 0
+            stale_tokens = 0
+            dead_weight_tokens = 0
+            total_tokens = 0
+
+            for bid in snap.block_ids:
+                block = block_registry.get(bid)
+                if not block:
+                    continue
+
+                messages_since: list[str] = []
+                for t in range(block.turn_entered + 1, snap.turn_number + 1):
+                    messages_since.extend(assistant_texts_by_turn.get(t, []))
+
+                score_val, label = compute_staleness(
+                    block=block,
+                    current_turn=snap.turn_number,
+                    config=config,
+                    resource_last_used=resource_last_used,
+                    messages_since_block=messages_since,
+                    active_resources=set(resource_last_used.keys()),
+                    task_boundaries=task_boundaries,
+                    superseded_map=superseded,
+                )
+
+                tokens = block.size_tokens_est
+                total_tokens += tokens
+                if label in ("active", "warm", "pinned"):
+                    active_tokens += tokens
+                elif label == "stale":
+                    stale_tokens += tokens
+                else:
+                    dead_weight_tokens += tokens
+
+            total = active_tokens + stale_tokens + dead_weight_tokens
+            dead_pct = dead_weight_tokens / total if total > 0 else 0.0
+
+            per_turn.append({
+                "turn": snap.turn_number,
+                "dead_weight_tokens": dead_weight_tokens,
+                "dead_weight_pct": round(dead_pct, 4),
+                "stale_tokens": stale_tokens,
+                "active_tokens": active_tokens,
+            })
+
+        # Top stale blocks at the final snapshot
+        if snapshots:
+            final_snap = snapshots[-1]
+            last_turn = final_snap.turn_number
+            superseded_final = detect_superseded(list(block_registry.values()))
+
+            for bid in final_snap.block_ids:
+                block = block_registry.get(bid)
+                if not block:
+                    continue
+
+                messages_since = []
+                for t in range(block.turn_entered + 1, last_turn + 1):
+                    messages_since.extend(assistant_texts_by_turn.get(t, []))
+
+                score_val, label = compute_staleness(
+                    block=block,
+                    current_turn=last_turn,
+                    config=config,
+                    resource_last_used=resource_last_used,
+                    messages_since_block=messages_since,
+                    active_resources=set(resource_last_used.keys()),
+                    task_boundaries=task_boundaries,
+                    superseded_map=superseded_final,
+                )
+
+                if label in ("stale", "dead_weight"):
+                    all_stale_blocks.append({
+                        "block_id": block.block_id,
+                        "block_type": block.block_type.value,
+                        "resource": block.resource,
+                        "size_tokens_est": block.size_tokens_est,
+                        "staleness_score": round(score_val, 3),
+                        "staleness_label": label,
+                    })
+
+        # Sort by size descending, take top 15
+        all_stale_blocks.sort(key=lambda b: b["size_tokens_est"], reverse=True)
+        top_blocks = all_stale_blocks[:15]
+
+        # Summary
+        dead_pcts = [t["dead_weight_pct"] for t in per_turn]
+        peak_dead = max(dead_pcts) if dead_pcts else 0.0
+        avg_dead = sum(dead_pcts) / len(dead_pcts) if dead_pcts else 0.0
+
+        return {
+            "summary": {
+                "peak_dead_weight_pct": round(peak_dead, 4),
+                "avg_dead_weight_pct": round(avg_dead, 4),
+            },
+            "top_blocks": top_blocks,
+            "per_turn": per_turn,
+        }
 
     @app.get("/api/session/{session_id}/turn/{turn_number}/messages")
     def get_turn_messages(session_id: str, turn_number: int):
