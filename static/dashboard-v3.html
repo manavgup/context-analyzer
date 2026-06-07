@@ -911,6 +911,111 @@ html, body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+/* ===== IMAGE SUPPORT ===== */
+.msg-img-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(99,102,241,0.1);
+  color: #6366f1;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.msg-img-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 0;
+}
+
+.msg-img-thumb {
+  width: 80px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.msg-img-thumb:hover {
+  transform: scale(1.08);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.msg-img-placeholder {
+  width: 80px;
+  height: 60px;
+  border: 2px dashed var(--border);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-muted);
+  background: var(--bg);
+  flex-shrink: 0;
+}
+
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.lightbox-img {
+  max-width: 90vw;
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+  cursor: default;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.lightbox-close:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+.lightbox-meta {
+  margin-top: 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: rgba(255,255,255,0.65);
+  text-align: center;
+}
 </style>
 </head>
 <body>
@@ -1107,6 +1212,8 @@ html, body {
   let healthData = null;       // from /api/session/{id}/health
   let deadWeightData = null;   // from /api/session/{id}/dead_weight
   let turnsData = null;        // from /api/session/{id}/turns — staleness per turn
+  let _imageCache = {};        // keyed by "sessionId/convTurn/msgIdx/imgIdx"
+  let _imageSessionId = null;  // track current session for stale fetch detection
 
   // Derived data (computed once)
   let labels = [];
@@ -1248,6 +1355,8 @@ html, body {
     healthData = null;
     deadWeightData = null;
     turnsData = null;
+    _imageCache = {};
+    _imageSessionId = null;
 
     // Destroy existing charts
     if (growthChart) { growthChart.destroy(); growthChart = null; }
@@ -2101,11 +2210,18 @@ html, body {
       const barColor = getBadgeColor(type);
       const borderColor = getBadgeColor(type);
 
+      // Image badge
+      const imgCount = (msg.images && msg.images.length) || 0;
+      const imgBadge = imgCount > 0
+        ? '<span class="msg-img-badge">' + imgCount + ' img</span>'
+        : '';
+
       html += '<div class="msg-row" data-idx="' + i + '" style="border-left-color:' + borderColor + '">' +
         '<span class="msg-role ' + roleClass + '">' + roleLabel + '</span>' +
         '<span class="msg-cat-dot" style="background:' + catColor + '"></span>' +
         '<span class="msg-cat-label">' + catLabel + '</span>' +
         '<span class="msg-content-preview">' + escapeHtml(preview) + '</span>' +
+        imgBadge +
         '<span class="msg-size-bar"><span class="msg-size-fill" style="width:' + barPct.toFixed(0) + '%;background:' + barColor + '"></span></span>' +
         '<span class="msg-size-val">' + fmt(sizeTok) + '</span>' +
         '</div>';
@@ -2213,7 +2329,9 @@ html, body {
       }
 
       let html = '';
-      for (const msg of data.messages) html += renderMessageBlock(msg);
+      for (let i = 0; i < data.messages.length; i++) {
+        html += renderMessageBlock(data.messages[i]);
+      }
 
       // Usage info
       if (data.usage && (data.usage.input_tokens || data.usage.cache_read)) {
@@ -2253,6 +2371,9 @@ html, body {
     const escHandler = (e) => { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', escHandler); } };
     document.addEventListener('keydown', escHandler);
 
+    // Set image session tracking
+    _imageSessionId = meta.session_id;
+
     fetchConvTurnContent(convTurn).then(data => {
       const body = document.getElementById('modal-content-body');
       if (!body) return;
@@ -2266,7 +2387,9 @@ html, body {
         'API calls ' + data.first_call + ' \u2013 ' + data.last_call + ' (' + data.api_call_count + ' calls, ' + data.messages.length + ' messages)' +
         '</div>';
 
-      for (const msg of data.messages) html += renderMessageBlock(msg);
+      for (let i = 0; i < data.messages.length; i++) {
+        html += renderMessageBlock(data.messages[i], convTurn, i);
+      }
 
       if (data.usage && (data.usage.input_tokens || data.usage.cache_read)) {
         const u = data.usage;
@@ -2277,6 +2400,9 @@ html, body {
       }
 
       body.innerHTML = html;
+
+      // Wire lazy loading for image placeholders
+      wireImagePlaceholders(body, convTurn);
     });
   }
 
@@ -2552,7 +2678,129 @@ html, body {
   const COLLAPSE_LINES = 8;
   let _collapseId = 0;
 
-  function renderMessageBlock(msg) {
+  // ===== IMAGE SUPPORT FUNCTIONS =====
+
+  async function loadConvTurnImage(convTurn, msgIndex, imgIndex) {
+    if (!meta.session_id) return null;
+    const key = meta.session_id + '/' + convTurn + '/' + msgIndex + '/' + imgIndex;
+    if (_imageCache[key] && _imageCache[key] !== 'loading') {
+      return _imageCache[key] === 'error' ? null : _imageCache[key];
+    }
+    _imageCache[key] = 'loading';
+    try {
+      const url = '/api/session/' + encodeURIComponent(meta.session_id) +
+        '/conv_turn/' + convTurn + '/image/' + msgIndex + '/' + imgIndex;
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        _imageCache[key] = 'error';
+        return null;
+      }
+      const data = await resp.json();
+      const src = data.data_uri || data.url || null;
+      _imageCache[key] = src || 'error';
+      return src;
+    } catch(e) {
+      _imageCache[key] = 'error';
+      return null;
+    }
+  }
+
+  function openLightbox(src, metaText) {
+    const overlay = document.createElement('div');
+    overlay.className = 'lightbox-overlay';
+    overlay.innerHTML =
+      '<button class="lightbox-close">&times;</button>' +
+      '<img class="lightbox-img" src="' + src + '" alt="Image">' +
+      (metaText ? '<div class="lightbox-meta">' + escapeHtml(metaText) + '</div>' : '');
+    document.body.appendChild(overlay);
+
+    // Close on click outside image
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay || e.target.classList.contains('lightbox-close')) {
+        overlay.remove();
+      }
+    });
+
+    // Close on Escape
+    const escHandler = (e) => {
+      if (e.key === 'Escape') {
+        overlay.remove();
+        document.removeEventListener('keydown', escHandler);
+      }
+    };
+    document.addEventListener('keydown', escHandler);
+  }
+
+  function renderImageStrip(images, convTurn, msgIndex) {
+    if (!images || images.length === 0) return '';
+    let html = '<div class="msg-img-strip">';
+    for (let i = 0; i < images.length; i++) {
+      const img = images[i];
+      const meta = img.width + 'x' + img.height + ' ' + (img.media_type || 'image') + ' (' + img.tokens + ' tok)';
+      html += '<div class="msg-img-placeholder" ' +
+        'data-conv-turn="' + convTurn + '" ' +
+        'data-msg-index="' + msgIndex + '" ' +
+        'data-img-index="' + i + '" ' +
+        'data-meta="' + escapeHtml(meta) + '" ' +
+        'title="' + escapeHtml(meta) + '">' +
+        img.width + 'x' + img.height +
+        '</div>';
+    }
+    html += '</div>';
+    // Summary line
+    const parts = images.map(function(img) {
+      return img.width + 'x' + img.height + ' ' + (img.media_type || '').replace('image/', '') + ' (' + img.tokens + ' tok)';
+    });
+    html += '<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">' +
+      images.length + ' image' + (images.length > 1 ? 's' : '') + ' -- ' + parts.join(' + ') +
+      '</div>';
+    return html;
+  }
+
+  function wireImagePlaceholders(containerEl, convTurn) {
+    const placeholders = containerEl.querySelectorAll('.msg-img-placeholder');
+    if (placeholders.length === 0) return;
+
+    const sessionAtWire = meta.session_id;
+
+    const observer = new IntersectionObserver(function(entries) {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const el = entry.target;
+        observer.unobserve(el);
+
+        const ct = parseInt(el.dataset.convTurn, 10);
+        const mi = parseInt(el.dataset.msgIndex, 10);
+        const ii = parseInt(el.dataset.imgIndex, 10);
+        const metaText = el.dataset.meta || '';
+
+        loadConvTurnImage(ct, mi, ii).then(function(src) {
+          // Guard: session may have switched while loading
+          if (_imageSessionId !== sessionAtWire) return;
+          if (!src) {
+            el.textContent = 'err';
+            el.style.borderColor = 'var(--danger)';
+            el.style.color = 'var(--danger)';
+            return;
+          }
+          const img = document.createElement('img');
+          img.className = 'msg-img-thumb';
+          img.src = src;
+          img.alt = 'Image';
+          img.title = metaText;
+          img.addEventListener('click', function(e) {
+            e.stopPropagation();
+            openLightbox(src, metaText);
+          });
+          el.replaceWith(img);
+        });
+      }
+    }, { rootMargin: '100px' });
+
+    placeholders.forEach(function(el) { observer.observe(el); });
+  }
+
+  function renderMessageBlock(msg, convTurn, msgIndex) {
     const type = msg.type || msg.role || 'unknown';
     const badgeCls = getBadgeClass(type);
     const toolInfo = msg.tool_name
@@ -2590,10 +2838,17 @@ html, body {
       contentHtml = '<pre class="msg-pre">' + escapeHtml(content) + '</pre>';
     }
 
+    // Image strip (only when convTurn and msgIndex are provided)
+    let imageStripHtml = '';
+    if (msg.images && msg.images.length > 0 && convTurn !== undefined && msgIndex !== undefined) {
+      imageStripHtml = renderImageStrip(msg.images, convTurn, msgIndex);
+    }
+
     return '<div style="margin-bottom:12px;border-left:3px solid ' + getBadgeColor(type) + ';padding-left:10px;">' +
       '<div style="margin-bottom:4px;"><span class="block-badge ' + badgeCls + '">' + escapeHtml(type) + '</span>' +
       toolInfo + sizeInfo + truncNote + errorNote + '</div>' +
       contentHtml +
+      imageStripHtml +
       '</div>';
   }
 
