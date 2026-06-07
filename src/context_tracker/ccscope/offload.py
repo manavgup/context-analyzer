@@ -74,8 +74,7 @@ def resolve_offloads(
             block["content"] = (
                 f"[OFFLOADED: full output {spilled_tokens:,} est. tokens "
                 f"in tool-results/{matched_file_id}.txt, "
-                f"resident preview {resident_tokens:,} tokens]\n"
-                + content[:300]
+                f"resident preview {resident_tokens:,} tokens]\n" + content[:300]
             )
 
     return blocks

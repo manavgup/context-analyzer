@@ -199,9 +199,7 @@ def parse_transcript_to_blocks(
         if etype == "user":
             msg = entry.get("message", {})
             content = msg.get("content", "")
-            new_blocks = _parse_user_content(
-                content, tool_use_map, entry.get("isMeta", False)
-            )
+            new_blocks = _parse_user_content(content, tool_use_map, entry.get("isMeta", False))
             pending_user_blocks.extend(new_blocks)
             continue
 
@@ -272,9 +270,7 @@ def parse_transcript_to_blocks(
                 ub.pop("_tool_id", None)
 
             # Parse assistant content blocks
-            asst_blocks = _parse_assistant_content(
-                content_blocks_raw, api_call_index, tool_use_map
-            )
+            asst_blocks = _parse_assistant_content(content_blocks_raw, api_call_index, tool_use_map)
 
             # Distribute tokens proportionally
             all_new_blocks = pending_user_blocks + asst_blocks
@@ -737,11 +733,13 @@ def build_turn_map(transcript_path: Path) -> list[dict[str, Any]]:
         else:
             last_call = total_api_calls - 1
 
-        turn_map.append({
-            "conv_turn": conv_turn,
-            "first_call": first_call,
-            "last_call": max(first_call, last_call),
-            "user_prompt": prompt,
-        })
+        turn_map.append(
+            {
+                "conv_turn": conv_turn,
+                "first_call": first_call,
+                "last_call": max(first_call, last_call),
+                "user_prompt": prompt,
+            }
+        )
 
     return turn_map

@@ -1,6 +1,5 @@
 """Tests for dashboard REST API endpoints."""
 
-
 import json
 
 import pytest

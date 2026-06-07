@@ -41,7 +41,9 @@ class SessionRecord(Base):
     hook_events = relationship("HookEventRecord", back_populates="session", cascade="all, delete-orphan")
     subagents = relationship("SubagentRecord", back_populates="session", cascade="all, delete-orphan")
     tool_result_offloads = relationship(
-        "ToolResultOffloadRecord", back_populates="session", cascade="all, delete-orphan",
+        "ToolResultOffloadRecord",
+        back_populates="session",
+        cascade="all, delete-orphan",
     )
 
 
@@ -127,6 +129,7 @@ class SubagentRecord(Base):
 
 class SubagentApiCallRecord(Base):
     """Per-API-call token data for a subagent's own context window."""
+
     __tablename__ = "subagent_api_calls"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -143,6 +146,7 @@ class SubagentApiCallRecord(Base):
 
 class ToolResultOffloadRecord(Base):
     """Tool results that were offloaded to disk (too large for inline transcript)."""
+
     __tablename__ = "tool_result_offloads"
 
     id = Column(Integer, primary_key=True, autoincrement=True)

@@ -199,14 +199,10 @@ class TestCascadeDelete:
             assert db.get(SessionRecord, "sess-005") is None
             from sqlalchemy import select
 
-            api_calls = db.execute(
-                select(ApiCallRecord).where(ApiCallRecord.session_id == "sess-005")
-            ).scalars().all()
+            api_calls = db.execute(select(ApiCallRecord).where(ApiCallRecord.session_id == "sess-005")).scalars().all()
             assert len(api_calls) == 0
 
-            turns = db.execute(
-                select(TurnRecord).where(TurnRecord.session_id == "sess-005")
-            ).scalars().all()
+            turns = db.execute(select(TurnRecord).where(TurnRecord.session_id == "sess-005")).scalars().all()
             assert len(turns) == 0
 
         engine.dispose()

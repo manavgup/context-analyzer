@@ -13,45 +13,48 @@ def _write_transcript(path: Path, entries: list[dict]) -> None:
 
 def test_parse_transcript_extracts_usage(tmp_path):
     transcript_path = tmp_path / "session.jsonl"
-    _write_transcript(transcript_path, [
-        {
-            "type": "user",
-            "message": {"role": "user", "content": "hello"},
-            "sessionId": "sess-1",
-        },
-        {
-            "type": "assistant",
-            "message": {
-                "role": "assistant",
-                "model": "claude-opus-4-6",
-                "content": [{"type": "text", "text": "Hi!"}],
-                "stop_reason": "end_turn",
-                "usage": {
-                    "input_tokens": 45000,
-                    "output_tokens": 200,
-                    "cache_read_input_tokens": 38000,
-                    "cache_creation_input_tokens": 2000,
-                },
+    _write_transcript(
+        transcript_path,
+        [
+            {
+                "type": "user",
+                "message": {"role": "user", "content": "hello"},
+                "sessionId": "sess-1",
             },
-            "sessionId": "sess-1",
-        },
-        {
-            "type": "assistant",
-            "message": {
-                "role": "assistant",
-                "model": "claude-opus-4-6",
-                "content": [{"type": "text", "text": "More"}],
-                "stop_reason": "end_turn",
-                "usage": {
-                    "input_tokens": 46000,
-                    "output_tokens": 150,
-                    "cache_read_input_tokens": 40000,
-                    "cache_creation_input_tokens": 1000,
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "model": "claude-opus-4-6",
+                    "content": [{"type": "text", "text": "Hi!"}],
+                    "stop_reason": "end_turn",
+                    "usage": {
+                        "input_tokens": 45000,
+                        "output_tokens": 200,
+                        "cache_read_input_tokens": 38000,
+                        "cache_creation_input_tokens": 2000,
+                    },
                 },
+                "sessionId": "sess-1",
             },
-            "sessionId": "sess-1",
-        },
-    ])
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "model": "claude-opus-4-6",
+                    "content": [{"type": "text", "text": "More"}],
+                    "stop_reason": "end_turn",
+                    "usage": {
+                        "input_tokens": 46000,
+                        "output_tokens": 150,
+                        "cache_read_input_tokens": 40000,
+                        "cache_creation_input_tokens": 1000,
+                    },
+                },
+                "sessionId": "sess-1",
+            },
+        ],
+    )
 
     events = parse_transcript(transcript_path)
     assert len(events) == 2
@@ -65,28 +68,34 @@ def test_parse_transcript_extracts_usage(tmp_path):
 
 def test_parse_transcript_skips_non_assistant(tmp_path):
     transcript_path = tmp_path / "session.jsonl"
-    _write_transcript(transcript_path, [
-        {"type": "user", "message": {"role": "user", "content": "hi"}, "sessionId": "s"},
-        {"type": "file-history-snapshot", "messageId": "x", "snapshot": {}},
-    ])
+    _write_transcript(
+        transcript_path,
+        [
+            {"type": "user", "message": {"role": "user", "content": "hi"}, "sessionId": "s"},
+            {"type": "file-history-snapshot", "messageId": "x", "snapshot": {}},
+        ],
+    )
     events = parse_transcript(transcript_path)
     assert events == []
 
 
 def test_parse_transcript_skips_missing_usage(tmp_path):
     transcript_path = tmp_path / "session.jsonl"
-    _write_transcript(transcript_path, [
-        {
-            "type": "assistant",
-            "message": {
-                "role": "assistant",
-                "model": "claude-opus-4-6",
-                "content": [{"type": "text", "text": "Hi"}],
-                "stop_reason": "end_turn",
+    _write_transcript(
+        transcript_path,
+        [
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "model": "claude-opus-4-6",
+                    "content": [{"type": "text", "text": "Hi"}],
+                    "stop_reason": "end_turn",
+                },
+                "sessionId": "sess-1",
             },
-            "sessionId": "sess-1",
-        },
-    ])
+        ],
+    )
     events = parse_transcript(transcript_path)
     assert events == []
 
@@ -96,40 +105,43 @@ def test_parse_transcript_deduplicates_by_stop_reason(tmp_path):
     Only entries with a non-null stop_reason and usage.output_tokens > 0
     represent completed turns."""
     transcript_path = tmp_path / "session.jsonl"
-    _write_transcript(transcript_path, [
-        {
-            "type": "assistant",
-            "message": {
-                "role": "assistant",
-                "model": "claude-opus-4-6",
-                "content": [{"type": "text", "text": "chunk1"}],
-                "stop_reason": None,
-                "usage": {
-                    "input_tokens": 100,
-                    "output_tokens": 10,
-                    "cache_read_input_tokens": 0,
-                    "cache_creation_input_tokens": 50,
+    _write_transcript(
+        transcript_path,
+        [
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "model": "claude-opus-4-6",
+                    "content": [{"type": "text", "text": "chunk1"}],
+                    "stop_reason": None,
+                    "usage": {
+                        "input_tokens": 100,
+                        "output_tokens": 10,
+                        "cache_read_input_tokens": 0,
+                        "cache_creation_input_tokens": 50,
+                    },
                 },
+                "sessionId": "sess-1",
             },
-            "sessionId": "sess-1",
-        },
-        {
-            "type": "assistant",
-            "message": {
-                "role": "assistant",
-                "model": "claude-opus-4-6",
-                "content": [{"type": "text", "text": "final"}],
-                "stop_reason": "end_turn",
-                "usage": {
-                    "input_tokens": 100,
-                    "output_tokens": 200,
-                    "cache_read_input_tokens": 0,
-                    "cache_creation_input_tokens": 50,
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "model": "claude-opus-4-6",
+                    "content": [{"type": "text", "text": "final"}],
+                    "stop_reason": "end_turn",
+                    "usage": {
+                        "input_tokens": 100,
+                        "output_tokens": 200,
+                        "cache_read_input_tokens": 0,
+                        "cache_creation_input_tokens": 50,
+                    },
                 },
+                "sessionId": "sess-1",
             },
-            "sessionId": "sess-1",
-        },
-    ])
+        ],
+    )
     events = parse_transcript(transcript_path)
     assert len(events) == 1
     assert events[0].output_tokens == 200

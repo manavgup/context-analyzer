@@ -39,9 +39,7 @@ def _cached_read_events(session_id: str, trace_dir: Path = DEFAULT_TRACE_DIR):
     return events
 
 
-def _find_transcript(
-    session_id: str, transcript_dir: Path = DEFAULT_TRANSCRIPT_DIR
-) -> Path | None:
+def _find_transcript(session_id: str, transcript_dir: Path = DEFAULT_TRANSCRIPT_DIR) -> Path | None:
     """Find a transcript JSONL file for a session ID across all project dirs."""
     # Direct match
     direct = transcript_dir / f"{session_id}.jsonl"
@@ -120,11 +118,13 @@ def get_tool_breakdown(
     events = _cached_read_events(session_id, trace_dir=trace_dir)
     tool_calls = [e for e in events if isinstance(e, PostToolUseEvent)]
 
-    by_tool: dict[str, dict] = defaultdict(lambda: {
-        "call_count": 0,
-        "total_input_payload_chars": 0,
-        "total_output_payload_chars": 0,
-    })
+    by_tool: dict[str, dict] = defaultdict(
+        lambda: {
+            "call_count": 0,
+            "total_input_payload_chars": 0,
+            "total_output_payload_chars": 0,
+        }
+    )
 
     for tc in tool_calls:
         entry = by_tool[tc.tool_name]
@@ -132,10 +132,7 @@ def get_tool_breakdown(
         entry["total_input_payload_chars"] += tc.input_payload_chars
         entry["total_output_payload_chars"] += tc.output_payload_chars
 
-    result = [
-        {"tool_name": name, **stats}
-        for name, stats in by_tool.items()
-    ]
+    result = [{"tool_name": name, **stats} for name, stats in by_tool.items()]
     result.sort(key=lambda x: x["total_output_payload_chars"], reverse=True)
     return result
 
@@ -150,11 +147,13 @@ def get_compaction_history(
     result = []
     for e in events:
         if isinstance(e, PostCompactEvent):
-            result.append({
-                "timestamp": e.timestamp,
-                "trigger": e.trigger,
-                "summary_length": e.compact_summary_length,
-            })
+            result.append(
+                {
+                    "timestamp": e.timestamp,
+                    "trigger": e.trigger,
+                    "summary_length": e.compact_summary_length,
+                }
+            )
     return result
 
 
@@ -186,10 +185,7 @@ def get_session_history(
 ) -> list[dict]:
     """List all sessions with summary stats."""
     session_ids = list_sessions(trace_dir=trace_dir)
-    return [
-        get_session_summary(sid, trace_dir=trace_dir, transcript_dir=transcript_dir)
-        for sid in session_ids
-    ]
+    return [get_session_summary(sid, trace_dir=trace_dir, transcript_dir=transcript_dir) for sid in session_ids]
 
 
 def get_bloat_events(
@@ -222,9 +218,7 @@ def should_clear(
     summary = get_session_summary(session_id, trace_dir=trace_dir, transcript_dir=transcript_dir)
 
     total_input = (
-        summary["total_input_tokens"]
-        + summary["total_cache_read_tokens"]
-        + summary["total_cache_creation_tokens"]
+        summary["total_input_tokens"] + summary["total_cache_read_tokens"] + summary["total_cache_creation_tokens"]
     )
     context_pct = (total_input / 1_000_000 * 100) if total_input > 0 else 0
     cache_hit = summary["cache_hit_rate"] * 100
@@ -346,6 +340,7 @@ def mcp_get_staleness_analysis(session_id: str = "", top_n: int = 10) -> str:
 
     try:
         from context_tracker.ccscope.reconcile import reconcile
+
         blocks, churn, subagents = reconcile(session_id)
     except FileNotFoundError:
         return json.dumps({"error": "Transcript not found for session"})
@@ -355,18 +350,21 @@ def mcp_get_staleness_analysis(session_id: str = "", top_n: int = 10) -> str:
     stale_tokens = sum(b["tokens"] for b in stale)
     total_tokens = sum(b["tokens"] for b in blocks)
 
-    return json.dumps({
-        "session_id": session_id,
-        "total_blocks": len(blocks),
-        "stale_blocks": len(stale),
-        "stale_tokens": stale_tokens,
-        "total_tokens": total_tokens,
-        "dead_weight_ratio": round(stale_tokens / max(total_tokens, 1), 3),
-        "top_stale": [
-            {"id": b["id"], "label": b["label"], "tokens": b["tokens"]}
-            for b in sorted(stale, key=lambda x: -x["tokens"])[:top_n]
-        ],
-    }, indent=2)
+    return json.dumps(
+        {
+            "session_id": session_id,
+            "total_blocks": len(blocks),
+            "stale_blocks": len(stale),
+            "stale_tokens": stale_tokens,
+            "total_tokens": total_tokens,
+            "dead_weight_ratio": round(stale_tokens / max(total_tokens, 1), 3),
+            "top_stale": [
+                {"id": b["id"], "label": b["label"], "tokens": b["tokens"]}
+                for b in sorted(stale, key=lambda x: -x["tokens"])[:top_n]
+            ],
+        },
+        indent=2,
+    )
 
 
 @mcp.tool(
@@ -383,6 +381,7 @@ def mcp_get_session_health(session_id: str = "") -> str:
 
     try:
         from context_tracker.ccscope.reconcile import reconcile
+
         blocks, churn, subagents = reconcile(session_id)
     except FileNotFoundError:
         return json.dumps({"error": "Transcript not found for session"})
@@ -393,9 +392,7 @@ def mcp_get_session_health(session_id: str = "") -> str:
     dead_weight_ratio = round(stale_tokens / max(total_tokens, 1), 3)
 
     total_cache_read = sum(c["cache_read"] for c in churn)
-    total_cache_total = sum(
-        c["cache_read"] + c["cache_creation"] + c["input"] for c in churn
-    )
+    total_cache_total = sum(c["cache_read"] + c["cache_creation"] + c["input"] for c in churn)
     cache_hit_rate = round(total_cache_read / max(total_cache_total, 1), 3)
 
     api_calls = len(churn)
@@ -413,20 +410,23 @@ def mcp_get_session_health(session_id: str = "") -> str:
     else:
         recommendation = "continue"
 
-    return json.dumps({
-        "session_id": session_id,
-        "api_calls": api_calls,
-        "total_blocks": len(blocks),
-        "total_tokens": total_tokens,
-        "stale_blocks": len(stale),
-        "stale_tokens": stale_tokens,
-        "dead_weight_ratio": dead_weight_ratio,
-        "cache_hit_rate": cache_hit_rate,
-        "peak_resident_tokens": peak_resident,
-        "subagent_count": len(subagents),
-        "urgency_score": urgency,
-        "recommendation": recommendation,
-    }, indent=2)
+    return json.dumps(
+        {
+            "session_id": session_id,
+            "api_calls": api_calls,
+            "total_blocks": len(blocks),
+            "total_tokens": total_tokens,
+            "stale_blocks": len(stale),
+            "stale_tokens": stale_tokens,
+            "dead_weight_ratio": dead_weight_ratio,
+            "cache_hit_rate": cache_hit_rate,
+            "peak_resident_tokens": peak_resident,
+            "subagent_count": len(subagents),
+            "urgency_score": urgency,
+            "recommendation": recommendation,
+        },
+        indent=2,
+    )
 
 
 @mcp.tool(
@@ -459,6 +459,7 @@ def mcp_get_block_lifespans(session_id: str = "", top_n: int = 20) -> str:
 
     try:
         from context_tracker.ccscope.reconcile import reconcile
+
         blocks, churn, subagents = reconcile(session_id)
     except FileNotFoundError:
         return json.dumps({"error": "Transcript not found for session"})
@@ -481,12 +482,15 @@ def mcp_get_block_lifespans(session_id: str = "", top_n: int = 20) -> str:
     ]
     lifespans.sort(key=lambda x: (x["enter"], -x["tokens"]))
 
-    return json.dumps({
-        "session_id": session_id,
-        "api_calls": len(churn),
-        "total_blocks": len(blocks),
-        "lifespans": lifespans[:top_n],
-    }, indent=2)
+    return json.dumps(
+        {
+            "session_id": session_id,
+            "api_calls": len(churn),
+            "total_blocks": len(blocks),
+            "lifespans": lifespans[:top_n],
+        },
+        indent=2,
+    )
 
 
 @mcp.tool(
@@ -502,6 +506,7 @@ def mcp_get_cache_churn(session_id: str = "") -> str:
 
     try:
         from context_tracker.ccscope.reconcile import reconcile
+
         blocks, churn, subagents = reconcile(session_id)
     except FileNotFoundError:
         return json.dumps({"error": "Transcript not found for session"})
@@ -521,23 +526,26 @@ def mcp_get_cache_churn(session_id: str = "") -> str:
         default=0,
     )
 
-    return json.dumps({
-        "session_id": session_id,
-        "api_calls": len(churn),
-        "total_cache_read": total_cache_read,
-        "total_new_input": total_input,
-        "total_output": total_output,
-        "total_cache_creation": total_cache_creation,
-        "cache_read_to_input_ratio": ratio,
-        "peak_resident_tokens": peak_resident,
-        "subagent_count": len(subagents),
-        "subagent_cache_read": sub_cache_read,
-        "combined_cache_read": total_cache_read + sub_cache_read,
-        "headline": (
-            f"{ratio:,}x cache-read:input ratio across {len(churn)} "
-            f"API calls. Peak resident {peak_resident:,} tokens."
-        ),
-    }, indent=2)
+    return json.dumps(
+        {
+            "session_id": session_id,
+            "api_calls": len(churn),
+            "total_cache_read": total_cache_read,
+            "total_new_input": total_input,
+            "total_output": total_output,
+            "total_cache_creation": total_cache_creation,
+            "cache_read_to_input_ratio": ratio,
+            "peak_resident_tokens": peak_resident,
+            "subagent_count": len(subagents),
+            "subagent_cache_read": sub_cache_read,
+            "combined_cache_read": total_cache_read + sub_cache_read,
+            "headline": (
+                f"{ratio:,}x cache-read:input ratio across {len(churn)} "
+                f"API calls. Peak resident {peak_resident:,} tokens."
+            ),
+        },
+        indent=2,
+    )
 
 
 def main() -> None:
@@ -565,6 +573,7 @@ def main() -> None:
         import uvicorn
 
         from context_tracker.dashboard import create_app
+
         app = create_app()
         uvicorn.run(app, host=args.dash_host, port=args.dash_port)
     else:

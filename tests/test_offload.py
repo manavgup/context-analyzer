@@ -121,7 +121,7 @@ def test_resolve_offloads_preserves_resident_tokens(tmp_path):
     result = resolve_offloads(blocks, tool_results_dir)
 
     assert result[0]["tokens"] == original_tokens  # resident tokens unchanged
-    assert result[0]["spilled_tokens"] == 75_000   # 300000 // 4
+    assert result[0]["spilled_tokens"] == 75_000  # 300000 // 4
 
 
 def test_resolve_offloads_non_tool_result_blocks_unchanged(tmp_path):
@@ -176,9 +176,9 @@ def test_resolve_offloads_multiple_blocks_multiple_files(tmp_path):
 
     result = resolve_offloads(blocks, tool_results_dir)
 
-    assert result[0]["spilled_tokens"] == 100_000   # 400000 // 4
-    assert result[1]["spilled_tokens"] == 50_000    # 200000 // 4
-    assert result[2]["spilled_tokens"] == 25_000    # 100000 // 4
+    assert result[0]["spilled_tokens"] == 100_000  # 400000 // 4
+    assert result[1]["spilled_tokens"] == 50_000  # 200000 // 4
+    assert result[2]["spilled_tokens"] == 25_000  # 100000 // 4
     # Resident tokens unchanged
     assert result[0]["tokens"] == 50
     assert result[1]["tokens"] == 60
@@ -209,4 +209,4 @@ def test_resolve_offloads_id_in_block_id(tmp_path):
     result = resolve_offloads([block], tool_results_dir)
 
     assert "spilled_tokens" in result[0]
-    assert result[0]["spilled_tokens"] == 20_000   # 80000 // 4
+    assert result[0]["spilled_tokens"] == 20_000  # 80000 // 4

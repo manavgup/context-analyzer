@@ -80,7 +80,8 @@ def _extract_bash_program(command: str) -> str:
 
 
 def extract_resource(
-    tool_name: str, tool_input: dict,
+    tool_name: str,
+    tool_input: dict,
 ) -> tuple[str | None, str | None]:
     """Extract (resource, resource_type) from a tool_use input dict.
 
@@ -182,7 +183,8 @@ def _estimate_tokens(size_chars: int) -> int:
 
 
 def _block_type_for_content_block(
-    block_type_str: str, entry_type: str,
+    block_type_str: str,
+    entry_type: str,
 ) -> BlockType:
     """Map content block type + message entry type to BlockType enum."""
     if block_type_str == "tool_use":
@@ -211,11 +213,7 @@ def _detect_compactions_from_api(
 
     for turn in turns:
         for api_call in turn.api_calls:
-            total_in = (
-                api_call.input_tokens
-                + api_call.cache_read_tokens
-                + api_call.cache_creation_tokens
-            )
+            total_in = api_call.input_tokens + api_call.cache_read_tokens + api_call.cache_creation_tokens
             if total_in == 0:
                 continue
 
@@ -260,9 +258,7 @@ def reconstruct_session(
     content_store = ContentStore()
 
     # Index compaction events by timestamp for matching
-    compaction_events: list[PostCompactEvent] = [
-        e for e in hook_events if isinstance(e, PostCompactEvent)
-    ]
+    compaction_events: list[PostCompactEvent] = [e for e in hook_events if isinstance(e, PostCompactEvent)]
 
     # Group messages into turns
     turns = group_into_turns(messages)
@@ -332,7 +328,8 @@ def reconstruct_session(
                 tool_use_id = cb.tool_use_id
                 if cb.tool_input:
                     resource, resource_type = extract_resource(
-                        cb.tool_name or "", cb.tool_input,
+                        cb.tool_name or "",
+                        cb.tool_input,
                     )
                 # Store for pairing with tool_result
                 if tool_use_id:
@@ -383,9 +380,7 @@ def reconstruct_session(
 
     # Create synthetic pinned blocks from first-turn cache_creation data
     # if no explicit system blocks were found.
-    has_system_blocks = any(
-        b.block_type == BlockType.SYSTEM for b in all_blocks.values()
-    )
+    has_system_blocks = any(b.block_type == BlockType.SYSTEM for b in all_blocks.values())
     if not has_system_blocks and turns:
         first_turn = turns[0]
         if first_turn.api_calls:
@@ -467,10 +462,9 @@ def reconstruct_session(
 
         if compaction_detected and tn > 1:
             # Count blocks from previous epochs that are being compacted out
-            blocks_before = len([
-                bid for bid in all_block_ids
-                if all_blocks[bid].turn_entered < tn and not all_blocks[bid].is_pinned
-            ])
+            blocks_before = len(
+                [bid for bid in all_block_ids if all_blocks[bid].turn_entered < tn and not all_blocks[bid].is_pinned]
+            )
 
             epoch_number += 1
             current_epoch_start_turn = tn
@@ -483,17 +477,12 @@ def reconstruct_session(
                 # the difference between actual context and new-epoch blocks.
                 last_api = turn.api_calls[-1] if turn.api_calls else None
                 if last_api:
-                    actual_total = (
-                        last_api.input_tokens
-                        + last_api.cache_read_tokens
-                        + last_api.cache_creation_tokens
-                    )
+                    actual_total = last_api.input_tokens + last_api.cache_read_tokens + last_api.cache_creation_tokens
                     # New-epoch blocks (pinned + just entered) token estimate
                     new_blocks_est = sum(
                         all_blocks[bid].size_tokens_est
                         for bid in all_block_ids
-                        if all_blocks[bid].is_pinned
-                        or all_blocks[bid].turn_entered >= tn
+                        if all_blocks[bid].is_pinned or all_blocks[bid].turn_entered >= tn
                     )
                     summary_size = max(0, actual_total - new_blocks_est)
 
@@ -570,19 +559,13 @@ def reconstruct_session(
         total_cache_create = sum(ac.cache_creation_tokens for ac in turn.api_calls)
 
         # Estimate total tokens from block sizes
-        total_tokens_est = sum(
-            all_blocks[bid].size_tokens_est for bid in current_block_ids
-        )
+        total_tokens_est = sum(all_blocks[bid].size_tokens_est for bid in current_block_ids)
 
         # REAL context size from the last API call in this turn (ground truth)
         actual_context_tokens = 0
         if turn.api_calls:
             last_api = turn.api_calls[-1]
-            actual_context_tokens = (
-                last_api.input_tokens
-                + last_api.cache_read_tokens
-                + last_api.cache_creation_tokens
-            )
+            actual_context_tokens = last_api.input_tokens + last_api.cache_read_tokens + last_api.cache_creation_tokens
 
         snapshot = TurnSnapshot(
             turn_number=tn,
@@ -608,7 +591,8 @@ def reconstruct_session(
 
 
 def _find_turn_for_message(
-    msg: TranscriptMessage, turns: list[ConversationTurn],
+    msg: TranscriptMessage,
+    turns: list[ConversationTurn],
 ) -> int:
     """Find which turn number a message belongs to.
 
@@ -637,7 +621,8 @@ def _find_turn_for_message(
 
 
 def _find_nearest_turn(
-    msg: TranscriptMessage, turns: list[ConversationTurn],
+    msg: TranscriptMessage,
+    turns: list[ConversationTurn],
 ) -> int:
     """Find the nearest turn at or before this message's sequence index."""
     # Use sequence index to find which turn this message falls into

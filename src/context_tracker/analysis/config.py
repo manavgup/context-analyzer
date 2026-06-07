@@ -15,7 +15,7 @@ class StalenessConfig:
     decay_window: int = 10
     resource_window: int = 10
     reference_scan_window: int = 15
-    task_boundary_time_gap: int = 10     # Minutes
+    task_boundary_time_gap: int = 10  # Minutes
     task_boundary_overlap: float = 0.2
     min_prompt_length_for_boundary: int = 20
 
@@ -51,20 +51,28 @@ MODEL_CONTEXT_WINDOWS = {
 # Pricing per million tokens
 PRICING = {
     "claude-opus-4-6": {
-        "input": 15.0, "output": 75.0,
-        "cache_read": 1.875, "cache_create": 18.75,
+        "input": 15.0,
+        "output": 75.0,
+        "cache_read": 1.875,
+        "cache_create": 18.75,
     },
     "claude-opus-4-6[1m]": {
-        "input": 15.0, "output": 75.0,
-        "cache_read": 1.875, "cache_create": 18.75,
+        "input": 15.0,
+        "output": 75.0,
+        "cache_read": 1.875,
+        "cache_create": 18.75,
     },
     "claude-sonnet-4-6": {
-        "input": 3.0, "output": 15.0,
-        "cache_read": 0.375, "cache_create": 3.75,
+        "input": 3.0,
+        "output": 15.0,
+        "cache_read": 0.375,
+        "cache_create": 3.75,
     },
     "_default": {
-        "input": 15.0, "output": 75.0,
-        "cache_read": 1.875, "cache_create": 18.75,
+        "input": 15.0,
+        "output": 75.0,
+        "cache_read": 1.875,
+        "cache_create": 18.75,
     },
 }
 

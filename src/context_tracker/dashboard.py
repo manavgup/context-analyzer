@@ -173,14 +173,16 @@ def _extract_content_blocks_with_images(
     messages: list[dict] = []
 
     if isinstance(content, str) and content:
-        messages.append({
-            "type": "user" if entry_type == "user" else "assistant",
-            "role": "user" if entry_type == "user" else "assistant",
-            "content": content[:8000],
-            "size_chars": len(content),
-            "is_truncated": len(content) > 8000,
-            "timestamp": timestamp,
-        })
+        messages.append(
+            {
+                "type": "user" if entry_type == "user" else "assistant",
+                "role": "user" if entry_type == "user" else "assistant",
+                "content": content[:8000],
+                "size_chars": len(content),
+                "is_truncated": len(content) > 8000,
+                "timestamp": timestamp,
+            }
+        )
         return messages
 
     if not isinstance(content, list):
@@ -193,58 +195,52 @@ def _extract_content_blocks_with_images(
 
         if block_type == "text":
             text = block_item.get("text", "")
-            messages.append({
-                "type": "assistant_text" if entry_type == "assistant" else "user_text",
-                "role": entry_type,
-                "content": text[:8000],
-                "size_chars": len(text),
-                "is_truncated": len(text) > 8000,
-                "timestamp": timestamp,
-            })
+            messages.append(
+                {
+                    "type": "assistant_text" if entry_type == "assistant" else "user_text",
+                    "role": entry_type,
+                    "content": text[:8000],
+                    "size_chars": len(text),
+                    "is_truncated": len(text) > 8000,
+                    "timestamp": timestamp,
+                }
+            )
 
         elif block_type == "thinking":
             text = block_item.get("thinking", "")
-            messages.append({
-                "type": "thinking",
-                "role": "assistant",
-                "content": text[:8000],
-                "size_chars": len(text),
-                "is_truncated": len(text) > 8000,
-                "timestamp": timestamp,
-            })
+            messages.append(
+                {
+                    "type": "thinking",
+                    "role": "assistant",
+                    "content": text[:8000],
+                    "size_chars": len(text),
+                    "is_truncated": len(text) > 8000,
+                    "timestamp": timestamp,
+                }
+            )
 
         elif block_type == "tool_use":
             tool_input = block_item.get("input", {})
-            input_str = (
-                json.dumps(tool_input, indent=2)
-                if isinstance(tool_input, dict)
-                else str(tool_input)
-            )
+            input_str = json.dumps(tool_input, indent=2) if isinstance(tool_input, dict) else str(tool_input)
             tool_name = block_item.get("name", "unknown")
             resource = ""
             if tool_name in ("Read", "Edit", "Write"):
-                resource = (
-                    tool_input.get("file_path", "")
-                    if isinstance(tool_input, dict)
-                    else ""
-                )
+                resource = tool_input.get("file_path", "") if isinstance(tool_input, dict) else ""
             elif tool_name == "Bash":
-                resource = (
-                    tool_input.get("command", "")[:100]
-                    if isinstance(tool_input, dict)
-                    else ""
-                )
-            messages.append({
-                "type": "tool_use",
-                "role": "assistant",
-                "tool_name": tool_name,
-                "resource": resource,
-                "content": input_str[:8000],
-                "size_chars": len(input_str),
-                "is_truncated": len(input_str) > 8000,
-                "tool_use_id": block_item.get("id", ""),
-                "timestamp": timestamp,
-            })
+                resource = tool_input.get("command", "")[:100] if isinstance(tool_input, dict) else ""
+            messages.append(
+                {
+                    "type": "tool_use",
+                    "role": "assistant",
+                    "tool_name": tool_name,
+                    "resource": resource,
+                    "content": input_str[:8000],
+                    "size_chars": len(input_str),
+                    "is_truncated": len(input_str) > 8000,
+                    "tool_use_id": block_item.get("id", ""),
+                    "timestamp": timestamp,
+                }
+            )
 
         elif block_type == "tool_result":
             result_content = block_item.get("content", "")
@@ -293,15 +289,17 @@ def _extract_content_blocks_with_images(
                 source.get("media_type", "image/png"),
             )
             meta["index"] = 0
-            messages.append({
-                "type": "image",
-                "role": entry_type,
-                "content": f"[image: {meta['media_type']} {meta['width']}x{meta['height']}]",
-                "size_chars": 0,
-                "is_truncated": False,
-                "timestamp": timestamp,
-                "images": [meta],
-            })
+            messages.append(
+                {
+                    "type": "image",
+                    "role": entry_type,
+                    "content": f"[image: {meta['media_type']} {meta['width']}x{meta['height']}]",
+                    "size_chars": 0,
+                    "is_truncated": False,
+                    "timestamp": timestamp,
+                    "images": [meta],
+                }
+            )
 
     return messages
 
@@ -332,7 +330,10 @@ def _walk_transcript_for_range(
 
             entry_type = entry.get("type", "")
             if entry_type in (
-                "file-history-snapshot", "last-prompt", "pr-link", "queue-operation",
+                "file-history-snapshot",
+                "last-prompt",
+                "pr-link",
+                "queue-operation",
             ):
                 continue
 
@@ -376,7 +377,9 @@ def _flatten_entries_to_messages(entries_raw: list[dict]) -> list[dict]:
         timestamp = entry.get("timestamp", "")
 
         msgs = _extract_content_blocks_with_images(
-            content, entry_type, timestamp,
+            content,
+            entry_type,
+            timestamp,
         )
         messages_out.extend(msgs)
     return messages_out
@@ -1626,7 +1629,9 @@ def create_app(
             raise HTTPException(status_code=404, detail="Transcript not found")
 
         target_entries = _walk_transcript_for_range(
-            transcript_path, call_index, call_index,
+            transcript_path,
+            call_index,
+            call_index,
         )
 
         if not target_entries:
@@ -1708,6 +1713,7 @@ def create_app(
 
         # Build turn_map on the fly (no ccscope build required)
         from context_tracker.ccscope.parse_transcript import build_turn_map
+
         turn_map_data = build_turn_map(transcript_path)
 
         # Find the entry for this conv_turn
@@ -1723,7 +1729,9 @@ def create_app(
         last_call = turn_entry["last_call"]
 
         entries_raw = _walk_transcript_for_range(
-            transcript_path, first_call, last_call,
+            transcript_path,
+            first_call,
+            last_call,
         )
 
         if not entries_raw:
@@ -1874,7 +1882,10 @@ def create_app(
 
     @app.get("/api/session/{session_id}/conv_turn/{conv_turn}/image/{msg_index}/{img_index}")
     def get_conv_turn_image(
-        session_id: str, conv_turn: int, msg_index: int, img_index: int,
+        session_id: str,
+        conv_turn: int,
+        msg_index: int,
+        img_index: int,
     ):
         """Serve a specific image from a conversation turn.
 
@@ -1889,6 +1900,7 @@ def create_app(
             raise HTTPException(status_code=404, detail="Transcript not found")
 
         from context_tracker.ccscope.parse_transcript import build_turn_map
+
         turn_map_data = build_turn_map(transcript_path)
 
         turn_entry = None
@@ -1903,7 +1915,9 @@ def create_app(
         last_call = turn_entry["last_call"]
 
         entries_raw = _walk_transcript_for_range(
-            transcript_path, first_call, last_call,
+            transcript_path,
+            first_call,
+            last_call,
         )
         if not entries_raw:
             raise HTTPException(status_code=404, detail="No entries found for this turn")

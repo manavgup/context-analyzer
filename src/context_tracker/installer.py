@@ -68,14 +68,16 @@ def install_hooks(
         matchers[:] = [m for m in matchers if not _is_owned_matcher(m)]
 
         # Add our hook
-        matchers.append({
-            "hooks": [
-                {
-                    "type": "command",
-                    "command": f"# {CONTEXT_TRACKER_MARKER}\n{hook_command}",
-                }
-            ]
-        })
+        matchers.append(
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": f"# {CONTEXT_TRACKER_MARKER}\n{hook_command}",
+                    }
+                ]
+            }
+        )
 
     _write_settings(settings_path, settings)
     print(f"Installed {len(HOOK_EVENTS_TO_INSTALL)} hooks into {settings_path}")

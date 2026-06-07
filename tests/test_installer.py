@@ -25,14 +25,16 @@ def test_install_into_empty_settings(tmp_path):
 
 def test_install_preserves_existing_hooks(tmp_path):
     settings_path = tmp_path / "settings.json"
-    settings_path.write_text(json.dumps({
-        "hooks": {
-            "PostToolUse": [
-                {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo existing"}]}
-            ]
-        },
-        "someOtherSetting": True,
-    }))
+    settings_path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PostToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo existing"}]}]
+                },
+                "someOtherSetting": True,
+            }
+        )
+    )
 
     install_hooks(settings_path=settings_path, hook_command="python3 -m context_tracker.hooks")
     settings = json.loads(settings_path.read_text())
@@ -54,7 +56,8 @@ def test_install_is_idempotent(tmp_path):
     settings = json.loads(settings_path.read_text())
     for event_name in HOOK_EVENTS_TO_INSTALL:
         context_tracker_entries = [
-            m for m in settings["hooks"][event_name]
+            m
+            for m in settings["hooks"][event_name]
             if any(CONTEXT_TRACKER_MARKER in h.get("command", "") for h in m.get("hooks", []))
         ]
         assert len(context_tracker_entries) == 1
@@ -62,17 +65,25 @@ def test_install_is_idempotent(tmp_path):
 
 def test_uninstall_removes_only_owned_hooks(tmp_path):
     settings_path = tmp_path / "settings.json"
-    settings_path.write_text(json.dumps({
-        "hooks": {
-            "PostToolUse": [
-                {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo user-hook"}]},
-                {"hooks": [{"type": "command", "command": (
-                    f"# {CONTEXT_TRACKER_MARKER}\n"
-                    "python3 -m context_tracker.hooks"
-                )}]},
-            ]
-        }
-    }))
+    settings_path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PostToolUse": [
+                        {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo user-hook"}]},
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": (f"# {CONTEXT_TRACKER_MARKER}\npython3 -m context_tracker.hooks"),
+                                }
+                            ]
+                        },
+                    ]
+                }
+            }
+        )
+    )
 
     uninstall_hooks(settings_path=settings_path)
     settings = json.loads(settings_path.read_text())

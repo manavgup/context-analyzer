@@ -39,6 +39,7 @@ def cmd_list(args):
             continue
         size_mb = jsonl.stat().st_size / (1024 * 1024)
         from datetime import datetime
+
         mtime = datetime.fromtimestamp(jsonl.stat().st_mtime)
 
         # Check if session folder exists (has subagents/tool-results)
@@ -89,6 +90,7 @@ def cmd_build(args):
 
     # Write meta.json for the dashboard to know the session ID
     import json as _json
+
     meta_path = output_dir / "meta.json"
     meta_path.write_text(_json.dumps({"session_id": session_id}), encoding="utf-8")
 
@@ -146,6 +148,7 @@ def cmd_open(args):
     import uvicorn
 
     from context_tracker.dashboard import create_app
+
     app = create_app()
     uvicorn.run(app, host=host, port=port)
 
