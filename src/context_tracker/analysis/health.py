@@ -344,7 +344,7 @@ def generate_recommendations(
     """Generate actionable recommendations from health signals.
 
     Returns a list of recommendation dicts, each with:
-        priority, code, title, detail, action, tokens_recoverable
+        priority, code, title, detail, action, tokens_recoverable, target_turn
     """
     if config is None:
         config = HealthConfig()
@@ -352,6 +352,8 @@ def generate_recommendations(
         staleness_config = StalenessConfig()
 
     recs: list[dict] = []
+    # Use 1-based conversation turn number (matches turnMap.conv_turn in frontend)
+    last_conv_turn = snapshots[-1].turn_number if snapshots else 1
 
     # HIGH_DEAD_WEIGHT
     if signals.dead_weight_ratio > 0.30:
@@ -368,6 +370,7 @@ def generate_recommendations(
                 "detail": (f"{signals.dead_weight_ratio:.0%} of context is dead weight ({recoverable:,} tokens)."),
                 "action": ("Start a new session or use /compact to reclaim stale context."),
                 "tokens_recoverable": recoverable,
+                "target_turn": last_conv_turn,
             }
         )
 
@@ -382,6 +385,7 @@ def generate_recommendations(
                 "detail": (f"Context utilization at {signals.context_utilization:.0%} of model window."),
                 "action": ("Consider starting a new session to avoid auto-compaction."),
                 "tokens_recoverable": 0,
+                "target_turn": last_conv_turn,
             }
         )
 
@@ -400,6 +404,21 @@ def generate_recommendations(
         active_copy_est = recoverable // max(1, sum(heavy_reads.values()))
         recoverable = max(0, recoverable - active_copy_est * len(heavy_reads))
 
+        # Find turn with highest dead_weight_ratio, fallback to last turn
+        repeated_target = last_conv_turn
+        max_dw = -1.0
+        for snap in snapshots:
+            dw_tokens = 0
+            for bid in snap.block_ids:
+                blk = block_registry.get(bid)
+                if blk and blk.resource and blk.resource in heavy_reads:
+                    dw_tokens += blk.size_tokens_est
+            if snap.actual_context_tokens > 0:
+                ratio = dw_tokens / snap.actual_context_tokens
+                if ratio > max_dw:
+                    max_dw = ratio
+                    repeated_target = snap.turn_number
+
         recs.append(
             {
                 "priority": priority,
@@ -410,6 +429,7 @@ def generate_recommendations(
                 ),
                 "action": ("Avoid re-reading files that haven't changed. Use Edit instead of Read+Write."),
                 "tokens_recoverable": recoverable,
+                "target_turn": repeated_target,
             }
         )
 
@@ -427,6 +447,7 @@ def generate_recommendations(
                 ),
                 "action": ("Context is changing too fast for the cache. Group related work together."),
                 "tokens_recoverable": 0,
+                "target_turn": last_conv_turn,
             }
         )
 
@@ -443,6 +464,7 @@ def generate_recommendations(
                     "Investigate failing tool calls. Errors consume context without contributing useful information."
                 ),
                 "tokens_recoverable": 0,
+                "target_turn": last_conv_turn,
             }
         )
 
@@ -457,6 +479,7 @@ def generate_recommendations(
                 "detail": (f"Recent outputs are {signals.output_inflation:.0%} larger than session average."),
                 "action": ("Larger outputs fill context faster. Consider more targeted prompts."),
                 "tokens_recoverable": 0,
+                "target_turn": last_conv_turn,
             }
         )
 
@@ -481,6 +504,7 @@ def generate_recommendations(
                     ),
                     "action": ("These old file contents waste context. A compaction would remove them."),
                     "tokens_recoverable": recoverable,
+                    "target_turn": last_conv_turn,
                 }
             )
 

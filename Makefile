@@ -71,10 +71,10 @@ coverage: ## Run tests with coverage report
 .PHONY: dev serve stop
 
 dev: ## Start dashboard dev server with reload
-	$(BIN)/uvicorn $(PROJECT_NAME).dashboard:app --reload --host 0.0.0.0 --port 8080
+	$(BIN)/uvicorn $(PROJECT_NAME).dashboard:create_app --factory --reload --host 0.0.0.0 --port 8080
 
 serve: ## Start dashboard server
-	$(BIN)/uvicorn $(PROJECT_NAME).dashboard:app --host 0.0.0.0 --port 8080
+	$(BIN)/uvicorn $(PROJECT_NAME).dashboard:create_app --factory --host 0.0.0.0 --port 8080
 
 stop: ## Stop running server
 	@pkill -f "uvicorn $(PROJECT_NAME)" 2>/dev/null || echo "No server running"

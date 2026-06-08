@@ -57,9 +57,7 @@ def read_events(session_id: str, trace_dir: Path = DEFAULT_TRACE_DIR) -> list[Tr
 DEFAULT_PROJECTS_DIR = Path.home() / ".claude" / "projects"
 
 # UUID pattern for session IDs (Claude Code transcript filenames)
-_UUID_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-)
+_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
 def list_sessions(
