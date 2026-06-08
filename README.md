@@ -2,6 +2,8 @@
 
 Context window usage analyzer for Claude Code. Tracks how context is consumed across tools, compaction, skills, and user interactions — then visualizes it so you can optimize your sessions.
 
+![Context Analyzer Demo](docs/screenshots/context-analyzer-demo.gif)
+
 ## What it does
 
 - **Hooks** into Claude Code via `~/.claude/settings.json` to capture tool calls, compaction events, session lifecycle, and subagent activity
