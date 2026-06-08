@@ -3426,21 +3426,26 @@ html, body {
     });
   }
 
-  function convTurnToApiCall(convTurn) {
+  function convTurnToApiCall(convTurn, useLastCall) {
     // Convert 1-based conversation turn number to 0-based API call index
+    // useLastCall=true navigates to end of turn (where snapshots are computed)
     if (!turnMap || turnMap.length === 0) return 0;
+    const field = useLastCall ? 'last_call' : 'first_call';
     for (const ct of turnMap) {
-      if (ct.conv_turn === convTurn) return ct.first_call;
+      if (ct.conv_turn === convTurn) return ct[field];
     }
-    // If exact match not found, find closest
     for (let i = turnMap.length - 1; i >= 0; i--) {
-      if (turnMap[i].conv_turn <= convTurn) return turnMap[i].first_call;
+      if (turnMap[i].conv_turn <= convTurn) return turnMap[i][field];
     }
     return 0;
   }
 
   function navigateToRecommendation(turn, code) {
-    const apiCall = convTurnToApiCall(turn);
+    // Health recs use last_call (snapshot computed at end of turn)
+    // Error recs use first_call (error occurs at start of cluster)
+    const isHealthRec = ['HIGH_DEAD_WEIGHT', 'CONTEXT_NEAR_LIMIT', 'REPEATED_READS',
+      'CACHE_CHURN', 'HIGH_ERROR_RATE', 'OUTPUT_INFLATION', 'SUPERSEDED_READS'].includes(code);
+    const apiCall = convTurnToApiCall(turn, isHealthRec);
     goToTurn(apiCall);
 
     // Determine which pane to flash based on recommendation code
