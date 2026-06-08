@@ -3426,8 +3426,22 @@ html, body {
     });
   }
 
+  function convTurnToApiCall(convTurn) {
+    // Convert 1-based conversation turn number to 0-based API call index
+    if (!turnMap || turnMap.length === 0) return 0;
+    for (const ct of turnMap) {
+      if (ct.conv_turn === convTurn) return ct.first_call;
+    }
+    // If exact match not found, find closest
+    for (let i = turnMap.length - 1; i >= 0; i--) {
+      if (turnMap[i].conv_turn <= convTurn) return turnMap[i].first_call;
+    }
+    return 0;
+  }
+
   function navigateToRecommendation(turn, code) {
-    goToTurn(turn);
+    const apiCall = convTurnToApiCall(turn);
+    goToTurn(apiCall);
 
     // Determine which pane to flash based on recommendation code
     let targetEl = null;

@@ -1429,7 +1429,7 @@ def create_app(
         if self_corrections:
             high_count = sum(1 for sc in self_corrections if sc["confidence"] == "high")
             med_count = sum(1 for sc in self_corrections if sc["confidence"] == "medium")
-            sc_target = self_corrections[0]["turn"] if self_corrections else (len(turns) - 1 if turns else 0)
+            sc_target = self_corrections[0]["turn"] if self_corrections else (len(turns) if turns else 1)
             error_recommendations.append(
                 {
                     "priority": "warning",
