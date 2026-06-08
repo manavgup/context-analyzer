@@ -1411,6 +1411,7 @@ def create_app(
                     ),
                     "action": "Review the error cluster for systemic issues",
                     "tokens_recoverable": 0,
+                    "target_turn": cluster["start_turn"],
                 }
             )
         for rp in retry_patterns:
@@ -1422,11 +1423,13 @@ def create_app(
                     "detail": (f"{rp['retry_count']} errors within 3 turns starting at turn {rp['window_start_turn']}"),
                     "action": "Check if the tool approach needs adjustment",
                     "tokens_recoverable": 0,
+                    "target_turn": rp["window_start_turn"],
                 }
             )
         if self_corrections:
             high_count = sum(1 for sc in self_corrections if sc["confidence"] == "high")
             med_count = sum(1 for sc in self_corrections if sc["confidence"] == "medium")
+            sc_target = self_corrections[0]["turn"] if self_corrections else (len(turns) - 1 if turns else 0)
             error_recommendations.append(
                 {
                     "priority": "warning",
@@ -1437,6 +1440,7 @@ def create_app(
                     ),
                     "action": "Review self-corrections for recurring issues",
                     "tokens_recoverable": 0,
+                    "target_turn": sc_target,
                 }
             )
 

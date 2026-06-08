@@ -580,6 +580,18 @@ html, body {
   color: var(--accent);
   margin-top: 4px;
 }
+.rec-card[data-target-turn] { cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
+.rec-card[data-target-turn]:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+@keyframes flash-highlight {
+  0% { box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.6); }
+  100% { box-shadow: 0 0 0 3px rgba(99, 102, 241, 0); }
+}
+.flash-highlight {
+  animation: flash-highlight 1s ease-out;
+}
 
 /* ===== DEAD WEIGHT TAB ===== */
 .tab-toggle {
@@ -1358,12 +1370,6 @@ html, body {
     </div>
     </div> <!-- /chart-row -->
 
-    <!-- Section 3.5: Recommendations -->
-    <div class="recommendations-panel hidden" id="recommendations-panel">
-      <div class="rec-panel-title">Recommendations</div>
-      <div class="rec-grid" id="rec-grid"></div>
-    </div>
-
     <!-- Section 4: Scrubber -->
     <div class="scrubber">
       <button class="scrubber-btn" id="btn-play" title="Play/Pause (Space)">
@@ -1427,6 +1433,12 @@ html, body {
         </div>
         <div id="messages-list"></div>
       </div>
+    </div>
+
+    <!-- Section 6: Recommendations (below bottom grid) -->
+    <div class="recommendations-panel hidden" id="recommendations-panel">
+      <div class="rec-panel-title">Recommendations</div>
+      <div class="rec-grid" id="rec-grid"></div>
     </div>
 
   </div>
@@ -3392,7 +3404,10 @@ html, body {
       const tokensLine = rec.tokens_recoverable > 0
         ? '<div class="rec-tokens">' + fmt(rec.tokens_recoverable) + ' tokens recoverable</div>'
         : '';
-      html += '<div class="rec-card ' + rec.priority + '">' +
+      const targetAttr = (rec.target_turn != null)
+        ? ' data-target-turn="' + rec.target_turn + '" data-code="' + escapeHtml(rec.code) + '"'
+        : '';
+      html += '<div class="rec-card ' + rec.priority + '"' + targetAttr + '>' +
         '<div class="rec-title">' + escapeHtml(rec.title) + '</div>' +
         '<div class="rec-detail">' + escapeHtml(rec.detail) + '</div>' +
         '<div class="rec-action">' + escapeHtml(rec.action) + '</div>' +
@@ -3400,6 +3415,59 @@ html, body {
         '</div>';
     }
     grid.innerHTML = html;
+
+    // Attach click handlers to cards with target_turn
+    grid.querySelectorAll('.rec-card[data-target-turn]').forEach(card => {
+      card.addEventListener('click', () => {
+        const turn = parseInt(card.dataset.targetTurn, 10);
+        const code = card.dataset.code;
+        navigateToRecommendation(turn, code);
+      });
+    });
+  }
+
+  function navigateToRecommendation(turn, code) {
+    goToTurn(turn);
+
+    // Determine which pane to flash based on recommendation code
+    let targetEl = null;
+    switch (code) {
+      case 'error_cluster':
+      case 'retry_pattern':
+      case 'HIGH_ERROR_RATE':
+        targetEl = document.getElementById('col-messages');
+        if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        break;
+      case 'HIGH_DEAD_WEIGHT':
+      case 'SUPERSEDED_READS':
+        // Switch to dead weight tab and flash the growth column
+        switchGrowthTab('deadweight');
+        targetEl = document.getElementById('col-growth');
+        if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        break;
+      case 'CACHE_CHURN':
+        targetEl = document.getElementById('col-growth');
+        if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        break;
+      case 'REPEATED_READS':
+        targetEl = document.getElementById('col-composition');
+        if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        break;
+      default:
+        // CONTEXT_NEAR_LIMIT, OUTPUT_INFLATION, self_correction: just navigate
+        break;
+    }
+
+    // Apply flash highlight animation
+    if (targetEl) {
+      targetEl.classList.remove('flash-highlight');
+      // Force reflow so re-adding the class restarts the animation
+      void targetEl.offsetWidth;
+      targetEl.classList.add('flash-highlight');
+      targetEl.addEventListener('animationend', () => {
+        targetEl.classList.remove('flash-highlight');
+      }, { once: true });
+    }
   }
 
   // ===== DEAD WEIGHT TAB =====
