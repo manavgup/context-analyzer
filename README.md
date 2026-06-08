@@ -10,11 +10,25 @@ Context window usage analyzer for Claude Code. Tracks how context is consumed ac
 - **Dashboard** at `/` for single-session visualization: context growth, cache churn, composition, message inspector
 - **Cross-session analytics** at `/sessions` for comparing patterns across sessions: cost/call vs context size, insights, trends
 
+## Prerequisites
+
+- Python 3.11+
+- [uv](https://docs.astral.sh/uv/) — fast Python package manager
+- make
+- git
+
+```bash
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
 ## Quick Start
 
 ```bash
-make install-dev       # install with uv
-make hook-install      # install Claude Code hooks
+git clone https://github.com/manavgup/context-analyzer.git
+cd context-analyzer
+make install-dev       # create venv and install with uv
+make hook-install      # install Claude Code hooks (optional — dashboard works without hooks)
 make dev               # start dashboard on localhost:8080
 ```
 
