@@ -1,4 +1,5 @@
 import json
+import shlex
 import sys
 
 from context_tracker.installer import (
@@ -7,6 +8,7 @@ from context_tracker.installer import (
     install_hooks,
     uninstall_hooks,
 )
+from context_tracker.profiles import default_hook_command
 
 
 def test_default_hook_command_pins_interpreter(tmp_path):
@@ -27,6 +29,24 @@ def test_default_hook_command_pins_interpreter(tmp_path):
     assert "-m context_tracker.hooks" in command
     # Must not fall back to a bare interpreter name.
     assert "\npython3 -m" not in command
+
+
+def test_default_hook_command_quotes_spaced_interpreter(monkeypatch):
+    """A spaced interpreter path (normal on Windows) must stay one shell token.
+
+    ``sys.executable`` like ``C:\\Program Files\\...\\python.exe`` contains a
+    space; interpolated unquoted into the hook command it splits into two tokens
+    and the hook fails. The command must quote the interpreter so a POSIX shell
+    parses it back as the single original path. Regression guard for #57.
+    """
+    spaced = "/a b/python"
+    monkeypatch.setattr(sys, "executable", spaced)
+
+    command = default_hook_command()
+    # On POSIX the command must be shlex-parseable back to the original argv.
+    assert shlex.split(command) == [spaced, "-m", "context_tracker.hooks"]
+    # The raw (unquoted) path must not appear verbatim — it had to be quoted.
+    assert f"{spaced} -m" not in command
 
 
 def test_install_into_empty_settings(tmp_path):

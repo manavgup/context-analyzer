@@ -5,8 +5,12 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import cast
+
+from sqlalchemy.orm import Session
 
 from context_tracker.ccscope.reconcile import find_session_paths, reconcile
+from context_tracker.ccscope.subagents import parse_workflows
 from context_tracker.db import (
     DEFAULT_DB_PATH,
     ApiCallRecord,
@@ -17,6 +21,7 @@ from context_tracker.db import (
     SubagentRecord,
     ToolResultOffloadRecord,
     TurnRecord,
+    WorkflowRunRecord,
     get_engine,
     get_session_factory,
 )
@@ -88,6 +93,47 @@ def _build_turn_map(churn: list[dict], blocks: list[dict]) -> list[dict]:
         )
 
     return turns
+
+
+def _add_subagent(
+    db: Session,
+    session_id: str,
+    sa: dict,
+    workflow_id: int | None = None,
+    phase: str | None = None,
+    label: str | None = None,
+) -> SubagentRecord:
+    """Persist a SubagentRecord + its per-call churn. Shared by plain subagents
+    and workflow agents (the latter set workflow_id/phase/label)."""
+    sa_rec = SubagentRecord(
+        session_id=session_id,
+        agent_id=sa.get("agent_id", ""),
+        agent_type=sa.get("agent_type"),
+        description=sa.get("description"),
+        peak_resident=sa.get("peak_resident", 0),
+        total_cache_read=sa.get("total_cache_read", 0),
+        total_api_calls=sa.get("api_calls", 0),
+        total_output_tokens=sa.get("total_output", 0),
+        workflow_id=workflow_id,
+        phase=phase,
+        label=label,
+    )
+    db.add(sa_rec)
+    db.flush()  # get sa_rec.id for FK
+
+    for sc in sa.get("churn", []):
+        db.add(
+            SubagentApiCallRecord(
+                subagent_id=sa_rec.id,
+                session_id=session_id,
+                call_index=sc.get("turn", 0),
+                input_tokens=sc.get("input", 0),
+                output_tokens=sc.get("output", 0),
+                cache_read=sc.get("cache_read", 0),
+                cache_creation=sc.get("cache_creation", 0),
+            )
+        )
+    return sa_rec
 
 
 def ingest_session(
@@ -258,34 +304,35 @@ def ingest_session(
                     )
                 )
 
-        # --- Subagent records + their per-call churn ---
+        # --- Subagent records + their per-call churn (plain Task subagents) ---
         for sa in subagent_summaries:
-            sa_rec = SubagentRecord(
-                session_id=session_id,
-                agent_id=sa.get("agent_id", ""),
-                agent_type=sa.get("agent_type"),
-                description=sa.get("description"),
-                peak_resident=sa.get("peak_resident", 0),
-                total_cache_read=sa.get("total_cache_read", 0),
-                total_api_calls=sa.get("api_calls", 0),
-                total_output_tokens=sa.get("total_output", 0),
-            )
-            db.add(sa_rec)
-            db.flush()  # get sa_rec.id for FK
+            _add_subagent(db, session_id, sa)
 
-            # Store each subagent's per-API-call churn
-            for sc in sa.get("churn", []):
-                db.add(
-                    SubagentApiCallRecord(
-                        subagent_id=sa_rec.id,
-                        session_id=session_id,
-                        call_index=sc.get("turn", 0),
-                        input_tokens=sc.get("input", 0),
-                        output_tokens=sc.get("output", 0),
-                        cache_read=sc.get("cache_read", 0),
-                        cache_creation=sc.get("cache_creation", 0),
-                    )
+        # --- Multi-agent workflow runs + their subagents ---
+        sa_dir = paths.get("subagents")
+        if sa_dir and Path(sa_dir).exists():
+            for run in parse_workflows(Path(sa_dir)):
+                agents = run.get("agents", [])
+                starts = [a.get("started_at") for a in agents if a.get("started_at")]
+                ends = [a.get("ended_at") for a in agents if a.get("ended_at")]
+                wf_rec = WorkflowRunRecord(
+                    wf_id=run.get("wf_id", ""),
+                    session_id=session_id,
+                    name=run.get("name"),
+                    started_at=min(starts) if starts else None,
+                    ended_at=max(ends) if ends else None,
                 )
+                db.add(wf_rec)
+                db.flush()  # get wf_rec.id for FK
+                for sa in agents:
+                    _add_subagent(
+                        db,
+                        session_id,
+                        sa,
+                        workflow_id=cast(int, wf_rec.id),
+                        phase=sa.get("phase"),
+                        label=sa.get("label"),
+                    )
 
         # --- Tool result offloads ---
         tr_path = paths.get("tool_results")
