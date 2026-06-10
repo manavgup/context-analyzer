@@ -40,6 +40,7 @@ from context_tracker.db import (
     get_session_factory,
 )
 from context_tracker.ingest import ingest_session
+from context_tracker.nudges import evaluate_nudges
 from context_tracker.storage import DEFAULT_TRACE_DIR, list_sessions, read_events
 from context_tracker.transcript_parser import parse_raw_transcript
 
@@ -1320,6 +1321,23 @@ def create_app(
                 "cost_cumulative": signals.cost_cumulative,
             },
             "recommendations": recommendations,
+        }
+
+    @app.get("/api/session/{session_id}/nudges")
+    def get_session_nudges(session_id: str) -> dict:
+        """Return current nudges for a session."""
+        _validate_session_id(session_id)
+        nudges = evaluate_nudges(session_id, db_path=db_path)
+        return {
+            "session_id": session_id,
+            "nudges": [
+                {
+                    "code": n.code,
+                    "severity": n.severity,
+                    "message": n.message,
+                }
+                for n in nudges
+            ],
         }
 
     @app.get("/api/session/{session_id}/errors")
