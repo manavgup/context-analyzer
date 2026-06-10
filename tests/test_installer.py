@@ -1,4 +1,5 @@
 import json
+import sys
 
 from context_tracker.installer import (
     CONTEXT_TRACKER_MARKER,
@@ -6,6 +7,26 @@ from context_tracker.installer import (
     install_hooks,
     uninstall_hooks,
 )
+
+
+def test_default_hook_command_pins_interpreter(tmp_path):
+    """The default command must use the absolute interpreter path, not bare python3.
+
+    The hooks run globally in every session; a bare ``python3`` resolves to an
+    interpreter that usually cannot import context_tracker, so the hook fails with
+    ModuleNotFoundError. Pinning to sys.executable fixes that. Regression guard.
+    """
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text("{}")
+
+    install_hooks(settings_path=settings_path)
+    settings = json.loads(settings_path.read_text())
+
+    command = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+    assert sys.executable in command
+    assert "-m context_tracker.hooks" in command
+    # Must not fall back to a bare interpreter name.
+    assert "\npython3 -m" not in command
 
 
 def test_install_into_empty_settings(tmp_path):
