@@ -639,6 +639,72 @@ html, body {
   animation: flash-highlight 1s ease-out;
 }
 
+/* ===== PROMPT EFFICIENCY PANEL ===== */
+.prompt-efficiency-panel {
+  margin-bottom: 20px;
+}
+.prompt-efficiency-panel.hidden { display: none; }
+.prompt-panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+.prompt-summary {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.prompt-summary-stat {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.prompt-summary-stat .label { color: var(--text-secondary); font-size: 11px; }
+.prompt-summary-stat .value { font-weight: 600; font-family: var(--mono); font-size: 13px; }
+.prompt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.prompt-table th {
+  text-align: left;
+  padding: 6px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+.prompt-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+.prompt-table tr.prompt-specific { background: rgba(52, 211, 153, 0.06); }
+.prompt-table tr.prompt-moderate { background: rgba(251, 191, 36, 0.06); }
+.prompt-table tr.prompt-vague { background: rgba(248, 113, 113, 0.06); }
+.prompt-score-bar {
+  display: inline-block;
+  height: 6px;
+  border-radius: 3px;
+  min-width: 4px;
+  max-width: 80px;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+.prompt-score-bar.high { background: #34d399; }
+.prompt-score-bar.medium { background: #fbbf24; }
+.prompt-score-bar.low { background: #f87171; }
+
 /* ===== DEAD WEIGHT TAB ===== */
 .tab-toggle {
   display: flex;
@@ -1493,6 +1559,26 @@ html, body {
       <div class="rec-grid" id="rec-grid"></div>
     </div>
 
+    <!-- Section 7: Prompt Efficiency (below recommendations) -->
+    <div class="prompt-efficiency-panel hidden" id="prompt-efficiency-panel">
+      <div class="prompt-panel-title">Prompt Efficiency</div>
+      <div class="prompt-summary" id="prompt-summary"></div>
+      <div style="max-height: 400px; overflow-y: auto;">
+        <table class="prompt-table">
+          <thead>
+            <tr>
+              <th>Turn</th>
+              <th>Prompt</th>
+              <th>Specificity</th>
+              <th>API Calls</th>
+              <th>Cost</th>
+            </tr>
+          </thead>
+          <tbody id="prompt-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -1536,6 +1622,7 @@ html, body {
   let toolIntelData = null;    // from /api/session/{id}/tool-intelligence
   let subagentData = null;     // from /api/session/{id}/subagents
   let nudgeData = null;        // from /api/session/{id}/nudges
+  let promptData = null;       // from /api/session/{id}/prompts
 
   // Derived data (computed once)
   let labels = [];
@@ -1659,6 +1746,7 @@ html, body {
       fetchToolIntelData(sessionId);
       fetchSubagentData(sessionId);
       fetchNudgeData(sessionId);
+      fetchPromptData(sessionId);
 
       return true;
     } catch(e) {
@@ -1689,6 +1777,7 @@ html, body {
     toolIntelData = null;
     subagentData = null;
     nudgeData = null;
+    promptData = null;
 
     // Destroy existing charts
     if (growthChart) { growthChart.destroy(); growthChart = null; }
@@ -3296,6 +3385,76 @@ html, body {
       // Re-render recommendations to merge error recs
       renderRecommendations();
     } catch(e) { /* non-blocking */ }
+  }
+
+  async function fetchPromptData(sessionId) {
+    try {
+      const resp = await fetch('/api/session/' + encodeURIComponent(sessionId) + '/prompts');
+      if (!resp.ok) return;
+      promptData = await resp.json();
+      renderPromptEfficiency();
+    } catch(e) { /* non-blocking */ }
+  }
+
+  // ===== PROMPT EFFICIENCY =====
+  function renderPromptEfficiency() {
+    var panel = document.getElementById('prompt-efficiency-panel');
+    var summaryEl = document.getElementById('prompt-summary');
+    var tbody = document.getElementById('prompt-table-body');
+    if (!panel || !promptData || !promptData.prompts || promptData.prompts.length === 0) {
+      if (panel) panel.classList.add('hidden');
+      return;
+    }
+
+    panel.classList.remove('hidden');
+    var agg = promptData.aggregate || {};
+
+    // Summary stats
+    var specificAvg = agg.specific_prompts ? '$' + agg.specific_prompts.avg_cost.toFixed(4) : '$0';
+    var vagueAvg = agg.vague_prompts ? '$' + agg.vague_prompts.avg_cost.toFixed(4) : '$0';
+    var specificCount = agg.specific_prompts ? agg.specific_prompts.count : 0;
+    var vagueCount = agg.vague_prompts ? agg.vague_prompts.count : 0;
+
+    summaryEl.innerHTML =
+      '<div class="prompt-summary-stat">' +
+        '<div class="label">Specific prompts (&gt;0.6)</div>' +
+        '<div class="value" style="color:#34d399">' + specificCount + ' prompts, avg ' + specificAvg + '</div>' +
+      '</div>' +
+      '<div class="prompt-summary-stat">' +
+        '<div class="label">Vague prompts (&lt;0.3)</div>' +
+        '<div class="value" style="color:#f87171">' + vagueCount + ' prompts, avg ' + vagueAvg + '</div>' +
+      '</div>' +
+      '<div class="prompt-summary-stat">' +
+        '<div class="label">Avg specificity</div>' +
+        '<div class="value">' + ((agg.avg_specificity || 0) * 100).toFixed(0) + '%</div>' +
+      '</div>';
+
+    // Table rows
+    var html = '';
+    for (var i = 0; i < promptData.prompts.length; i++) {
+      var p = promptData.prompts[i];
+      var score = p.specificity_score;
+      var rowClass = score > 0.6 ? 'prompt-specific' : (score >= 0.3 ? 'prompt-moderate' : 'prompt-vague');
+      var barClass = score > 0.6 ? 'high' : (score >= 0.3 ? 'medium' : 'low');
+      var barWidth = Math.max(4, Math.round(score * 80));
+      var preview = (p.prompt_preview || '').substring(0, 80);
+      if ((p.prompt_preview || '').length > 80) preview += '...';
+
+      html += '<tr class="' + rowClass + '">' +
+        '<td>' + p.turn_number + '</td>' +
+        '<td title="' + (p.prompt_preview || '').replace(/"/g, '&quot;') + '">' + escapeHtml(preview) + '</td>' +
+        '<td><span class="prompt-score-bar ' + barClass + '" style="width:' + barWidth + 'px"></span>' + (score * 100).toFixed(0) + '%</td>' +
+        '<td>' + p.resolution_turns + '</td>' +
+        '<td>$' + p.resolution_cost.toFixed(4) + '</td>' +
+        '</tr>';
+    }
+    tbody.innerHTML = html;
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
   }
 
   // ===== ERROR SCORECARD =====
