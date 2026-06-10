@@ -24,6 +24,10 @@ from context_tracker.analysis.health import (
     generate_recommendations,
 )
 from context_tracker.analysis.models import BlockType, ContextBlock
+from context_tracker.analysis.patterns import (
+    analyze_patterns,
+    analyze_trends,
+)
 from context_tracker.analysis.prompts import (
     analyze_session_prompts,
     compute_aggregate_stats,
@@ -564,6 +568,43 @@ def create_app(
             "total_api_calls": sum(t["total_api_calls"] for t in trends),
             "sessions": trends,
         }
+
+    @app.get("/api/sessions/patterns")
+    def get_session_patterns() -> list:
+        """Detect cross-session efficiency patterns."""
+        engine = get_engine(db_path)
+        factory = get_session_factory(engine)
+        with factory() as db:
+            patterns = analyze_patterns(db)
+            return [
+                {
+                    "name": p.name,
+                    "description": p.description,
+                    "evidence": p.evidence,
+                    "confidence": round(p.confidence, 2),
+                    "actionable": p.actionable,
+                }
+                for p in patterns
+            ]
+
+    @app.get("/api/sessions/trends/detailed")
+    def get_session_trends_detailed(period: int = 30) -> list:
+        """Compute metric trends with sparkline data."""
+        engine = get_engine(db_path)
+        factory = get_session_factory(engine)
+        with factory() as db:
+            trend_results = analyze_trends(db, period_days=period)
+            return [
+                {
+                    "metric": t.metric,
+                    "direction": t.direction,
+                    "magnitude": t.magnitude,
+                    "period": t.period,
+                    "data_points": t.data_points,
+                    "values": [round(v, 4) for v in t.values],
+                }
+                for t in trend_results
+            ]
 
     @app.get("/api/session/{session_id}/data")
     def get_session_data(session_id: str) -> dict:

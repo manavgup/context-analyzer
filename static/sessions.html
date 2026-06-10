@@ -74,6 +74,49 @@ html, body {
 .insight-icon.warn { background: var(--danger-bg); color: var(--danger); }
 .insight-icon.info { background: var(--yellow-bg); color: var(--yellow); }
 
+/* Patterns & Trends section */
+.patterns-section { margin-bottom: 24px; }
+.patterns-section h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-secondary); margin-bottom: 14px; }
+.patterns-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.pattern-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; box-shadow: var(--shadow); position: relative; overflow: hidden; }
+.pattern-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+.pattern-card.improving::before { background: var(--green); }
+.pattern-card.degrading::before { background: var(--danger); }
+.pattern-card.neutral::before { background: var(--accent); }
+.pattern-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.pattern-icon { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+.pattern-icon.sweet-spot { background: var(--green-bg); color: var(--green); }
+.pattern-icon.time { background: var(--accent-bg); color: var(--accent); }
+.pattern-icon.error { background: var(--danger-bg); color: var(--danger); }
+.pattern-icon.cost { background: var(--yellow-bg); color: var(--yellow); }
+.pattern-icon.tool { background: var(--accent-bg); color: var(--accent); }
+.pattern-name { font-size: 12px; font-weight: 600; color: var(--text); }
+.pattern-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 8px; }
+.pattern-evidence { font-family: var(--mono); font-size: 10px; color: var(--text-muted); margin-bottom: 8px; line-height: 1.4; }
+.pattern-action { font-size: 11px; color: var(--accent); font-weight: 500; padding: 6px 10px; background: var(--accent-bg); border-radius: 6px; }
+.pattern-confidence { position: absolute; top: 12px; right: 14px; font-family: var(--mono); font-size: 10px; color: var(--text-muted); }
+
+/* Trend sparklines */
+.trend-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+.trend-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; box-shadow: var(--shadow); }
+.trend-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 4px; }
+.trend-direction { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 4px; }
+.trend-direction.improving { background: var(--green-bg); color: var(--green); }
+.trend-direction.stable { background: rgba(156,163,175,0.1); color: var(--text-muted); }
+.trend-direction.degrading { background: var(--danger-bg); color: var(--danger); }
+.trend-sparkline { height: 28px; margin-top: 6px; }
+.trend-sparkline svg { width: 100%; height: 100%; }
+.trend-magnitude { font-family: var(--mono); font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+
+/* Heatmap */
+.heatmap-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow); margin-bottom: 24px; }
+.heatmap-card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-secondary); margin-bottom: 14px; }
+.heatmap-table { width: 100%; border-collapse: collapse; }
+.heatmap-table th { font-family: var(--mono); font-size: 9px; color: var(--text-muted); text-align: center; padding: 2px 1px; font-weight: 500; }
+.heatmap-table td { text-align: center; padding: 2px 1px; }
+.heatmap-table .row-label { text-align: right; padding-right: 8px; font-family: var(--mono); font-size: 10px; color: var(--text-muted); }
+.heatmap-cell { display: inline-block; width: 18px; height: 18px; border-radius: 3px; }
+
 /* Session table */
 .table-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
 .table-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
@@ -169,6 +212,22 @@ tbody tr { cursor: pointer; transition: background 0.1s; }
   <div class="insights-card" id="insights-panel">
     <h2>Insights</h2>
     <div id="insights-body"></div>
+  </div>
+
+  <!-- Trends sparklines -->
+  <div class="trend-row" id="trend-row" style="display:none">
+  </div>
+
+  <!-- Patterns -->
+  <div class="patterns-section" id="patterns-section" style="display:none">
+    <h2>Detected Patterns</h2>
+    <div class="patterns-grid" id="patterns-grid"></div>
+  </div>
+
+  <!-- Time-of-day heatmap -->
+  <div class="heatmap-card" id="heatmap-card" style="display:none">
+    <h2>Session Activity Heatmap (Hour of Day vs Day of Week)</h2>
+    <div id="heatmap-body"></div>
   </div>
 
   <!-- Session table -->
@@ -481,10 +540,153 @@ tbody tr { cursor: pointer; transition: background 0.1s; }
     });
   }
 
+  function renderSparkline(values, color, width, height) {
+    if (!values || values.length < 2) return '';
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+    const stepX = width / (values.length - 1);
+
+    const points = values.map((v, i) => {
+      const x = i * stepX;
+      const y = height - ((v - min) / range) * (height - 4) - 2;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+
+    return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+      <polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+  }
+
+  function renderTrends(trendsData) {
+    const row = document.getElementById('trend-row');
+    if (!trendsData || trendsData.length === 0) return;
+
+    const metricLabels = { cost: 'Cost Trend', turns: 'Turns Trend', efficiency: 'Efficiency Trend', error_rate: 'Error Rate Trend' };
+    const metricColors = { cost: '#6366f1', turns: '#34d399', efficiency: '#f59e0b', error_rate: '#ef4444' };
+    const arrows = { improving: '↓', stable: '→', degrading: '↑' };
+
+    row.innerHTML = trendsData.map(t => {
+      const label = metricLabels[t.metric] || t.metric;
+      const color = metricColors[t.metric] || '#6366f1';
+      const arrow = arrows[t.direction] || '';
+      const sparkHtml = renderSparkline(t.values, color, 120, 28);
+
+      return `<div class="trend-card">
+        <div class="trend-label">${label}</div>
+        <span class="trend-direction ${t.direction}">${arrow} ${t.direction}</span>
+        <div class="trend-magnitude">${t.magnitude.toFixed(1)}% change · ${t.data_points} sessions</div>
+        <div class="trend-sparkline">${sparkHtml}</div>
+      </div>`;
+    }).join('');
+    row.style.display = 'grid';
+  }
+
+  function renderPatterns(patternsData) {
+    const section = document.getElementById('patterns-section');
+    const grid = document.getElementById('patterns-grid');
+    if (!patternsData || patternsData.length === 0) return;
+
+    const iconMap = {
+      session_length_sweet_spot: { cls: 'sweet-spot', sym: '⏱' },
+      time_of_day:             { cls: 'time',       sym: '☀' },
+      error_rate_trend:        { cls: 'error',      sym: '⚠' },
+      cost_trajectory:         { cls: 'cost',       sym: '$' },
+      tool_preference_shift:   { cls: 'tool',       sym: '⚙' },
+    };
+
+    function cardClass(p) {
+      if (p.name === 'cost_trajectory') {
+        return p.description.includes('decreasing') ? 'improving' : 'degrading';
+      }
+      if (p.name === 'error_rate_trend') {
+        return p.description.includes('improving') ? 'improving' : 'degrading';
+      }
+      return 'neutral';
+    }
+
+    grid.innerHTML = patternsData.map(p => {
+      const icon = iconMap[p.name] || { cls: 'cost', sym: '•' };
+      return `<div class="pattern-card ${cardClass(p)}">
+        <div class="pattern-confidence">${(p.confidence * 100).toFixed(0)}% confidence</div>
+        <div class="pattern-header">
+          <div class="pattern-icon ${icon.cls}">${icon.sym}</div>
+          <div class="pattern-name">${p.name.replace(/_/g, ' ')}</div>
+        </div>
+        <div class="pattern-desc">${p.description}</div>
+        <div class="pattern-evidence">${p.evidence}</div>
+        <div class="pattern-action">${p.actionable}</div>
+      </div>`;
+    }).join('');
+    section.style.display = 'block';
+  }
+
+  function renderHeatmap(sessionsData) {
+    const card = document.getElementById('heatmap-card');
+    const body = document.getElementById('heatmap-body');
+    if (!sessionsData || sessionsData.length === 0) return;
+
+    // Build grid: day_of_week (0=Mon..6=Sun) x hour (0..23) -> cost sum and count
+    const grid = {};
+    const dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+    sessionsData.forEach(s => {
+      if (!s.source_mtime) return;
+      const d = new Date(s.source_mtime * 1000);
+      const dow = (d.getDay() + 6) % 7; // Mon=0
+      const hour = d.getHours();
+      const key = `${dow}-${hour}`;
+      if (!grid[key]) grid[key] = { cost: 0, count: 0 };
+      grid[key].cost += s.total_cost_usd || 0;
+      grid[key].count += 1;
+    });
+
+    // Find max count for color scaling
+    let maxCount = 0;
+    Object.values(grid).forEach(v => { if (v.count > maxCount) maxCount = v.count; });
+    if (maxCount === 0) return;
+
+    function cellColor(count, cost) {
+      if (count === 0) return 'rgba(0,0,0,0.03)';
+      const intensity = count / maxCount;
+      // Blend from light to accent color based on intensity
+      const r = Math.round(99 + (1 - intensity) * 156);
+      const g = Math.round(102 + (1 - intensity) * 153);
+      const b = Math.round(241 + (1 - intensity) * 14);
+      return `rgba(${r},${g},${b},${0.2 + intensity * 0.7})`;
+    }
+
+    // Build HTML table
+    let html = '<table class="heatmap-table"><thead><tr><th></th>';
+    for (let h = 0; h < 24; h++) {
+      html += `<th>${h}</th>`;
+    }
+    html += '</tr></thead><tbody>';
+
+    for (let dow = 0; dow < 7; dow++) {
+      html += `<tr><td class="row-label">${dayNames[dow]}</td>`;
+      for (let h = 0; h < 24; h++) {
+        const key = `${dow}-${h}`;
+        const cell = grid[key] || { cost: 0, count: 0 };
+        const bg = cellColor(cell.count, cell.cost);
+        const title = cell.count > 0
+          ? `${dayNames[dow]} ${h}:00 - ${cell.count} session${cell.count > 1 ? 's' : ''}, $${cell.cost.toFixed(2)}`
+          : `${dayNames[dow]} ${h}:00 - no sessions`;
+        html += `<td><div class="heatmap-cell" style="background:${bg}" title="${title}"></div></td>`;
+      }
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+    body.innerHTML = html;
+    card.style.display = 'block';
+  }
+
   async function init() {
-    const [trends, sessionsData] = await Promise.all([
+    const [trends, sessionsData, patternsData, trendsDetailed] = await Promise.all([
       fetch('/api/sessions/trends').then(r => r.ok ? r.json() : null),
       fetch('/api/sessions').then(r => r.ok ? r.json() : []),
+      fetch('/api/sessions/patterns').then(r => r.ok ? r.json() : []),
+      fetch('/api/sessions/trends/detailed').then(r => r.ok ? r.json() : []),
     ]);
 
     sessions = sessionsData;
@@ -501,6 +703,9 @@ tbody tr { cursor: pointer; transition: background 0.1s; }
     buildScatterChart(sessions);
     buildBarChart(sessions);
     renderInsights(sessions);
+    renderTrends(trendsDetailed);
+    renderPatterns(patternsData);
+    renderHeatmap(sessions);
 
     document.querySelectorAll('thead th').forEach(th => {
       th.addEventListener('click', () => {
