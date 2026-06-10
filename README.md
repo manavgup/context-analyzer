@@ -38,6 +38,22 @@ Then open:
 - `http://localhost:8080/` — single-session dashboard (picks most recent session)
 - `http://localhost:8080/sessions` — cross-session analytics
 
+## Upgrading
+
+After upgrading context-tracker, **re-run the installer** to refresh the Claude
+Code hooks in `~/.claude/settings.json`:
+
+```bash
+make hook-install      # or: context-tracker install
+```
+
+Older versions installed a hook command that could fail to import
+`context_tracker` (and broke on interpreter paths containing spaces).
+Reinstalling rewrites context-tracker's hook entries with the corrected,
+pinned-and-quoted interpreter. It is idempotent, backs up your settings first,
+and leaves any other hooks you have configured untouched. See
+[CHANGELOG.md](CHANGELOG.md) for details.
+
 ## Screenshots
 
 ### Single-Session Dashboard
