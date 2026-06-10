@@ -35,6 +35,7 @@ from context_tracker.db import (
     SubagentApiCallRecord,
     SubagentRecord,
     TurnRecord,
+    WorkflowRunRecord,
     get_engine,
     get_session_factory,
 )
@@ -928,6 +929,114 @@ def create_app(
             "count": len(subagents_out),
             "total_peak_tokens": total_peak,
             "subagents": subagents_out,
+        }
+
+    # ------------------------------------------------------------------
+    # Workflows endpoint (multi-agent workflow runs)
+    # ------------------------------------------------------------------
+    @app.get("/api/session/{session_id}/workflows")
+    def get_workflows(session_id: str) -> dict:
+        """Expose WorkflowRunRecord data grouped run -> phase -> agents.
+
+        Mirrors the /subagents endpoint's token-computation idioms (per-agent
+        output is summed from SubagentApiCallRecord churn).
+        """
+        _validate_session_id(session_id)
+        _ensure_ingested(session_id, trace_dir, db_path, transcript_dir)
+
+        engine = get_engine(db_path)
+        factory = get_session_factory(engine)
+        with factory() as db:
+            run_recs = db.query(WorkflowRunRecord).filter_by(session_id=session_id).all()
+
+            workflows_out = []
+            for run in run_recs:
+                agent_recs = (
+                    db.query(SubagentRecord)
+                    .filter_by(session_id=session_id, workflow_id=run.id)
+                    .all()
+                )
+
+                # Group agents by phase (preserve first-seen order of phases).
+                phases: dict[str, dict] = {}
+                phase_order: list[str] = []
+
+                run_total_output = 0
+                run_peak_resident = 0
+                run_agent_count = 0
+
+                for sa in agent_recs:
+                    api_calls = (
+                        db.query(SubagentApiCallRecord)
+                        .filter_by(subagent_id=sa.id)
+                        .order_by(SubagentApiCallRecord.call_index)
+                        .all()
+                    )
+                    computed_output = sum(c.output_tokens for c in api_calls)
+                    churn_data = [
+                        {
+                            "call_index": c.call_index,
+                            "input_tokens": c.input_tokens,
+                            "output_tokens": c.output_tokens,
+                            "cache_read": c.cache_read,
+                            "cache_creation": c.cache_creation,
+                        }
+                        for c in api_calls
+                    ]
+
+                    output_tokens = computed_output or sa.total_output_tokens
+                    run_total_output += output_tokens
+                    run_peak_resident = max(run_peak_resident, sa.peak_resident)
+                    run_agent_count += 1
+
+                    agent_out = {
+                        "agent_id": sa.agent_id,
+                        "agent_type": sa.agent_type or "unknown",
+                        "description": sa.description or "",
+                        "label": sa.label,
+                        "peak_resident": sa.peak_resident,
+                        "total_cache_read": sa.total_cache_read,
+                        "total_api_calls": sa.total_api_calls,
+                        "total_output_tokens": output_tokens,
+                        "churn": churn_data,
+                    }
+
+                    phase_key = sa.phase or "(unphased)"
+                    if phase_key not in phases:
+                        phases[phase_key] = {
+                            "phase": phase_key,
+                            "label": sa.label,
+                            "agents": [],
+                        }
+                        phase_order.append(phase_key)
+                    bucket = phases[phase_key]
+                    bucket["agents"].append(agent_out)
+                    # Surface a human-readable label for the phase if available.
+                    if bucket["label"] is None and sa.label:
+                        bucket["label"] = sa.label
+
+                # Parallelism: agents grouped under the same phase run together;
+                # report the largest phase fan-out as a simple indication.
+                max_phase_fanout = max((len(p["agents"]) for p in phases.values()), default=0)
+
+                workflows_out.append(
+                    {
+                        "wf_id": run.wf_id,
+                        "name": run.name or run.wf_id,
+                        "started_at": run.started_at,
+                        "ended_at": run.ended_at,
+                        "total_agents": run_agent_count,
+                        "total_phases": len(phase_order),
+                        "total_output_tokens": run_total_output,
+                        "peak_resident": run_peak_resident,
+                        "max_parallelism": max_phase_fanout,
+                        "phases": [phases[k] for k in phase_order],
+                    }
+                )
+
+        return {
+            "count": len(workflows_out),
+            "workflows": workflows_out,
         }
 
     @app.get("/api/session/{session_id}/turns")
@@ -2067,6 +2176,14 @@ def create_app(
         if sessions_html.exists():
             return FileResponse(str(sessions_html))
         return HTMLResponse("<h1>Sessions</h1><p>sessions.html not found</p>")
+
+    @app.get("/workflows")
+    def serve_workflows_page() -> Response:
+        """Multi-agent workflow run viewer."""
+        workflows_html = static_dir / "workflows.html"
+        if workflows_html.exists():
+            return FileResponse(str(workflows_html))
+        return HTMLResponse("<h1>Workflows</h1><p>workflows.html not found</p>")
 
     @app.get("/")
     def serve_dashboard() -> Response:

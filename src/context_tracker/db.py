@@ -41,6 +41,11 @@ class SessionRecord(Base):
     blocks = relationship("BlockRecord", back_populates="session", cascade="all, delete-orphan")
     hook_events = relationship("HookEventRecord", back_populates="session", cascade="all, delete-orphan")
     subagents = relationship("SubagentRecord", back_populates="session", cascade="all, delete-orphan")
+    workflow_runs = relationship(
+        "WorkflowRunRecord",
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
     tool_result_offloads = relationship(
         "ToolResultOffloadRecord",
         back_populates="session",
@@ -111,6 +116,22 @@ class HookEventRecord(Base):
     session = relationship("SessionRecord", back_populates="hook_events")
 
 
+class WorkflowRunRecord(Base):
+    """A multi-agent workflow run (subagents/workflows/wf_<runid>/)."""
+
+    __tablename__ = "workflow_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    wf_id = Column(Text, nullable=False, unique=True)  # e.g. "wf_e95c637f-433"
+    session_id = Column(Text, ForeignKey("sessions.session_id"), nullable=False)
+    name = Column(Text, nullable=True)
+    started_at = Column(Text, nullable=True)
+    ended_at = Column(Text, nullable=True)
+
+    session = relationship("SessionRecord", back_populates="workflow_runs")
+    subagents = relationship("SubagentRecord", back_populates="workflow")
+
+
 class SubagentRecord(Base):
     __tablename__ = "subagents"
 
@@ -123,8 +144,13 @@ class SubagentRecord(Base):
     total_cache_read = Column(Integer, default=0)
     total_api_calls = Column(Integer, default=0)
     total_output_tokens = Column(Integer, default=0)
+    # Multi-agent workflow grouping. NULL for plain Task subagents.
+    workflow_id = Column(Integer, ForeignKey("workflow_runs.id"), nullable=True)
+    phase = Column(Text, nullable=True)  # journal "key" grouping the agent into a phase
+    label = Column(Text, nullable=True)  # human-readable label (e.g. result dimension)
 
     session = relationship("SessionRecord", back_populates="subagents")
+    workflow = relationship("WorkflowRunRecord", back_populates="subagents")
     api_calls = relationship("SubagentApiCallRecord", back_populates="subagent", cascade="all, delete-orphan")
 
 

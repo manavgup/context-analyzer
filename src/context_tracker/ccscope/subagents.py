@@ -53,6 +53,100 @@ def parse_subagents(subagents_dir: Path) -> list[dict]:
     return results
 
 
+def parse_workflows(subagents_dir: Path) -> list[dict]:
+    """Parse all multi-agent workflow runs under <subagents>/workflows/.
+
+    A workflow run lives at ``<subagents>/workflows/wf_<runid>/`` and contains:
+      - ``agent-<id>.jsonl`` / ``agent-<id>.meta.json`` (same format as plain
+        subagents — token data is reconstructed by the existing machinery)
+      - ``journal.jsonl`` — orchestration log. "started" lines map a phase
+        ``key`` to an ``agentId``; "result" lines carry a human-readable label
+        (e.g. ``result.dimension``).
+
+    Args:
+        subagents_dir: The session's ``subagents/`` directory.
+
+    Returns:
+        List of workflow-run dicts, one per ``wf_<runid>``:
+        {
+            "wf_id": str,
+            "name": str | None,
+            "agents": [ <subagent dict with extra phase/label keys>, ... ],
+        }
+        Each agent dict has the same shape as :func:`parse_subagents` entries
+        plus ``"phase"`` and ``"label"`` (either may be None for a still-running
+        or partially-journaled run).
+    """
+    workflows_dir = subagents_dir / "workflows"
+    if not workflows_dir.exists():
+        return []
+
+    runs: list[dict] = []
+    for run_dir in sorted(workflows_dir.glob("wf_*")):
+        if not run_dir.is_dir():
+            continue
+        run = _parse_workflow_run(run_dir)
+        if run["agents"]:
+            runs.append(run)
+    return runs
+
+
+def _parse_workflow_run(run_dir: Path) -> dict:
+    """Parse a single workflow run directory."""
+    wf_id = run_dir.name  # "wf_<runid>"
+
+    phases, labels = _parse_journal(run_dir / "journal.jsonl")
+
+    agent_ids = _discover_agent_ids(run_dir)
+    agents: list[dict] = []
+    for agent_id in sorted(agent_ids):
+        agent = _parse_single_subagent(run_dir, agent_id)
+        agent["phase"] = phases.get(agent_id)
+        agent["label"] = labels.get(agent_id)
+        agents.append(agent)
+
+    # No explicit workflow name on disk yet — derive a friendly default.
+    name = wf_id
+
+    return {"wf_id": wf_id, "name": name, "agents": agents}
+
+
+def _parse_journal(journal_path: Path) -> tuple[dict[str, str], dict[str, str | None]]:
+    """Parse journal.jsonl into per-agent phase + label maps.
+
+    Returns ``(phases, labels)`` keyed by agentId:
+      - phases[agentId] = the "started"/"result" line's ``key`` (phase grouping)
+      - labels[agentId] = a human-readable label, preferring ``result.dimension``
+    Tolerant of partial journals (still-running workflows) and malformed lines.
+    """
+    phases: dict[str, str] = {}
+    labels: dict[str, str | None] = {}
+    if not journal_path.exists():
+        return phases, labels
+
+    with open(journal_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            agent_id = entry.get("agentId")
+            if not agent_id:
+                continue
+            key = entry.get("key")
+            if key is not None and agent_id not in phases:
+                phases[agent_id] = key
+            result = entry.get("result")
+            if isinstance(result, dict):
+                label = result.get("dimension") or result.get("summary")
+                if label:
+                    labels[agent_id] = str(label)[:200]
+    return phases, labels
+
+
 def _discover_agent_ids(subagents_dir: Path) -> list[str]:
     """Find all unique agent IDs from .jsonl files in the directory."""
     ids = []
