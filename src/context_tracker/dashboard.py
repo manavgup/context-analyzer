@@ -8,7 +8,7 @@ import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -2164,6 +2164,116 @@ def create_app(
             status_code=404,
             detail=f"Message index {msg_index} not found",
         )
+
+    # ------------------------------------------------------------------
+    # Team benchmarks endpoints
+    # ------------------------------------------------------------------
+    # In-memory store for imported team metrics (per app instance)
+    _team_store: list[dict] = []
+
+    @app.get("/api/team/export")
+    def export_team_metrics(period: int = 30, alias: str = "anonymous") -> dict:
+        """Export your anonymized metrics as JSON."""
+        from dataclasses import asdict
+
+        from context_tracker.team import export_metrics
+
+        engine = get_engine(db_path)
+        factory = get_session_factory(engine)
+        with factory() as db:
+            metrics = export_metrics(db, period_days=period, alias=alias)
+        return asdict(metrics)
+
+    @app.post("/api/team/import")
+    async def import_team_metrics(request: Request) -> dict:
+        """Accept a JSON file upload or raw JSON body with team member metrics."""
+        from context_tracker.team import import_metrics_from_dict
+
+        content_type = request.headers.get("content-type", "")
+
+        if "multipart/form-data" in content_type:
+            form = await request.form()
+            upload = form.get("file")
+            if upload is None:
+                raise HTTPException(status_code=400, detail="No file uploaded")
+            contents = await upload.read()  # type: ignore[union-attr]
+            data = json.loads(contents)
+        else:
+            body = await request.body()
+            data = json.loads(body)
+
+        metrics = import_metrics_from_dict(data)
+        from dataclasses import asdict
+
+        _team_store.append(asdict(metrics))
+        return {
+            "status": "imported",
+            "alias": metrics.alias,
+            "total_imported": len(_team_store),
+        }
+
+    @app.get("/api/team/compare")
+    def compare_team_metrics(period: int = 30, alias: str = "me") -> dict:
+        """Compare your metrics against all imported team data."""
+        from dataclasses import asdict
+
+        from context_tracker.team import (
+            MIN_TEAM_SIZE,
+            AnonymizedMetrics,
+            compare_with_team,
+            export_metrics,
+        )
+
+        if len(_team_store) < MIN_TEAM_SIZE:
+            return {
+                "error": f"Need at least {MIN_TEAM_SIZE} team members, have {len(_team_store)}",
+                "total_imported": len(_team_store),
+                "min_required": MIN_TEAM_SIZE,
+            }
+
+        engine = get_engine(db_path)
+        factory = get_session_factory(engine)
+        with factory() as db:
+            yours = export_metrics(db, period_days=period, alias=alias)
+
+        team = [AnonymizedMetrics(**d) for d in _team_store]
+        comparison = compare_with_team(yours, team)
+        return {
+            "your_metrics": asdict(comparison.your_metrics),
+            "team_metrics": [asdict(m) for m in comparison.team_metrics],
+            "rankings": comparison.rankings,
+            "total_members": comparison.total_members,
+            "insights": comparison.insights,
+        }
+
+    @app.get("/api/team/imported")
+    def list_imported_team_metrics() -> dict:
+        """List all imported team member aliases and count."""
+        return {
+            "total_imported": len(_team_store),
+            "members": [
+                {"alias": d.get("alias", "unknown"), "session_count": d.get("session_count", 0)} for d in _team_store
+            ],
+        }
+
+    @app.delete("/api/team/imported")
+    def clear_imported_team_metrics() -> dict:
+        """Clear all imported team metrics."""
+        count = len(_team_store)
+        _team_store.clear()
+        return {"status": "cleared", "removed": count}
+
+    # ------------------------------------------------------------------
+    # Page routes
+    # ------------------------------------------------------------------
+
+    @app.get("/team")
+    def serve_team_page() -> Response:
+        """Team benchmarks page."""
+        team_html = static_dir / "team.html"
+        if team_html.exists():
+            return FileResponse(str(team_html))
+        return HTMLResponse("<h1>Team Benchmarks</h1><p>team.html not found</p>")
 
     @app.get("/sessions")
     def serve_sessions_page() -> Response:
