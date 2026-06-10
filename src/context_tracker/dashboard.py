@@ -951,11 +951,7 @@ def create_app(
 
             workflows_out = []
             for run in run_recs:
-                agent_recs = (
-                    db.query(SubagentRecord)
-                    .filter_by(session_id=session_id, workflow_id=run.id)
-                    .all()
-                )
+                agent_recs = db.query(SubagentRecord).filter_by(session_id=session_id, workflow_id=run.id).all()
 
                 # Group agents by phase (preserve first-seen order of phases).
                 phases: dict[str, dict] = {}

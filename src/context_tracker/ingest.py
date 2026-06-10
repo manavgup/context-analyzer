@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import cast
+
+from sqlalchemy.orm import Session
 
 from context_tracker.ccscope.reconcile import find_session_paths, reconcile
 from context_tracker.ccscope.subagents import parse_workflows
@@ -93,7 +96,7 @@ def _build_turn_map(churn: list[dict], blocks: list[dict]) -> list[dict]:
 
 
 def _add_subagent(
-    db,
+    db: Session,
     session_id: str,
     sa: dict,
     workflow_id: int | None = None,
@@ -326,7 +329,7 @@ def ingest_session(
                         db,
                         session_id,
                         sa,
-                        workflow_id=wf_rec.id,
+                        workflow_id=cast(int, wf_rec.id),
                         phase=sa.get("phase"),
                         label=sa.get("label"),
                     )

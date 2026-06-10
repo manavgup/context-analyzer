@@ -51,9 +51,7 @@ def _assistant_entry(usage: dict, agent_id: str, stop_reason: str = "end_turn") 
 
 
 def _write_agent(run_dir: Path, agent_id: str, usages: list[dict]) -> None:
-    (run_dir / f"agent-{agent_id}.meta.json").write_text(
-        json.dumps({"agentType": "workflow-subagent"})
-    )
+    (run_dir / f"agent-{agent_id}.meta.json").write_text(json.dumps({"agentType": "workflow-subagent"}))
     jsonl = run_dir / f"agent-{agent_id}.jsonl"
     with jsonl.open("w") as f:
         for u in usages:
