@@ -49,11 +49,28 @@ def _is_owned_matcher(matcher: dict) -> bool:
     return False
 
 
+def _default_hook_command() -> str:
+    """Hook command pinned to the interpreter running the installer.
+
+    The hooks are installed into the *global* ~/.claude/settings.json and fire in
+    every Claude Code session, regardless of which project (or virtualenv) is
+    active. A bare ``python3`` resolves to whatever interpreter that session
+    happens to have on PATH, which usually cannot import context_tracker (it is
+    only installed in this project's venv) and the hook dies with
+    ModuleNotFoundError. Pinning to ``sys.executable`` — the interpreter the user
+    ran ``context-tracker install`` from, which by definition has the package
+    installed — makes the hook resolve correctly from any session.
+    """
+    return f"{sys.executable} -m context_tracker.hooks"
+
+
 def install_hooks(
     settings_path: Path = DEFAULT_SETTINGS_PATH,
-    hook_command: str = "python3 -m context_tracker.hooks",
+    hook_command: str | None = None,
 ) -> None:
     """Install context-tracker hooks into settings.json. Merge-safe and idempotent."""
+    if hook_command is None:
+        hook_command = _default_hook_command()
     settings = _read_settings(settings_path)
 
     # Create backup before modifying
