@@ -1523,6 +1523,127 @@ html, body {
   color: var(--text-muted);
   font-size: 13px;
 }
+
+/* ===== COMPACT ADVISOR ===== */
+.compact-advisor {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 20px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow);
+}
+.compact-advisor.hidden { display: none; }
+.compact-advisor-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.compact-advisor-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+}
+.compact-advisor-body {
+  display: grid;
+  grid-template-columns: 100px 1fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+.ca-gauge-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.ca-gauge-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.ca-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ca-bar-track {
+  width: 100%;
+  height: 14px;
+  background: #e5e7eb;
+  border-radius: 7px;
+  overflow: hidden;
+  display: flex;
+}
+.ca-bar-active {
+  background: var(--working);
+  height: 100%;
+  transition: width 0.3s ease;
+}
+.ca-bar-stale {
+  background: #f87171;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+.ca-bar-legend {
+  display: flex;
+  gap: 14px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: var(--mono);
+}
+.ca-bar-legend span::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.ca-bar-legend .active-legend::before { background: var(--working); }
+.ca-bar-legend .stale-legend::before { background: #f87171; }
+.ca-stale-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.ca-stale-list li {
+  font-size: 12px;
+  font-family: var(--mono);
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ca-stale-list li:last-child { border-bottom: none; }
+.ca-stale-label { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+.ca-stale-cat { color: var(--text-muted); font-size: 10px; }
+.ca-stale-tokens { color: var(--danger); font-weight: 500; white-space: nowrap; }
+.ca-savings {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.ca-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ca-detail-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+@media (max-width: 900px) {
+  .compact-advisor-body { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
@@ -1650,6 +1771,39 @@ html, body {
       <button class="scrubber-btn speed-btn" id="btn-speed" title="Speed">1x</button>
     </div>
 
+    <!-- Section 4b: Compact Advisor -->
+    <div class="compact-advisor hidden" id="compact-advisor">
+      <div class="compact-advisor-header">
+        <div class="compact-advisor-title">Compact Advisor</div>
+      </div>
+      <div class="compact-advisor-body">
+        <!-- Gauge -->
+        <div class="ca-gauge-wrap">
+          <canvas id="ca-gauge" width="90" height="90"></canvas>
+          <div class="ca-gauge-label" id="ca-gauge-label">--</div>
+        </div>
+        <!-- Breakdown bar + savings -->
+        <div class="ca-breakdown">
+          <div class="ca-bar-track">
+            <div class="ca-bar-active" id="ca-bar-active" style="width:100%"></div>
+            <div class="ca-bar-stale" id="ca-bar-stale" style="width:0%"></div>
+          </div>
+          <div class="ca-bar-legend">
+            <span class="active-legend" id="ca-active-label">Active: --</span>
+            <span class="stale-legend" id="ca-stale-label">Stale: --</span>
+          </div>
+          <div class="ca-savings" id="ca-savings">--</div>
+        </div>
+        <!-- Top stale blocks -->
+        <div class="ca-details">
+          <div class="ca-detail-title">Top Stale Blocks</div>
+          <ul class="ca-stale-list" id="ca-stale-list">
+            <li><span class="ca-stale-label">--</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
     <!-- Section 5: Three-Column Bottom -->
     <div class="bottom-grid">
       <!-- Col 1: Composition / Tools / Agents (tabbed) -->
@@ -1775,6 +1929,7 @@ html, body {
   let subagentData = null;     // from /api/session/{id}/subagents
   let nudgeData = null;        // from /api/session/{id}/nudges
   let promptData = null;       // from /api/session/{id}/prompts
+  let freshnessCache = {};     // turn -> freshness data (compact advisor)
 
   // Derived data (computed once)
   let labels = [];
@@ -1930,6 +2085,7 @@ html, body {
     subagentData = null;
     nudgeData = null;
     promptData = null;
+    freshnessCache = {};
 
     // Destroy existing charts
     if (growthChart) { growthChart.destroy(); growthChart = null; }
@@ -4168,6 +4324,110 @@ html, body {
       '</div>';
   }
 
+  // ===== COMPACT ADVISOR =====
+  function drawGauge(score) {
+    const canvas = document.getElementById('ca-gauge');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const cx = 45, cy = 45, r = 36;
+    ctx.clearRect(0, 0, 90, 90);
+
+    // Background arc
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0.75 * Math.PI, 0.25 * Math.PI);
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // Colored arc
+    const fraction = Math.min(score / 100, 1);
+    const startAngle = 0.75 * Math.PI;
+    const endAngle = startAngle + fraction * 1.5 * Math.PI;
+    let color = '#34d399';  // green
+    if (score >= 60) color = '#ef4444';       // red
+    else if (score >= 30) color = '#fbbf24';  // yellow
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, startAngle, endAngle);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // Score text
+    ctx.fillStyle = color;
+    ctx.font = 'bold 18px Inter, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(score), cx, cy);
+  }
+
+  async function fetchFreshness(turn) {
+    const sid = meta.session_id;
+    if (!sid) return null;
+    const key = sid + ':' + turn;
+    if (freshnessCache[key]) return freshnessCache[key];
+    try {
+      const url = '/api/session/' + sid + '/freshness' + (turn != null ? '?turn=' + turn : '');
+      const resp = await fetch(url);
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      freshnessCache[key] = data;
+      return data;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function renderCompactAdvisor() {
+    const panel = document.getElementById('compact-advisor');
+    if (!panel) return;
+
+    const data = await fetchFreshness(currentTurn);
+    if (!data || (data.total_tokens === 0 && data.stale_tokens === 0)) {
+      panel.classList.add('hidden');
+      return;
+    }
+    panel.classList.remove('hidden');
+
+    // Draw gauge
+    drawGauge(data.compact_readiness_score);
+    document.getElementById('ca-gauge-label').textContent = 'Readiness';
+
+    // Breakdown bar
+    const total = Math.max(data.total_tokens, 1);
+    const activePct = ((data.active_tokens / total) * 100).toFixed(1);
+    const stalePct = ((data.stale_tokens / total) * 100).toFixed(1);
+    document.getElementById('ca-bar-active').style.width = activePct + '%';
+    document.getElementById('ca-bar-stale').style.width = stalePct + '%';
+    document.getElementById('ca-active-label').textContent = 'Active: ' + fmt(data.active_tokens);
+    document.getElementById('ca-stale-label').textContent = 'Stale: ' + fmt(data.stale_tokens);
+
+    // Savings
+    const savingsTokensK = (data.stale_tokens / 1000).toFixed(0);
+    const savingsUSD = data.estimated_savings_per_call.toFixed(4);
+    document.getElementById('ca-savings').textContent =
+      'Compacting now would save ~' + savingsTokensK + 'K tokens ($' + savingsUSD + '/call)';
+
+    // Top stale blocks
+    const listEl = document.getElementById('ca-stale-list');
+    const top5 = (data.safe_to_drop || []).slice(0, 5);
+    if (top5.length === 0) {
+      listEl.innerHTML = '<li><span class="ca-stale-label">No stale blocks</span></li>';
+    } else {
+      listEl.innerHTML = top5.map(function(sb) {
+        const label = sb.label || sb.block_id;
+        const shortLabel = label.length > 35 ? '…' + label.slice(-34) : label;
+        return '<li>' +
+          '<span class="ca-stale-label" title="' + label.replace(/"/g, '&quot;') + '">' + shortLabel + '</span>' +
+          '<span class="ca-stale-cat">' + sb.category + '</span>' +
+          '<span class="ca-stale-tokens">' + fmt(sb.tokens) + '</span>' +
+          '</li>';
+      }).join('');
+    }
+  }
+
   // ===== RENDER ALL BOTTOM COLUMNS =====
   function renderTurnDetails() {
     renderComposition();
@@ -4175,6 +4435,7 @@ html, body {
     renderTopGrowth();
     renderMessages();
     renderAgentsTab();
+    renderCompactAdvisor();
   }
 
   // ===== SCRUBBER =====

@@ -1584,6 +1584,39 @@ def create_app(
             "recommendations": error_recommendations,
         }
 
+    # ------------------------------------------------------------------
+    # Freshness / Compact Advisor endpoint
+    # ------------------------------------------------------------------
+    @app.get("/api/session/{session_id}/freshness")
+    def get_session_freshness(session_id: str, turn: int | None = None) -> dict:
+        """Context freshness analysis for compact advisor."""
+        _validate_session_id(session_id)
+        _ensure_ingested(session_id, trace_dir, db_path, transcript_dir)
+
+        from context_tracker.analysis.freshness import analyze_freshness
+
+        engine = get_engine(db_path)
+        factory = get_session_factory(engine)
+        with factory() as db:
+            report = analyze_freshness(session_id, turn, db)
+            return {
+                "total_tokens": report.total_tokens,
+                "active_tokens": report.active_tokens,
+                "stale_tokens": report.stale_tokens,
+                "stale_breakdown": report.stale_breakdown,
+                "compact_readiness_score": report.compact_readiness_score,
+                "safe_to_drop": [
+                    {
+                        "block_id": sb.block_id,
+                        "label": sb.label,
+                        "category": sb.category,
+                        "tokens": sb.tokens,
+                    }
+                    for sb in report.safe_to_drop[:15]
+                ],
+                "estimated_savings_per_call": report.estimated_savings_per_call,
+            }
+
     @app.get("/api/session/{session_id}/dead_weight")
     def get_session_dead_weight(session_id: str) -> dict:
         """Per-turn dead weight data and top stale blocks."""
