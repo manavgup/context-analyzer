@@ -34,6 +34,16 @@ def _add_hook_events(db_factory, session_id: str, events: list[dict]) -> None:  
         db.commit()
 
 
+def _write_trace_events(trace_dir, session_id: str, events: list[dict]) -> None:  # type: ignore[no-untyped-def]
+    """Write events to a hook trace JSONL file (simulating real-time hook output)."""
+    trace_dir.mkdir(parents=True, exist_ok=True)
+    filepath = trace_dir / f"{session_id}.jsonl"
+    with open(filepath, "a", encoding="utf-8") as f:
+        for evt in events:
+            evt.setdefault("session_id", session_id)
+            f.write(json.dumps(evt) + "\n")
+
+
 # ── CONTEXT_THRESHOLD nudge ──────────────────────────────────────────
 
 
@@ -139,23 +149,47 @@ class TestCostWarning:
 
 class TestRepeatedReads:
     def test_fires_when_file_read_3_times(self, tmp_path):
-        """REPEATED_READS fires when the same tool_name appears 3+ times."""
+        """REPEATED_READS fires when the same tool_name appears 3+ times in trace."""
+        trace_dir = tmp_path / "traces"
+        trace_dir.mkdir()
         db_path = tmp_path / "test.db"
         engine = get_engine(db_path)
         factory = get_session_factory(engine)
         _create_session(factory, "sess-repeat")
-        _add_hook_events(
-            factory,
+
+        # Write events to JSONL trace (real-time source)
+        _write_trace_events(
+            trace_dir,
             "sess-repeat",
             [
-                {"event_type": "post_tool_use", "tool_name": "src/main.py"},
-                {"event_type": "post_tool_use", "tool_name": "src/main.py"},
-                {"event_type": "post_tool_use", "tool_name": "src/main.py"},
-                {"event_type": "post_tool_use", "tool_name": "src/other.py"},
+                {
+                    "event": "post_tool_use",
+                    "tool_name": "src/main.py",
+                    "input_payload_chars": 100,
+                    "output_payload_chars": 200,
+                },
+                {
+                    "event": "post_tool_use",
+                    "tool_name": "src/main.py",
+                    "input_payload_chars": 100,
+                    "output_payload_chars": 200,
+                },
+                {
+                    "event": "post_tool_use",
+                    "tool_name": "src/main.py",
+                    "input_payload_chars": 100,
+                    "output_payload_chars": 200,
+                },
+                {
+                    "event": "post_tool_use",
+                    "tool_name": "src/other.py",
+                    "input_payload_chars": 50,
+                    "output_payload_chars": 50,
+                },
             ],
         )
 
-        nudges = evaluate_nudges("sess-repeat", db_path=db_path)
+        nudges = evaluate_nudges("sess-repeat", db_path=db_path, trace_dir=trace_dir)
 
         rr_nudges = [n for n in nudges if n.code == "REPEATED_READS"]
         assert len(rr_nudges) == 1
@@ -166,21 +200,39 @@ class TestRepeatedReads:
 
     def test_does_not_fire_below_threshold(self, tmp_path):
         """REPEATED_READS does not fire when reads < 3."""
+        trace_dir = tmp_path / "traces"
+        trace_dir.mkdir()
         db_path = tmp_path / "test.db"
         engine = get_engine(db_path)
         factory = get_session_factory(engine)
         _create_session(factory, "sess-no-repeat")
-        _add_hook_events(
-            factory,
+
+        _write_trace_events(
+            trace_dir,
             "sess-no-repeat",
             [
-                {"event_type": "post_tool_use", "tool_name": "src/main.py"},
-                {"event_type": "post_tool_use", "tool_name": "src/main.py"},
-                {"event_type": "post_tool_use", "tool_name": "src/other.py"},
+                {
+                    "event": "post_tool_use",
+                    "tool_name": "src/main.py",
+                    "input_payload_chars": 100,
+                    "output_payload_chars": 200,
+                },
+                {
+                    "event": "post_tool_use",
+                    "tool_name": "src/main.py",
+                    "input_payload_chars": 100,
+                    "output_payload_chars": 200,
+                },
+                {
+                    "event": "post_tool_use",
+                    "tool_name": "src/other.py",
+                    "input_payload_chars": 50,
+                    "output_payload_chars": 50,
+                },
             ],
         )
 
-        nudges = evaluate_nudges("sess-no-repeat", db_path=db_path)
+        nudges = evaluate_nudges("sess-no-repeat", db_path=db_path, trace_dir=trace_dir)
 
         rr_nudges = [n for n in nudges if n.code == "REPEATED_READS"]
         assert len(rr_nudges) == 0
@@ -265,14 +317,35 @@ class TestHookIntegration:
             peak_context_tokens=750_000,
             total_cost_usd=12.00,
         )
-        _add_hook_events(
-            factory,
+        # Write trace events for repeated reads detection
+        _write_trace_events(
+            trace_dir,
             "sess-integ",
             [
-                {"event_type": "post_tool_use", "tool_name": "README.md"},
-                {"event_type": "post_tool_use", "tool_name": "README.md"},
-                {"event_type": "post_tool_use", "tool_name": "README.md"},
-                {"event_type": "post_tool_use", "tool_name": "README.md"},
+                {
+                    "event": "post_tool_use",
+                    "tool_name": "README.md",
+                    "input_payload_chars": 100,
+                    "output_payload_chars": 500,
+                },
+                {
+                    "event": "post_tool_use",
+                    "tool_name": "README.md",
+                    "input_payload_chars": 100,
+                    "output_payload_chars": 500,
+                },
+                {
+                    "event": "post_tool_use",
+                    "tool_name": "README.md",
+                    "input_payload_chars": 100,
+                    "output_payload_chars": 500,
+                },
+                {
+                    "event": "post_tool_use",
+                    "tool_name": "README.md",
+                    "input_payload_chars": 100,
+                    "output_payload_chars": 500,
+                },
             ],
         )
 
@@ -286,8 +359,8 @@ class TestHookIntegration:
         assert event is not None
         append_event(event, trace_dir=trace_dir)
 
-        # Evaluate nudges
-        nudges = evaluate_nudges("sess-integ", db_path=db_path)
+        # Evaluate nudges (pass trace_dir for repeated reads detection)
+        nudges = evaluate_nudges("sess-integ", db_path=db_path, trace_dir=trace_dir)
 
         codes = {n.code for n in nudges}
         assert "CONTEXT_THRESHOLD" in codes
@@ -362,6 +435,98 @@ class TestNudgesEndpoint:
         data = resp.json()
         assert data["nudges"] == []
         engine.dispose()
+
+
+# ── Trace-only nudges (no DB, simulating live session) ──────────────
+
+
+class TestTraceOnlyNudges:
+    """Test nudges computed purely from hook trace JSONL, with no DB data."""
+
+    def test_context_estimate_from_trace(self, tmp_path):
+        """Context threshold fires from trace-estimated token count."""
+        trace_dir = tmp_path / "traces"
+        trace_dir.mkdir()
+        db_path = tmp_path / "empty.db"
+        get_engine(db_path)
+
+        # Write enough tool I/O to exceed 600K tokens (~2.4M chars)
+        events = []
+        for i in range(100):
+            events.append(
+                {
+                    "event": "post_tool_use",
+                    "tool_name": f"file_{i}.py",
+                    "input_payload_chars": 5000,
+                    "output_payload_chars": 20000,
+                }
+            )
+        _write_trace_events(trace_dir, "trace-ctx", events)
+
+        nudges = evaluate_nudges("trace-ctx", db_path=db_path, trace_dir=trace_dir)
+        ct = [n for n in nudges if n.code == "CONTEXT_THRESHOLD"]
+        assert len(ct) == 1
+        assert "%" in ct[0].message
+
+    def test_cost_estimate_from_trace(self, tmp_path):
+        """Cost warning fires from trace-estimated cost."""
+        trace_dir = tmp_path / "traces"
+        trace_dir.mkdir()
+        db_path = tmp_path / "empty.db"
+        get_engine(db_path)
+
+        events = []
+        for i in range(200):
+            events.append(
+                {
+                    "event": "post_tool_use",
+                    "tool_name": "Read",
+                    "input_payload_chars": 2000,
+                    "output_payload_chars": 10000,
+                }
+            )
+            if i % 5 == 0:
+                events.append({"event": "user_prompt", "prompt_length_chars": 100})
+        _write_trace_events(trace_dir, "trace-cost", events)
+
+        nudges = evaluate_nudges("trace-cost", db_path=db_path, trace_dir=trace_dir)
+        cw = [n for n in nudges if n.code == "COST_WARNING"]
+        assert len(cw) == 1
+        assert "$" in cw[0].message
+
+    def test_no_db_no_trace_returns_empty(self, tmp_path):
+        """No DB session and no trace file returns empty nudges."""
+        trace_dir = tmp_path / "traces"
+        trace_dir.mkdir()
+        db_path = tmp_path / "empty.db"
+        get_engine(db_path)
+
+        nudges = evaluate_nudges("nonexistent", db_path=db_path, trace_dir=trace_dir)
+        assert nudges == []
+
+    def test_compaction_resets_context_estimate(self, tmp_path):
+        """Post-compact events reduce the estimated context size."""
+        trace_dir = tmp_path / "traces"
+        trace_dir.mkdir()
+        db_path = tmp_path / "empty.db"
+        get_engine(db_path)
+
+        events = []
+        for i in range(80):
+            events.append(
+                {
+                    "event": "post_tool_use",
+                    "tool_name": f"file_{i}.py",
+                    "input_payload_chars": 5000,
+                    "output_payload_chars": 20000,
+                }
+            )
+        events.append({"event": "post_compact", "trigger": "auto", "compact_summary_length": 1000})
+        _write_trace_events(trace_dir, "trace-compact", events)
+
+        nudges = evaluate_nudges("trace-compact", db_path=db_path, trace_dir=trace_dir)
+        ct = [n for n in nudges if n.code == "CONTEXT_THRESHOLD"]
+        assert len(ct) == 0
 
 
 # ── Nudge dataclass ──────────────────────────────────────────────────
