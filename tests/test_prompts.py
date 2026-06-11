@@ -83,6 +83,26 @@ class TestClassifyPrompt:
         score, signals = classify_prompt("ContextBlock doesn't have the right attribute")
         assert "function_name" in signals
 
+    def test_ordinary_capitalized_word_no_function_signal(self):
+        """Ordinary capitalized words like 'Please' should NOT trigger function_name."""
+        score, signals = classify_prompt("Please fix this issue")
+        assert "function_name" not in signals
+
+    def test_sentence_start_capitals_no_function_signal(self):
+        """Sentence-starting capitals should NOT trigger function_name."""
+        score, signals = classify_prompt("Update the header component")
+        assert "function_name" not in signals
+
+    def test_backticked_identifier_detection(self):
+        """Backticked identifiers like `functionName` should trigger function_name signal."""
+        score, signals = classify_prompt("The issue is in `process_data` when it receives None")
+        assert "function_name" in signals
+
+    def test_qualified_access_detection(self):
+        """Qualified access like ClassName.method should trigger function_name signal."""
+        score, signals = classify_prompt("Check Response.status_code for the error")
+        assert "function_name" in signals
+
     def test_error_message_detection(self):
         """Quoted error messages should trigger error_message signal."""
         score, signals = classify_prompt('I see "TypeError: cannot read property" in the console')
@@ -237,6 +257,37 @@ class TestAnalyzeSessionPrompts:
         assert "file_path" in results[0].signals
         # Turn 1 should have no signals (or minimal)
         assert results[1].specificity_score < 0.3
+
+    def test_tool_failures_always_zero_per_prompt(self, db_session):
+        """Tool failures should be 0 for every prompt (session-level metric only)."""
+        results = analyze_session_prompts("test-sess", db_session, "claude-opus-4-6")
+        for r in results:
+            assert r.tool_failures == 0
+
+    def test_no_api_range_gives_zero_resolution_turns(self, tmp_path):
+        """A turn with no first/last API call should have resolution_turns=0, not 1."""
+        db_path = tmp_path / "no_range.db"
+        engine = get_engine(db_path)
+        Base.metadata.create_all(engine)
+        factory = get_session_factory(engine)
+        session = factory()
+        session.add(SessionRecord(session_id="no-range-sess", total_turns=1))
+        session.add(
+            TurnRecord(
+                session_id="no-range-sess",
+                turn_number=0,
+                first_api_call=None,
+                last_api_call=None,
+                prompt_preview="Do something",
+            )
+        )
+        session.commit()
+
+        results = analyze_session_prompts("no-range-sess", session, "_default")
+        assert len(results) == 1
+        assert results[0].resolution_turns == 0
+        assert results[0].resolution_cost == 0.0
+        session.close()
 
     def test_empty_session(self, tmp_path):
         """Analyzing a session with no turns returns empty list."""

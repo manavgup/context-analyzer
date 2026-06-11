@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from sqlalchemy.orm import Session as DbSession
 
 from context_tracker.analysis.config import PRICING
-from context_tracker.db import ApiCallRecord, HookEventRecord, TurnRecord
+from context_tracker.db import ApiCallRecord, TurnRecord
 
 # ---------------------------------------------------------------------------
 # Specificity signal patterns
@@ -30,9 +30,15 @@ _LINE_NUMBER_RE = re.compile(
     r"(?::\d{1,6}|[Ll]ine\s+\d+|L\d+)\b",
 )
 
-# function_name: functionName(), snake_case_func(), ClassName (PascalCase)
+# function_name: func(), snake_case(), CamelCase identifiers, `backticked`
 _FUNCTION_NAME_RE = re.compile(
-    r"\b(?:[a-z_][a-zA-Z0-9_]*\(\)|[A-Z][a-zA-Z0-9]*(?=[.\s,;:)\]]))",
+    r"(?:"
+    r"\b[a-z_][a-zA-Z0-9_]*\(\)"  # snake_case() or camelCase() calls
+    r"|\b[A-Z][a-zA-Z0-9_]*\.\w+"  # Qualified access: ClassName.method
+    r"|\b[A-Z][a-zA-Z0-9]*[a-z][a-zA-Z0-9]*[A-Z][a-zA-Z0-9]*\b"  # CamelCase with internal cap
+    r"|`[a-zA-Z_][a-zA-Z0-9_.]*`"  # `backticked` identifiers
+    r"|\b[A-Z][a-zA-Z0-9]*\(\)"  # PascalCase() function call
+    r")",
 )
 
 # error_message: quoted strings with error-like words
@@ -141,8 +147,11 @@ def analyze_session_prompts(
     For each turn:
     - Score the prompt_preview for specificity
     - Count API calls (resolution_turns)
-    - Count tool failures (HookEventRecords with event_type containing 'failure')
     - Sum cost across the turn's API calls
+
+    Note: tool_failures is always 0 per-prompt because failures are a
+    session-level metric that cannot be accurately attributed to individual
+    prompts without timestamp/API-call range correlation.
     """
     turns = db_session.query(TurnRecord).filter_by(session_id=session_id).order_by(TurnRecord.turn_number).all()
 
@@ -154,9 +163,6 @@ def analyze_session_prompts(
         db_session.query(ApiCallRecord).filter_by(session_id=session_id).order_by(ApiCallRecord.call_index).all()
     )
     api_call_by_index: dict[int, ApiCallRecord] = {int(ac.call_index): ac for ac in api_calls}
-
-    # Pre-fetch hook events that indicate tool failures
-    hook_events = db_session.query(HookEventRecord).filter_by(session_id=session_id).all()
 
     results: list[PromptAnalysis] = []
 
@@ -177,31 +183,10 @@ def analyze_session_prompts(
                 if ac:
                     resolution_cost += _compute_api_call_cost(ac, model)
 
-        # Count tool failures in this turn's range
-        tool_failures = 0
-        for he in hook_events:
-            if he.event_type and "failure" in he.event_type.lower():
-                # Hook events don't have a turn_number, but they have metadata.
-                # Use a simple heuristic: count all failures for now.
-                # A more precise approach would correlate timestamps.
-                tool_failures += 1
-
-        # For tool failures, divide total by number of turns as a rough per-turn estimate
-        # unless we can correlate more precisely
-        per_turn_failures = 0
-        if tool_failures > 0 and len(turns) > 0:
-            # Better approach: count error_length > 0 hook events
-            # For now, just attribute failures to turns proportionally
-            per_turn_failures = 0  # Will be refined below
-
-        # Refined: count hook events with error_length > 0
-        turn_failures = 0
-        for he in hook_events:
-            if he.error_length and he.error_length > 0:
-                turn_failures += 1
-        # Distribute proportionally (rough)
-        if len(turns) > 0 and turn_failures > 0:
-            per_turn_failures = max(0, round(turn_failures / len(turns)))
+        # Tool failures are a session-level metric and cannot be accurately
+        # attributed to individual prompts without timestamp correlation.
+        # Set to 0 at the per-prompt level; session summary should report
+        # the aggregate instead.
 
         results.append(
             PromptAnalysis(
@@ -209,9 +194,9 @@ def analyze_session_prompts(
                 prompt_preview=prompt_text,
                 specificity_score=score,
                 signals=signals,
-                resolution_turns=max(resolution_turns, 1),
+                resolution_turns=resolution_turns,
                 resolution_cost=round(resolution_cost, 6),
-                tool_failures=per_turn_failures,
+                tool_failures=0,
             )
         )
 
