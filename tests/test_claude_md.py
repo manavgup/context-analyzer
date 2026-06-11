@@ -15,6 +15,7 @@ from context_tracker.analysis.claude_md import (
     _extract_keywords,
     analyze_claude_md,
     correlate_usage,
+    find_claude_md_files,
     generate_optimized,
     parse_claude_md,
 )
@@ -385,3 +386,45 @@ class TestOptimizeAPI:
         client = TestClient(app)
         resp = client.get("/optimize")
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# find_claude_md_files
+# ---------------------------------------------------------------------------
+
+
+class TestFindClaudeMdFiles:
+    def test_finds_root_claude_md(self, tmp_path: Path) -> None:
+        (tmp_path / "CLAUDE.md").write_text("# Instructions")
+        result = find_claude_md_files(project_dir=tmp_path)
+        assert len(result) == 1
+        assert result[0] == (tmp_path / "CLAUDE.md").resolve()
+
+    def test_finds_dotclaude_subdir(self, tmp_path: Path) -> None:
+        (tmp_path / ".claude").mkdir()
+        (tmp_path / ".claude" / "CLAUDE.md").write_text("# Nested")
+        result = find_claude_md_files(project_dir=tmp_path)
+        assert len(result) == 1
+        assert result[0] == (tmp_path / ".claude" / "CLAUDE.md").resolve()
+
+    def test_finds_both(self, tmp_path: Path) -> None:
+        (tmp_path / "CLAUDE.md").write_text("# Root")
+        (tmp_path / ".claude").mkdir()
+        (tmp_path / ".claude" / "CLAUDE.md").write_text("# Nested")
+        result = find_claude_md_files(project_dir=tmp_path)
+        assert len(result) == 2
+
+    def test_excludes_home_claude_md(self, tmp_path: Path) -> None:
+        """User-global ~/.claude/CLAUDE.md should NOT be discovered."""
+        # Simulate a home dir file that is outside project_dir
+        home_like = tmp_path / "fake_home" / ".claude"
+        home_like.mkdir(parents=True)
+        (home_like / "CLAUDE.md").write_text("# Private")
+        project = tmp_path / "project"
+        project.mkdir()
+        result = find_claude_md_files(project_dir=project)
+        assert len(result) == 0
+
+    def test_empty_project(self, tmp_path: Path) -> None:
+        result = find_claude_md_files(project_dir=tmp_path)
+        assert result == []

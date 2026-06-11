@@ -207,7 +207,7 @@ html, body {
 
   <div id="empty" class="empty-state" style="display:none;">
     No CLAUDE.md files found.<br>
-    Checked: ~/.claude/CLAUDE.md, .claude/CLAUDE.md, ./CLAUDE.md
+    Checked: .claude/CLAUDE.md, ./CLAUDE.md
   </div>
 </div>
 
@@ -231,7 +231,7 @@ async function load() {
     selectReport(0);
   } catch (err) {
     document.getElementById('loading').innerHTML =
-      '<div style="color:var(--danger)">Failed to load analysis: ' + err.message + '</div>';
+      '<div style="color:var(--danger)">Failed to load analysis: ' + escHtml(err.message) + '</div>';
   }
 }
 
@@ -283,22 +283,22 @@ function renderInstructions(r) {
   }
   filtered.forEach(inst => {
     const card = document.createElement('div');
-    card.className = 'instruction-card ' + inst.status;
+    card.className = 'instruction-card ' + escHtml(inst.status);
     const evidenceHtml = inst.evidence.length > 0
       ? '<div class="inst-evidence">Evidence: ' + escHtml(inst.evidence.join('; ')) + '</div>'
       : '';
     card.innerHTML =
       '<div class="inst-header">' +
         '<div class="inst-meta">' +
-          '<span class="inst-badge ' + inst.status + '">' + inst.status.replace('_', ' ') + '</span>' +
-          '<span class="inst-category">' + inst.category + '</span>' +
-          '<span class="inst-lines">L' + inst.line_start + '-' + inst.line_end + '</span>' +
+          '<span class="inst-badge ' + escHtml(inst.status) + '">' + escHtml(inst.status.replace('_', ' ')) + '</span>' +
+          '<span class="inst-category">' + escHtml(inst.category) + '</span>' +
+          '<span class="inst-lines">L' + escHtml(String(inst.line_start)) + '-' + escHtml(String(inst.line_end)) + '</span>' +
         '</div>' +
-        '<span class="inst-tokens">' + fmtNum(inst.token_count) + ' tok</span>' +
+        '<span class="inst-tokens">' + escHtml(fmtNum(inst.token_count)) + ' tok</span>' +
       '</div>' +
       '<div class="inst-text">' + escHtml(inst.text) + '</div>' +
       evidenceHtml +
-      '<div class="inst-evidence">' + inst.sessions_active + '/' + inst.sessions_total + ' sessions active</div>';
+      '<div class="inst-evidence">' + escHtml(String(inst.sessions_active)) + '/' + escHtml(String(inst.sessions_total)) + ' sessions active</div>';
     list.appendChild(card);
   });
 }

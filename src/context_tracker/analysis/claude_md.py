@@ -420,11 +420,17 @@ def analyze_claude_md(
 # ---------------------------------------------------------------------------
 
 
-def find_claude_md_files() -> list[Path]:
-    """Find CLAUDE.md files in standard locations."""
+def find_claude_md_files(project_dir: Path | None = None) -> list[Path]:
+    """Find CLAUDE.md files within the project directory only.
+
+    Only discovers project-scoped files (``CLAUDE.md`` and
+    ``.claude/CLAUDE.md`` under *project_dir*).  User-global files such
+    as ``~/.claude/CLAUDE.md`` are intentionally excluded to avoid
+    exposing private instructions over the API.
+    """
+    root = (project_dir or Path.cwd()).resolve()
     candidates = [
-        Path.home() / ".claude" / "CLAUDE.md",
-        Path(".claude") / "CLAUDE.md",
-        Path("CLAUDE.md"),
+        root / ".claude" / "CLAUDE.md",
+        root / "CLAUDE.md",
     ]
     return [p.resolve() for p in candidates if p.exists()]

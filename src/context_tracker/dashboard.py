@@ -2172,7 +2172,7 @@ def create_app(
     @app.get("/api/optimize/claude-md")
     def optimize_claude_md() -> dict:
         """Analyze CLAUDE.md files and return usage/optimization report."""
-        paths = find_claude_md_files()
+        paths = find_claude_md_files(project_dir=trace_dir.parent)
         if not paths:
             return {
                 "reports": [],
