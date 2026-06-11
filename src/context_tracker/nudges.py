@@ -137,8 +137,8 @@ def evaluate_nudges(
             with factory() as db:
                 session: SessionRecord | None = db.get(SessionRecord, session_id)
                 if session is not None:
-                    db_peak_tokens = session.peak_context_tokens or 0
-                    db_total_cost = session.total_cost_usd or 0.0
+                    db_peak_tokens = int(session.peak_context_tokens or 0)
+                    db_total_cost = float(session.total_cost_usd or 0.0)
         except Exception:
             logger.debug("DB fallback failed", exc_info=True)
 
