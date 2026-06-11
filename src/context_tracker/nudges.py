@@ -22,7 +22,6 @@ from context_tracker.storage import DEFAULT_TRACE_DIR
 
 logger = logging.getLogger(__name__)
 
-MODEL_CONTEXT_WINDOW = 1_000_000
 CHARS_PER_TOKEN_EST = 4
 
 
@@ -145,26 +144,33 @@ def evaluate_nudges(
     if not events and db_peak_tokens is None:
         return []
 
+    # Read configurable context window (default 1M for Claude)
+    _raw_window = cfg.get("context_window", 1_000_000)
+    context_window = int(_raw_window) if _raw_window is not None else 1_000_000
+
     # --- CONTEXT_THRESHOLD ---
     _raw_pct = cfg.get("context_threshold_pct", 60)
     threshold_pct = int(_raw_pct) if _raw_pct is not None else 60
-    peak = db_peak_tokens if db_peak_tokens else _estimate_context_from_events(events)
-    threshold_tokens = MODEL_CONTEXT_WINDOW * threshold_pct // 100
+    trace_peak = _estimate_context_from_events(events) if events else 0
+    peak = max(db_peak_tokens or 0, trace_peak)
+    threshold_tokens = context_window * threshold_pct // 100
     if peak > threshold_tokens:
-        pct = round(peak / MODEL_CONTEXT_WINDOW * 100)
+        pct = round(peak / context_window * 100)
+        window_label = f"{context_window // 1000}K"
         severity = "critical" if pct >= 80 else "warning"
         nudges.append(
             Nudge(
                 code="CONTEXT_THRESHOLD",
                 severity=severity,
-                message=f"⚠️ Context at {pct}% of 1M limit — consider compacting or starting a new session",
+                message=f"⚠️ Context at {pct}% of {window_label} limit — consider compacting or starting a new session",
             )
         )
 
     # --- COST_WARNING ---
     _raw_cost = cfg.get("cost_warning_usd", 10.0)
     cost_threshold = float(_raw_cost) if _raw_cost is not None else 10.0
-    total_cost = db_total_cost if db_total_cost is not None else _estimate_cost_from_events(events)
+    trace_cost = _estimate_cost_from_events(events) if events else 0.0
+    total_cost = max(db_total_cost or 0.0, trace_cost)
     if total_cost > cost_threshold:
         nudges.append(
             Nudge(
@@ -186,7 +192,10 @@ def evaluate_nudges(
                 Nudge(
                     code="REPEATED_READS",
                     severity="info",
-                    message=f"\U0001f4a1 {tool_name} used {count} times recently — consider pinning relevant sections",
+                    message=(
+                        f"\U0001f4a1 {tool_name} used {count} times recently"
+                        " — high tool reuse may indicate context bloat"
+                    ),
                 )
             )
             break

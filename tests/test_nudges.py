@@ -148,7 +148,7 @@ class TestCostWarning:
 
 
 class TestRepeatedReads:
-    def test_fires_when_file_read_3_times(self, tmp_path):
+    def test_fires_when_tool_used_3_times(self, tmp_path):
         """REPEATED_READS fires when the same tool_name appears 3+ times in trace."""
         trace_dir = tmp_path / "traces"
         trace_dir.mkdir()

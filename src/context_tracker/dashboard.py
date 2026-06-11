@@ -1327,7 +1327,7 @@ def create_app(
     def get_session_nudges(session_id: str) -> dict:
         """Return current nudges for a session."""
         _validate_session_id(session_id)
-        nudges = evaluate_nudges(session_id, db_path=db_path)
+        nudges = evaluate_nudges(session_id, db_path=db_path, trace_dir=trace_dir)
         return {
             "session_id": session_id,
             "nudges": [
