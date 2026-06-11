@@ -19,13 +19,31 @@ from context_tracker.db import (
     SessionRecord,
 )
 
-# Approximate cost per million input tokens (USD).
-COST_PER_M_INPUT = 3.0
+# Pricing per million tokens (USD) — must match ingest.py cost model.
+COST_PER_M_INPUT = 15.0
+COST_PER_M_OUTPUT = 75.0
+COST_PER_M_CACHE_READ = 1.875
+COST_PER_M_CACHE_CREATION = 18.75
 
 
 def _tokens_to_cost(tokens: int) -> float:
-    """Convert token count to estimated cost in USD."""
+    """Convert *input* token count to estimated cost in USD.
+
+    Uses the full input-token rate. For split analysis the per-call
+    helper ``_api_call_cost`` is preferred because it accounts for
+    output and cache pricing too.
+    """
     return tokens * COST_PER_M_INPUT / 1_000_000
+
+
+def _api_call_cost(call: ApiCallRecord) -> float:
+    """Return the real cost of a single API call using all pricing tiers."""
+    return (
+        int(call.input_tokens or 0) * COST_PER_M_INPUT / 1_000_000
+        + int(call.output_tokens or 0) * COST_PER_M_OUTPUT / 1_000_000
+        + int(call.cache_read or 0) * COST_PER_M_CACHE_READ / 1_000_000
+        + int(call.cache_creation or 0) * COST_PER_M_CACHE_CREATION / 1_000_000
+    )
 
 
 @dataclass
@@ -76,14 +94,20 @@ def _detect_stale_content(
 ) -> WasteItem | None:
     """Detect blocks that lived in context for an excessively long time.
 
-    Blocks where exit_turn is set and (exit_turn - enter_turn) > 50 API calls
-    are considered to have occupied context for too long.
+    Blocks where (effective_exit - enter_turn) > 50 API calls are considered
+    to have occupied context too long.  For blocks still present at session
+    end (exit_turn IS NULL), the session's total_api_calls (or the max
+    call_index) is used as the effective exit turn.
     """
+    # Determine the effective session-end turn for blocks that never exited.
+    session_rec = db.get(SessionRecord, session_id)
+    max_turn: int = int(session_rec.total_api_calls or 0) if session_rec else 0
+
     blocks = (
         db.query(BlockRecord)
         .filter(
             BlockRecord.session_id == session_id,
-            BlockRecord.exit_turn.isnot(None),
+            BlockRecord.enter_turn.isnot(None),
         )
         .all()
     )
@@ -91,7 +115,8 @@ def _detect_stale_content(
     stale_tokens = 0
     stale_count = 0
     for block in blocks:
-        lifespan = int(block.exit_turn or 0) - int(block.enter_turn or 0)
+        effective_exit = int(block.exit_turn) if block.exit_turn is not None else max_turn
+        lifespan = effective_exit - int(block.enter_turn or 0)
         if lifespan > 50:
             stale_tokens += int(block.tokens or 0)
             stale_count += 1
@@ -129,15 +154,16 @@ def _detect_repeated_reads(
     )
 
     label_groups: Counter[str] = Counter()
-    label_tokens: dict[str, list[int]] = {}
+    # Store (enter_turn, id, tokens) tuples so we can sort chronologically.
+    label_reads: dict[str, list[tuple[int, int, int]]] = {}
     for block in blocks:
         label = str(block.label or "")
         if not label:
             continue
         label_groups[label] += 1
-        if label not in label_tokens:
-            label_tokens[label] = []
-        label_tokens[label].append(int(block.tokens or 0))
+        if label not in label_reads:
+            label_reads[label] = []
+        label_reads[label].append((int(block.enter_turn or 0), int(block.id or 0), int(block.tokens or 0)))
 
     waste_tokens = 0
     repeated_count = 0
@@ -145,9 +171,10 @@ def _detect_repeated_reads(
         if count > 2:
             excess = count - 2
             repeated_count += excess
-            # Sum the tokens for excess reads (the oldest ones)
-            sorted_tokens = sorted(label_tokens[label])
-            waste_tokens += sum(sorted_tokens[:excess])
+            # Sort by chronological order (enter_turn, then id as tie-breaker).
+            # The first 2 reads are legitimate; excess reads after that are waste.
+            chronological = sorted(label_reads[label], key=lambda t: (t[0], t[1]))
+            waste_tokens += sum(t[2] for t in chronological[2:])
 
     if repeated_count == 0:
         return None
@@ -233,8 +260,12 @@ def _compute_split_recommendation(
     """Analyze API call sequence and recommend an optimal session split point.
 
     Walks API call records and evaluates the total cost with and without
-    a split. The cost model accounts for context growth: larger contexts
-    cost more per call because input tokens scale.
+    a split.  Uses the same multi-tier cost model as ``ingest.py``
+    (input, output, cache_read, cache_creation rates) so that the
+    numbers displayed here are consistent with ``SessionRecord.total_cost_usd``.
+
+    The "current cost" is taken from the session's actual ``total_cost_usd``
+    when available, falling back to a per-call sum.
 
     Only recommends a split if savings > 20%.
     """
@@ -245,9 +276,14 @@ def _compute_split_recommendation(
     if len(api_calls) < 4:
         return None
 
-    # Compute current total cost (simple sum of input tokens)
-    total_input = sum(int(c.input_tokens or 0) for c in api_calls)
-    current_cost = _tokens_to_cost(total_input)
+    # Use the session's real total_cost_usd when available so
+    # "Current cost" matches what the user sees elsewhere.
+    session_rec = db.get(SessionRecord, session_id)
+    actual_cost = float(session_rec.total_cost_usd or 0.0) if session_rec else 0.0
+
+    # Compute current total cost from per-call data (same formula as ingest.py).
+    computed_cost = sum(_api_call_cost(c) for c in api_calls)
+    current_cost = actual_cost if actual_cost > 0 else computed_cost
 
     if current_cost <= 0:
         return None
@@ -263,8 +299,8 @@ def _compute_split_recommendation(
     best_projected = current_cost
 
     for i in range(2, len(api_calls) - 1):
-        # Cost before split: sum of actual input tokens up to split
-        cost_before = sum(int(c.input_tokens or 0) for c in api_calls[:i])
+        # Cost before split: actual per-call costs up to split
+        cost_before = sum(_api_call_cost(c) for c in api_calls[:i])
 
         # Context at split point
         context_at_split = int(api_calls[i - 1].input_tokens or 0)
@@ -275,13 +311,22 @@ def _compute_split_recommendation(
         # the context at split point (system prompt + essential context),
         # then grows by output_tokens.
         base_context = max(context_at_split * 0.1, 5000)
-        cost_after = 0.0
+        cost_after_input = 0.0
         running_context = base_context
         for c in api_calls[i:]:
-            cost_after += running_context
+            cost_after_input += running_context
             running_context += int(c.output_tokens or 0)
 
-        projected_total = _tokens_to_cost(cost_before) + _tokens_to_cost(int(cost_after))
+        # For the second session, output / cache costs stay roughly the
+        # same — only the input portion shrinks.
+        cost_after_output = sum(
+            int(c.output_tokens or 0) * COST_PER_M_OUTPUT / 1_000_000
+            + int(c.cache_read or 0) * COST_PER_M_CACHE_READ / 1_000_000
+            + int(c.cache_creation or 0) * COST_PER_M_CACHE_CREATION / 1_000_000
+            for c in api_calls[i:]
+        )
+
+        projected_total = cost_before + cost_after_input * COST_PER_M_INPUT / 1_000_000 + cost_after_output
         savings = current_cost - projected_total
 
         if savings > best_savings:
@@ -299,7 +344,7 @@ def _compute_split_recommendation(
         projected_cost=round(best_projected, 4),
         savings=round(best_savings, 4),
         reason=(
-            f"Splitting at API call {best_split} would reduce total input cost "
+            f"Splitting at API call {best_split} would reduce total cost "
             f"by {best_savings / current_cost:.0%} (${best_savings:.4f})"
         ),
     )

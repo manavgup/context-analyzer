@@ -3,6 +3,7 @@
 import pytest
 
 from context_tracker.analysis.report import (
+    _api_call_cost,
     _compute_split_recommendation,
     _detect_failed_retries,
     _detect_oversized_output,
@@ -159,11 +160,28 @@ class TestTokensToCost:
         assert _tokens_to_cost(0) == 0.0
 
     def test_one_million_tokens(self):
-        assert _tokens_to_cost(1_000_000) == 3.0
+        # $15/M input tokens
+        assert _tokens_to_cost(1_000_000) == 15.0
 
     def test_fractional(self):
         cost = _tokens_to_cost(500_000)
-        assert abs(cost - 1.5) < 0.001
+        assert abs(cost - 7.5) < 0.001
+
+
+class TestApiCallCost:
+    def test_all_tiers(self):
+        """Cost includes input, output, cache_read, and cache_creation."""
+        call = ApiCallRecord(
+            session_id="x",
+            call_index=0,
+            input_tokens=1_000_000,
+            output_tokens=1_000_000,
+            cache_read=1_000_000,
+            cache_creation=1_000_000,
+        )
+        cost = _api_call_cost(call)
+        expected = 15.0 + 75.0 + 1.875 + 18.75  # $110.625
+        assert abs(cost - expected) < 0.001
 
 
 class TestStaleContent:
@@ -174,6 +192,44 @@ class TestStaleContent:
         assert item.category == "stale_content"
         assert item.tokens == 8000  # 5000 + 3000
         assert "2 blocks" in item.description
+
+    def test_detects_blocks_still_present_at_session_end(self, db_factory):
+        """Blocks with exit_turn=NULL are treated as present until session end."""
+        with db_factory() as db:
+            db.add(
+                SessionRecord(
+                    session_id="sess-null-exit",
+                    total_api_calls=100,
+                )
+            )
+            # Block entered at turn 5, never exited -> lifespan = 100 - 5 = 95 > 50
+            db.add(
+                BlockRecord(
+                    session_id="sess-null-exit",
+                    block_id="still-present-1",
+                    block_type="tool_result",
+                    tokens=4000,
+                    enter_turn=5,
+                    exit_turn=None,
+                )
+            )
+            # Block entered at turn 80, never exited -> lifespan = 100 - 80 = 20 < 50
+            db.add(
+                BlockRecord(
+                    session_id="sess-null-exit",
+                    block_id="still-present-2",
+                    block_type="tool_result",
+                    tokens=2000,
+                    enter_turn=80,
+                    exit_turn=None,
+                )
+            )
+            db.commit()
+            item = _detect_stale_content("sess-null-exit", db)
+        assert item is not None
+        assert item.category == "stale_content"
+        assert item.tokens == 4000  # Only the first block is stale
+        assert "1 blocks" in item.description
 
     def test_no_stale_blocks(self, db_factory):
         with db_factory() as db:
@@ -201,6 +257,29 @@ class TestRepeatedReads:
         assert item.category == "repeated_reads"
         assert item.tokens > 0
         assert "excess" in item.description
+
+    def test_waste_is_chronological_excess(self, db_factory):
+        """Excess reads after the first 2 (chronologically) are waste, not the smallest."""
+        with db_factory() as db:
+            db.add(SessionRecord(session_id="sess-chrono"))
+            # 4 reads: enter_turn 0,10,20,30 with tokens 500,200,800,300
+            # Chronological order: first 2 (500, 200) kept, last 2 (800, 300) = 1100 waste
+            # Old smallest-first would have charged 200+300=500
+            for i, (et, tok) in enumerate([(0, 500), (10, 200), (20, 800), (30, 300)]):
+                db.add(
+                    BlockRecord(
+                        session_id="sess-chrono",
+                        block_id=f"chrono-{i}",
+                        block_type="tool_result",
+                        label="/src/chrono.py",
+                        tokens=tok,
+                        enter_turn=et,
+                    )
+                )
+            db.commit()
+            item = _detect_repeated_reads("sess-chrono", db)
+        assert item is not None
+        assert item.tokens == 1100  # 800 + 300 (the 3rd and 4th reads chronologically)
 
     def test_no_repeated_reads(self, db_factory):
         with db_factory() as db:
@@ -276,11 +355,13 @@ class TestSplitRecommendation:
     def test_recommends_split_for_growing_session(self, populated_db):
         with populated_db() as db:
             rec = _compute_split_recommendation("sess-report-1", db)
-        # With linearly growing input tokens, a split should yield savings
+        # With linearly growing input tokens, a split should yield savings.
+        # current_cost should match session's total_cost_usd (3.50).
         if rec is not None:
             assert rec.savings > 0
             assert rec.split_at_turn >= 2
             assert rec.projected_cost < rec.current_cost
+            assert rec.current_cost == 3.50
 
     def test_no_split_for_short_session(self, db_factory):
         with db_factory() as db:
