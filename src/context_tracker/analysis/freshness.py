@@ -77,7 +77,12 @@ def _detect_aged_out(
 
 
 def _detect_superseded(blocks: list[BlockRecord]) -> list[StaleBlock]:
-    """Blocks superseded by a newer block with the same label (same file read twice)."""
+    """Blocks superseded by a newer block with the same label (same file read twice).
+
+    Only a present (non-exited) newer block can supersede an older block that is
+    still present.  An exited newer block must NOT supersede a present older block
+    -- that would incorrectly mark the only current copy as stale.
+    """
     # Group blocks by label, keeping only those with a non-empty label
     by_label: dict[str, list[BlockRecord]] = defaultdict(list)
     for b in blocks:
@@ -88,9 +93,16 @@ def _detect_superseded(blocks: list[BlockRecord]) -> list[StaleBlock]:
     for _label, group in by_label.items():
         if len(group) < 2:
             continue
-        # Sort by enter_turn; all except the newest are superseded
+        # Sort by enter_turn; check each older block against the newest
         sorted_group = sorted(group, key=lambda x: int(x.enter_turn or 0))
+        newest = sorted_group[-1]
+        newest_is_present = newest.exit_turn is None
+
         for older in sorted_group[:-1]:
+            older_is_present = older.exit_turn is None
+            # An exited newer block must not supersede a present older block
+            if older_is_present and not newest_is_present:
+                continue
             results.append(_stale_block_from(older, "superseded"))
     return results
 
@@ -259,8 +271,13 @@ def analyze_freshness(
     readiness = _compute_readiness(stale_tokens, total_tokens)
     savings = _estimate_savings(stale_tokens, str(model) if model else None)
 
-    # Sort safe_to_drop by tokens descending
-    safe_to_drop = sorted(all_stale, key=lambda s: s.tokens, reverse=True)
+    # Only recommend dropping blocks that are still present -- exited blocks
+    # are already gone and cannot be acted upon.
+    safe_to_drop = sorted(
+        [sb for sb in all_stale if sb.block_id in present_ids],
+        key=lambda s: s.tokens,
+        reverse=True,
+    )
 
     return FreshnessReport(
         total_tokens=total_tokens,

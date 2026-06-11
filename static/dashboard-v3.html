@@ -4420,8 +4420,8 @@ html, body {
         const label = sb.label || sb.block_id;
         const shortLabel = label.length > 35 ? '…' + label.slice(-34) : label;
         return '<li>' +
-          '<span class="ca-stale-label" title="' + label.replace(/"/g, '&quot;') + '">' + shortLabel + '</span>' +
-          '<span class="ca-stale-cat">' + sb.category + '</span>' +
+          '<span class="ca-stale-label" title="' + escapeHtml(label) + '">' + escapeHtml(shortLabel) + '</span>' +
+          '<span class="ca-stale-cat">' + escapeHtml(sb.category) + '</span>' +
           '<span class="ca-stale-tokens">' + fmt(sb.tokens) + '</span>' +
           '</li>';
       }).join('');

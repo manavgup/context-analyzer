@@ -132,6 +132,45 @@ class TestDetectSuperseded:
         result = _detect_superseded(blocks)
         assert len(result) == 0
 
+    def test_exited_newer_does_not_supersede_present_older(self):
+        """An exited newer block must NOT supersede a present older block."""
+        blocks = [
+            _make_block(block_id="old", label="file.py", enter_turn=0, exit_turn=None),
+            _make_block(block_id="new", label="file.py", enter_turn=10, exit_turn=15),
+        ]
+        result = _detect_superseded(blocks)
+        assert len(result) == 0
+
+    def test_both_exited_newer_supersedes_older(self):
+        """When both blocks are exited, the newer one supersedes the older."""
+        blocks = [
+            _make_block(block_id="old", label="file.py", enter_turn=0, exit_turn=5),
+            _make_block(block_id="new", label="file.py", enter_turn=10, exit_turn=15),
+        ]
+        result = _detect_superseded(blocks)
+        assert len(result) == 1
+        assert result[0].block_id == "old"
+
+    def test_present_newer_supersedes_present_older(self):
+        """When both blocks are present, the newer one supersedes the older."""
+        blocks = [
+            _make_block(block_id="old", label="file.py", enter_turn=0, exit_turn=None),
+            _make_block(block_id="new", label="file.py", enter_turn=10, exit_turn=None),
+        ]
+        result = _detect_superseded(blocks)
+        assert len(result) == 1
+        assert result[0].block_id == "old"
+
+    def test_present_newer_supersedes_exited_older(self):
+        """A present newer block supersedes an exited older block."""
+        blocks = [
+            _make_block(block_id="old", label="file.py", enter_turn=0, exit_turn=5),
+            _make_block(block_id="new", label="file.py", enter_turn=10, exit_turn=None),
+        ]
+        result = _detect_superseded(blocks)
+        assert len(result) == 1
+        assert result[0].block_id == "old"
+
 
 # ---------------------------------------------------------------------------
 # Tests: _detect_failed_output
@@ -381,6 +420,77 @@ class TestAnalyzeFreshness:
 
         report = analyze_freshness("cost-session", 100, db_session)
         assert report.estimated_savings_per_call > 0
+
+    def test_safe_to_drop_excludes_exited_blocks(self, db_session):
+        """safe_to_drop should only include present blocks, not exited ones."""
+        sr = SessionRecord()
+        sr.session_id = "drop-session"
+        sr.model = "claude-opus-4-6"
+        db_session.add(sr)
+
+        # An exited block that is aged out -- should NOT be in safe_to_drop
+        b1 = BlockRecord()
+        b1.session_id = "drop-session"
+        b1.block_id = "exited-old"
+        b1.block_type = "tool_result"
+        b1.label = "gone.py"
+        b1.tokens = 5000
+        b1.enter_turn = 0
+        b1.exit_turn = 5
+        db_session.add(b1)
+
+        # A present block that is aged out -- should be in safe_to_drop
+        b2 = BlockRecord()
+        b2.session_id = "drop-session"
+        b2.block_id = "present-old"
+        b2.block_type = "tool_result"
+        b2.label = "still-here.py"
+        b2.tokens = 8000
+        b2.enter_turn = 0
+        b2.exit_turn = None
+        db_session.add(b2)
+        db_session.commit()
+
+        report = analyze_freshness("drop-session", 100, db_session)
+        drop_ids = {sb.block_id for sb in report.safe_to_drop}
+        assert "present-old" in drop_ids
+        assert "exited-old" not in drop_ids
+
+    def test_exited_newer_does_not_supersede_present_older(self, db_session):
+        """Integration test: exited newer block must not mark present older as stale."""
+        sr = SessionRecord()
+        sr.session_id = "supersede-session"
+        sr.model = "claude-opus-4-6"
+        db_session.add(sr)
+
+        # The older block is still present
+        b1 = BlockRecord()
+        b1.session_id = "supersede-session"
+        b1.block_id = "old-present"
+        b1.block_type = "tool_result"
+        b1.label = "important.py"
+        b1.tokens = 3000
+        b1.enter_turn = 5
+        b1.exit_turn = None
+        db_session.add(b1)
+
+        # The newer block has exited -- it should NOT supersede the older one
+        b2 = BlockRecord()
+        b2.session_id = "supersede-session"
+        b2.block_id = "new-exited"
+        b2.block_type = "tool_result"
+        b2.label = "important.py"
+        b2.tokens = 3200
+        b2.enter_turn = 10
+        b2.exit_turn = 12
+        db_session.add(b2)
+        db_session.commit()
+
+        report = analyze_freshness("supersede-session", 15, db_session)
+        superseded = [sb for sb in report.safe_to_drop if sb.category == "superseded"]
+        superseded_ids = {sb.block_id for sb in superseded}
+        # The present older block should NOT be marked as superseded
+        assert "old-present" not in superseded_ids
 
 
 # ---------------------------------------------------------------------------
