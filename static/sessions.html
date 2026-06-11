@@ -259,6 +259,11 @@ tbody tr { cursor: pointer; transition: background 0.1s; }
 
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = String(str ?? '');
+    return div.innerHTML;
+  }
   function fmt(n) {
     if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
     if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
@@ -412,9 +417,9 @@ tbody tr { cursor: pointer; transition: background 0.1s; }
       const multiplier = largeCpc / Math.max(smallCpc, 0.01);
       if (multiplier > 1.5) {
         insights.push({
-          icon: 'cost', text: 'Cost scales <b>' + multiplier.toFixed(1) + 'x</b> from your smallest session (' +
-            fmt(smallest.peak_context_tokens) + ' peak, $' + smallCpc.toFixed(2) + '/call) to your largest (' +
-            fmt(largest.peak_context_tokens) + ' peak, $' + largeCpc.toFixed(2) + '/call). Smaller context = cheaper calls.'
+          icon: 'cost', text: 'Cost scales <b>' + escapeHtml(multiplier.toFixed(1)) + 'x</b> from your smallest session (' +
+            escapeHtml(fmt(smallest.peak_context_tokens)) + ' peak, $' + escapeHtml(smallCpc.toFixed(2)) + '/call) to your largest (' +
+            escapeHtml(fmt(largest.peak_context_tokens)) + ' peak, $' + escapeHtml(largeCpc.toFixed(2)) + '/call). Smaller context = cheaper calls.'
         });
       }
     }
@@ -425,9 +430,9 @@ tbody tr { cursor: pointer; transition: background 0.1s; }
       const pct = ((mostExpensive.total_cost_usd || 0) / Math.max(data.reduce((s, d) => s + (d.total_cost_usd || 0), 0), 0.01) * 100);
       if (pct > 25) {
         insights.push({
-          icon: 'warn', text: '<b>' + sessionShortLabel(mostExpensive) + '</b> accounts for ' +
-            pct.toFixed(0) + '% of total cost ($' + (mostExpensive.total_cost_usd || 0).toFixed(0) + '). ' +
-            'Peak context was ' + fmt(mostExpensive.peak_context_tokens) + ' tokens.'
+          icon: 'warn', text: '<b>' + escapeHtml(sessionShortLabel(mostExpensive)) + '</b> accounts for ' +
+            escapeHtml(pct.toFixed(0)) + '% of total cost ($' + escapeHtml((mostExpensive.total_cost_usd || 0).toFixed(0)) + '). ' +
+            'Peak context was ' + escapeHtml(fmt(mostExpensive.peak_context_tokens)) + ' tokens.'
         });
       }
     }
@@ -439,8 +444,8 @@ tbody tr { cursor: pointer; transition: background 0.1s; }
     })).sort((a, b) => b.cpt - a.cpt);
     if (callsPerTurn.length > 0 && callsPerTurn[0].cpt > 8) {
       insights.push({
-        icon: 'info', text: '<b>' + callsPerTurn[0].label + '</b> averaged ' +
-          callsPerTurn[0].cpt.toFixed(1) + ' API calls per turn \u2014 heavy tool use or subagent activity. ' +
+        icon: 'info', text: '<b>' + escapeHtml(callsPerTurn[0].label) + '</b> averaged ' +
+          escapeHtml(callsPerTurn[0].cpt.toFixed(1)) + ' API calls per turn \u2014 heavy tool use or subagent activity. ' +
           'Fewer calls/turn = less cache re-reading.'
       });
     }
@@ -481,10 +486,10 @@ tbody tr { cursor: pointer; transition: background 0.1s; }
       // Store computed cost_per_call for sorting
       s.cost_per_call = cpc;
 
-      return `<tr data-sid="${s.session_id}">
+      return `<tr data-sid="${escapeHtml(s.session_id)}">
         <td class="session-label">
-          <div class="session-date">${date}</div>
-          <div class="session-prompt" title="${(s.first_prompt || '').replace(/"/g, '&quot;')}">${label}</div>
+          <div class="session-date">${escapeHtml(date)}</div>
+          <div class="session-prompt" title="${escapeHtml(s.first_prompt || '')}">${escapeHtml(label)}</div>
         </td>
         <td class="num-cell">${s.total_turns || 0}</td>
         <td class="num-cell">${s.total_api_calls || 0}</td>
@@ -573,9 +578,9 @@ tbody tr { cursor: pointer; transition: background 0.1s; }
       const sparkHtml = renderSparkline(t.values, color, 120, 28);
 
       return `<div class="trend-card">
-        <div class="trend-label">${label}</div>
-        <span class="trend-direction ${t.direction}">${arrow} ${t.direction}</span>
-        <div class="trend-magnitude">${t.magnitude.toFixed(1)}% change · ${t.data_points} sessions</div>
+        <div class="trend-label">${escapeHtml(label)}</div>
+        <span class="trend-direction ${escapeHtml(t.direction)}">${escapeHtml(arrow)} ${escapeHtml(t.direction)}</span>
+        <div class="trend-magnitude">${t.magnitude.toFixed(1)}% change · ${t.data_points} sessions · ${escapeHtml(t.period)}</div>
         <div class="trend-sparkline">${sparkHtml}</div>
       </div>`;
     }).join('');
@@ -611,11 +616,11 @@ tbody tr { cursor: pointer; transition: background 0.1s; }
         <div class="pattern-confidence">${(p.confidence * 100).toFixed(0)}% confidence</div>
         <div class="pattern-header">
           <div class="pattern-icon ${icon.cls}">${icon.sym}</div>
-          <div class="pattern-name">${p.name.replace(/_/g, ' ')}</div>
+          <div class="pattern-name">${escapeHtml(p.name.replace(/_/g, ' '))}</div>
         </div>
-        <div class="pattern-desc">${p.description}</div>
-        <div class="pattern-evidence">${p.evidence}</div>
-        <div class="pattern-action">${p.actionable}</div>
+        <div class="pattern-desc">${escapeHtml(p.description)}</div>
+        <div class="pattern-evidence">${escapeHtml(p.evidence)}</div>
+        <div class="pattern-action">${escapeHtml(p.actionable)}</div>
       </div>`;
     }).join('');
     section.style.display = 'block';
@@ -631,8 +636,10 @@ tbody tr { cursor: pointer; transition: background 0.1s; }
     const dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
     sessionsData.forEach(s => {
-      if (!s.source_mtime) return;
-      const d = new Date(s.source_mtime * 1000);
+      // Prefer started_at (ISO timestamp) over source_mtime (file modification time)
+      const ts = s.started_at || s.source_mtime;
+      if (!ts) return;
+      const d = s.started_at ? new Date(s.started_at) : new Date(s.source_mtime * 1000);
       const dow = (d.getDay() + 6) % 7; // Mon=0
       const hour = d.getHours();
       const key = `${dow}-${hour}`;

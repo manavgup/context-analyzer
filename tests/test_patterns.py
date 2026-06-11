@@ -443,6 +443,26 @@ class TestAnalyzeTrends:
         assert len(cost_trend) == 1
         assert cost_trend[0].direction == "degrading"
 
+    def test_fallback_period_label(self, db_session):
+        """When fewer than 3 sessions in the period, label should say 'all time'."""
+        # Sessions well outside the 7-day window
+        for i in range(4):
+            db_session.add(
+                _make_session(
+                    f"s{i}",
+                    f"2025-01-0{i + 1}T10:00:00Z",
+                    total_cost_usd=1.0 + i * 0.5,
+                    total_turns=10,
+                )
+            )
+        db_session.commit()
+
+        trends = analyze_trends(db_session, period_days=7)
+        assert len(trends) >= 1
+        for t in trends:
+            assert "all time" in t.period
+            assert "4 sessions" in t.period
+
     def test_sparkline_values(self, db_session):
         """Trend values should contain rolling averages for sparkline rendering."""
         for i in range(8):

@@ -459,11 +459,12 @@ def analyze_trends(db_session: DbSession, period_days: int = 30) -> list[TrendAn
     # Fall back to all records if fewer than 3 within the period
     if len(period_records) < 3:
         period_records = records
+        period_label = f"all time ({len(records)} sessions)"
+    else:
+        period_label = f"last {period_days} days"
 
     if len(period_records) < 2:
         return []
-
-    period_label = f"last {period_days} days"
     trends: list[TrendAnalysis] = []
 
     # Cost trend

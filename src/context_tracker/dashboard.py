@@ -481,6 +481,7 @@ def create_app(
                         "total_cache_read": rec.total_cache_read,
                         "total_cost_usd": rec.total_cost_usd,
                         "source_mtime": rec.source_mtime,
+                        "started_at": rec.started_at,
                         "first_prompt": first_prompt,
                     }
                 )
