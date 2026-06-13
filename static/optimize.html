@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Context Analyzer — CLAUDE.md Optimizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f8f9fb;
+  --card: #ffffff;
+  --border: #e5e7eb;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --text: #1a1d23;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --accent: #6366f1;
+  --accent-bg: rgba(99,102,241,0.08);
+  --green: #34d399;
+  --green-bg: rgba(52,211,153,0.08);
+  --danger: #ef4444;
+  --danger-bg: rgba(239,68,68,0.08);
+  --yellow: #fbbf24;
+  --yellow-bg: rgba(251,191,36,0.08);
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.container { max-width: 1240px; margin: 0 auto; padding: 24px 24px 80px; }
+
+.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.header h1 { font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.header-left { display: flex; align-items: center; gap: 10px; }
+.header-right { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 12px; color: var(--text-muted); }
+.nav-link { font-family: var(--mono); font-size: 11px; color: var(--accent); text-decoration: none; padding: 4px 10px; border: 1px solid var(--accent); border-radius: 4px; transition: all 0.15s ease; }
+.nav-link:hover { background: var(--accent); color: white; }
+
+/* Summary cards */
+.summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+.summary-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; box-shadow: var(--shadow); }
+.summary-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 6px; }
+.summary-value { font-family: var(--mono); font-size: 26px; font-weight: 700; color: var(--text); }
+.summary-sub { font-family: var(--mono); font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.summary-value.green { color: var(--green); }
+.summary-value.danger { color: var(--danger); }
+.summary-value.yellow { color: var(--yellow); }
+
+/* File selector */
+.file-tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+.file-tab {
+  font-family: var(--mono); font-size: 12px; padding: 6px 14px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--card); cursor: pointer; transition: all 0.15s;
+  color: var(--text-secondary);
+}
+.file-tab:hover { border-color: var(--accent); color: var(--accent); }
+.file-tab.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+/* Instructions list */
+.instructions-section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow); margin-bottom: 20px; }
+.section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 16px; color: var(--text); }
+
+.instruction-card {
+  border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 10px;
+  border-left: 4px solid var(--border); transition: all 0.15s;
+}
+.instruction-card.active { border-left-color: var(--green); background: var(--green-bg); }
+.instruction-card.rarely_used { border-left-color: var(--yellow); background: var(--yellow-bg); }
+.instruction-card.unused { border-left-color: var(--danger); background: var(--danger-bg); }
+
+.inst-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.inst-meta { display: flex; align-items: center; gap: 10px; }
+.inst-badge {
+  font-family: var(--mono); font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.05em; padding: 2px 8px; border-radius: 4px;
+}
+.inst-badge.active { background: var(--green); color: #064e3b; }
+.inst-badge.rarely_used { background: var(--yellow); color: #78350f; }
+.inst-badge.unused { background: var(--danger); color: white; }
+.inst-category { font-family: var(--mono); font-size: 10px; color: var(--text-muted); text-transform: uppercase; }
+.inst-tokens { font-family: var(--mono); font-size: 11px; color: var(--text-secondary); }
+.inst-lines { font-family: var(--mono); font-size: 10px; color: var(--text-muted); }
+
+.inst-text {
+  font-family: var(--mono); font-size: 12px; line-height: 1.6; color: var(--text);
+  white-space: pre-wrap; word-break: break-word; max-height: 120px; overflow-y: auto;
+  background: rgba(0,0,0,0.02); border-radius: 4px; padding: 8px 10px; margin-top: 8px;
+}
+
+.inst-evidence {
+  margin-top: 6px; font-family: var(--mono); font-size: 10px; color: var(--text-muted);
+}
+
+/* Optimized output */
+.optimized-section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow); }
+.optimized-output {
+  font-family: var(--mono); font-size: 12px; line-height: 1.6;
+  background: #1a1d23; color: #e5e7eb; border-radius: 8px; padding: 16px;
+  max-height: 400px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+}
+.copy-btn {
+  font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 8px 20px;
+  background: var(--accent); color: white; border: none; border-radius: 6px;
+  cursor: pointer; margin-top: 12px; transition: all 0.15s;
+}
+.copy-btn:hover { opacity: 0.85; }
+.copy-btn.copied { background: var(--green); }
+
+/* Loading / empty state */
+.loading-state, .empty-state {
+  text-align: center; padding: 60px 20px; color: var(--text-muted);
+  font-family: var(--mono); font-size: 13px;
+}
+.loading-spinner {
+  width: 28px; height: 28px; border: 3px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin 0.8s linear infinite; margin: 0 auto 14px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Filter buttons */
+.filter-row { display: flex; gap: 8px; margin-bottom: 16px; }
+.filter-btn {
+  font-family: var(--mono); font-size: 11px; padding: 4px 12px;
+  border: 1px solid var(--border); border-radius: 4px; background: var(--card);
+  cursor: pointer; transition: all 0.15s; color: var(--text-secondary);
+}
+.filter-btn:hover { border-color: var(--accent); }
+.filter-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="header-left">
+      <h1>CLAUDE.md Optimizer</h1>
+    </div>
+    <div class="header-right">
+      <a href="/" class="nav-link">Dashboard</a>
+      <a href="/sessions" class="nav-link">All Sessions</a>
+    </div>
+  </div>
+
+  <div id="loading" class="loading-state">
+    <div class="loading-spinner"></div>
+    Analyzing CLAUDE.md files...
+  </div>
+
+  <div id="content" style="display:none;">
+    <div class="summary-row" id="summary-row">
+      <div class="summary-card">
+        <div class="summary-label">Total Tokens</div>
+        <div class="summary-value" id="total-tokens">--</div>
+        <div class="summary-sub" id="total-files">--</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Active Tokens</div>
+        <div class="summary-value green" id="active-tokens">--</div>
+        <div class="summary-sub" id="active-pct">--</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Unused Tokens</div>
+        <div class="summary-value danger" id="unused-tokens">--</div>
+        <div class="summary-sub" id="unused-pct">--</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Savings / Session</div>
+        <div class="summary-value" id="savings">--</div>
+        <div class="summary-sub">estimated at $3/MTok</div>
+      </div>
+    </div>
+
+    <div class="file-tabs" id="file-tabs"></div>
+
+    <div class="instructions-section">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+        <div class="section-title" style="margin-bottom: 0;">Instructions</div>
+        <div class="filter-row" style="margin-bottom: 0;">
+          <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">All</button>
+          <button class="filter-btn" data-filter="active" onclick="setFilter('active')">Active</button>
+          <button class="filter-btn" data-filter="rarely_used" onclick="setFilter('rarely_used')">Rarely Used</button>
+          <button class="filter-btn" data-filter="unused" onclick="setFilter('unused')">Unused</button>
+        </div>
+      </div>
+      <div id="instructions-list"></div>
+    </div>
+
+    <div class="optimized-section">
+      <div class="section-title">Optimized CLAUDE.md</div>
+      <div class="optimized-output" id="optimized-output"></div>
+      <button class="copy-btn" id="copy-btn" onclick="copyOptimized()">Copy Optimized</button>
+    </div>
+  </div>
+
+  <div id="empty" class="empty-state" style="display:none;">
+    No CLAUDE.md files found.<br>
+    Checked: .claude/CLAUDE.md, ./CLAUDE.md
+  </div>
+</div>
+
+<script>
+let data = null;
+let currentReport = 0;
+let currentFilter = 'all';
+
+async function load() {
+  try {
+    const resp = await fetch('/api/optimize/claude-md');
+    data = await resp.json();
+    if (!data.reports || data.reports.length === 0) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('empty').style.display = 'block';
+      return;
+    }
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+    renderFileTabs();
+    selectReport(0);
+  } catch (err) {
+    document.getElementById('loading').innerHTML =
+      '<div style="color:var(--danger)">Failed to load analysis: ' + escHtml(err.message) + '</div>';
+  }
+}
+
+function renderFileTabs() {
+  const tabs = document.getElementById('file-tabs');
+  tabs.innerHTML = '';
+  data.reports.forEach((r, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'file-tab' + (i === currentReport ? ' active' : '');
+    btn.textContent = r.file_path.replace(/^.*\//, '');
+    btn.title = r.file_path;
+    btn.onclick = () => selectReport(i);
+    tabs.appendChild(btn);
+  });
+}
+
+function selectReport(idx) {
+  currentReport = idx;
+  const r = data.reports[idx];
+  // Update tabs
+  document.querySelectorAll('.file-tab').forEach((t, i) => {
+    t.className = 'file-tab' + (i === idx ? ' active' : '');
+  });
+  // Summary
+  document.getElementById('total-tokens').textContent = fmtNum(r.total_tokens);
+  document.getElementById('total-files').textContent = r.file_path;
+  document.getElementById('active-tokens').textContent = fmtNum(r.active_tokens);
+  document.getElementById('active-pct').textContent =
+    r.total_tokens > 0 ? Math.round(r.active_tokens / r.total_tokens * 100) + '% of total' : '--';
+  document.getElementById('unused-tokens').textContent = fmtNum(r.unused_tokens);
+  document.getElementById('unused-pct').textContent =
+    r.total_tokens > 0 ? Math.round(r.unused_tokens / r.total_tokens * 100) + '% of total' : '--';
+  document.getElementById('savings').textContent = '$' + r.estimated_savings_per_session.toFixed(4);
+  // Instructions
+  renderInstructions(r);
+  // Optimized
+  document.getElementById('optimized-output').textContent = r.optimized_content || '(empty)';
+}
+
+function renderInstructions(r) {
+  const list = document.getElementById('instructions-list');
+  list.innerHTML = '';
+  const filtered = currentFilter === 'all'
+    ? r.instructions
+    : r.instructions.filter(i => i.status === currentFilter);
+  if (filtered.length === 0) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-family:var(--mono);font-size:12px;">No instructions match this filter.</div>';
+    return;
+  }
+  filtered.forEach(inst => {
+    const card = document.createElement('div');
+    card.className = 'instruction-card ' + escHtml(inst.status);
+    const evidenceHtml = inst.evidence.length > 0
+      ? '<div class="inst-evidence">Evidence: ' + escHtml(inst.evidence.join('; ')) + '</div>'
+      : '';
+    card.innerHTML =
+      '<div class="inst-header">' +
+        '<div class="inst-meta">' +
+          '<span class="inst-badge ' + escHtml(inst.status) + '">' + escHtml(inst.status.replace('_', ' ')) + '</span>' +
+          '<span class="inst-category">' + escHtml(inst.category) + '</span>' +
+          '<span class="inst-lines">L' + escHtml(String(inst.line_start)) + '-' + escHtml(String(inst.line_end)) + '</span>' +
+        '</div>' +
+        '<span class="inst-tokens">' + escHtml(fmtNum(inst.token_count)) + ' tok</span>' +
+      '</div>' +
+      '<div class="inst-text">' + escHtml(inst.text) + '</div>' +
+      evidenceHtml +
+      '<div class="inst-evidence">' + escHtml(String(inst.sessions_active)) + '/' + escHtml(String(inst.sessions_total)) + ' sessions active</div>';
+    list.appendChild(card);
+  });
+}
+
+function setFilter(f) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => {
+    b.className = 'filter-btn' + (b.dataset.filter === f ? ' active' : '');
+  });
+  if (data && data.reports.length > 0) renderInstructions(data.reports[currentReport]);
+}
+
+function copyOptimized() {
+  const text = data.reports[currentReport].optimized_content;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy Optimized'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+function fmtNum(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return String(n);
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+load();
+</script>
+</body>
+</html>

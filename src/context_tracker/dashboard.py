@@ -12,6 +12,10 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from context_tracker.analysis.claude_md import (
+    analyze_claude_md,
+    find_claude_md_files,
+)
 from context_tracker.analysis.config import StalenessConfig
 from context_tracker.analysis.health import (
     build_health_signals,
@@ -2277,6 +2281,55 @@ def create_app(
             status_code=404,
             detail=f"Message index {msg_index} not found",
         )
+
+    @app.get("/api/optimize/claude-md")
+    def optimize_claude_md() -> dict:
+        """Analyze CLAUDE.md files and return usage/optimization report."""
+        paths = find_claude_md_files(project_dir=trace_dir.parent)
+        if not paths:
+            return {
+                "reports": [],
+                "message": "No CLAUDE.md files found in standard locations",
+            }
+        engine = get_engine(db_path)
+        factory = get_session_factory(engine)
+        reports = []
+        with factory() as db:
+            for p in paths:
+                report = analyze_claude_md(p, db)
+                reports.append(
+                    {
+                        "file_path": report.file_path,
+                        "total_tokens": report.total_tokens,
+                        "active_tokens": report.active_tokens,
+                        "unused_tokens": report.unused_tokens,
+                        "estimated_savings_per_session": report.estimated_savings_per_session,
+                        "optimized_content": report.optimized_content,
+                        "instructions": [
+                            {
+                                "line_start": iu.instruction.line_start,
+                                "line_end": iu.instruction.line_end,
+                                "text": iu.instruction.text,
+                                "token_count": iu.instruction.token_count,
+                                "category": iu.instruction.category,
+                                "sessions_active": iu.sessions_active,
+                                "sessions_total": iu.sessions_total,
+                                "evidence": iu.evidence,
+                                "status": iu.status,
+                            }
+                            for iu in report.instructions
+                        ],
+                    }
+                )
+        return {"reports": reports}
+
+    @app.get("/optimize")
+    def serve_optimize_page() -> Response:
+        """CLAUDE.md optimizer page."""
+        optimize_html = static_dir / "optimize.html"
+        if optimize_html.exists():
+            return FileResponse(str(optimize_html))
+        return HTMLResponse("<h1>Optimize</h1><p>optimize.html not found</p>")
 
     @app.get("/sessions")
     def serve_sessions_page() -> Response:
