@@ -20,6 +20,10 @@ from context_tracker.analysis.health import (
     generate_recommendations,
 )
 from context_tracker.analysis.models import BlockType, ContextBlock
+from context_tracker.analysis.prompts import (
+    analyze_session_prompts,
+    compute_aggregate_stats,
+)
 from context_tracker.analysis.reconstruction import reconstruct_session
 from context_tracker.analysis.staleness import (
     compute_staleness,
@@ -1722,6 +1726,45 @@ def create_app(
             },
             "top_blocks": top_blocks,
             "per_turn": per_turn,
+        }
+
+    # ------------------------------------------------------------------
+    # Prompt Efficiency endpoint
+    # ------------------------------------------------------------------
+    @app.get("/api/session/{session_id}/prompts")
+    def get_prompt_analysis(session_id: str) -> dict:
+        """Prompt specificity analysis with resolution tracking."""
+        _validate_session_id(session_id)
+        _ensure_ingested(session_id, trace_dir, db_path, transcript_dir)
+
+        engine = get_engine(db_path)
+        factory = get_session_factory(engine)
+        with factory() as db:
+            rec = db.get(SessionRecord, session_id)
+            if not rec:
+                raise HTTPException(status_code=404, detail="Session not found")
+            model = rec.model or "_default"
+            analyses = analyze_session_prompts(session_id, db, model)
+
+        prompts_out = [
+            {
+                "turn_number": a.turn_number,
+                "prompt_preview": a.prompt_preview[:120],
+                "specificity_score": a.specificity_score,
+                "signals": a.signals,
+                "resolution_turns": a.resolution_turns,
+                "resolution_cost": a.resolution_cost,
+                "tool_failures": a.tool_failures,
+            }
+            for a in analyses
+        ]
+
+        aggregate = compute_aggregate_stats(analyses)
+
+        return {
+            "session_id": session_id,
+            "prompts": prompts_out,
+            "aggregate": aggregate,
         }
 
     @app.get("/api/session/{session_id}/turn/{turn_number}/messages")
