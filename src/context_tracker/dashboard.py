@@ -25,6 +25,7 @@ from context_tracker.analysis.prompts import (
     compute_aggregate_stats,
 )
 from context_tracker.analysis.reconstruction import reconstruct_session
+from context_tracker.analysis.report import generate_report
 from context_tracker.analysis.staleness import (
     compute_staleness,
     detect_superseded,
@@ -1766,6 +1767,24 @@ def create_app(
             "prompts": prompts_out,
             "aggregate": aggregate,
         }
+
+    # ------------------------------------------------------------------
+    # Optimization Report endpoint
+    # ------------------------------------------------------------------
+    @app.get("/api/session/{session_id}/report")
+    def get_session_report(session_id: str) -> dict:
+        """Post-session optimization report with waste analysis and split recommendation."""
+        _validate_session_id(session_id)
+        _ensure_ingested(session_id, trace_dir, db_path, transcript_dir)
+
+        engine = get_engine(db_path)
+        factory = get_session_factory(engine)
+        with factory() as db:
+            rec = db.get(SessionRecord, session_id)
+            if not rec:
+                raise HTTPException(status_code=404, detail="Session not found")
+            report = generate_report(session_id, db)
+            return report.to_dict()
 
     @app.get("/api/session/{session_id}/turn/{turn_number}/messages")
     def get_turn_messages(session_id: str, turn_number: int) -> dict:

@@ -1372,6 +1372,157 @@ html, body {
   color: rgba(255,255,255,0.65);
   text-align: center;
 }
+
+/* ===== OPTIMIZATION REPORT ===== */
+.report-btn {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-left: 10px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.report-btn:hover { border-color: var(--accent); background: rgba(59,130,246,0.1); }
+.report-btn:disabled { opacity: 0.5; cursor: default; }
+
+.report-modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.report-modal {
+  background: var(--card);
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+  max-width: 720px;
+  width: 92%;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 28px 32px;
+}
+.report-modal h3 {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 18px;
+}
+.report-modal-close {
+  float: right;
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+}
+.report-modal-close:hover { color: var(--text); }
+
+.report-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.report-stat {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+.report-stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.report-stat-value {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.report-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 18px 0 10px;
+  color: var(--text);
+}
+
+.waste-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+.waste-table th {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.waste-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  vertical-align: top;
+}
+.waste-table tr:last-child td { border-bottom: none; }
+.waste-category {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(59,130,246,0.12);
+  color: var(--accent);
+}
+.waste-suggestion {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.split-card {
+  background: rgba(59,130,246,0.08);
+  border: 1px solid rgba(59,130,246,0.2);
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 12px;
+}
+.split-card h4 {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--accent);
+}
+.split-card p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin: 4px 0;
+}
+.split-savings {
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 700;
+  color: #22c55e;
+}
+
+.report-no-waste {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
 </style>
 </head>
 <body>
@@ -1393,6 +1544,7 @@ html, body {
         <select id="session-picker" class="session-picker">
           <option value="">Loading sessions...</option>
         </select>
+        <button class="report-btn" id="report-btn" disabled title="Optimization Report">Optimization Report</button>
       </div>
       <div class="header-right">
         <a href="/sessions" class="nav-link">All Sessions</a>
@@ -1821,6 +1973,9 @@ html, body {
     // Update picker selection
     picker.value = sessionId;
     picker.classList.remove('loading');
+
+    // Enable report button
+    document.getElementById('report-btn').disabled = false;
   }
 
   function sessionLabel(s) {
@@ -4247,7 +4402,101 @@ html, body {
 
     // Populate session picker (async, non-blocking)
     populateSessionPicker();
+
+    // Enable report button once a session is loaded
+    document.getElementById('report-btn').disabled = false;
   }
+
+  // ---- Optimization Report ----
+  function fmtCost(v) { return '$' + (v || 0).toFixed(4); }
+  function fmtTokensK(v) { return (v / 1000).toFixed(1) + 'K'; }
+
+  async function openReportModal() {
+    const sid = meta.session_id;
+    if (!sid) return;
+
+    const btn = document.getElementById('report-btn');
+    btn.disabled = true;
+    btn.textContent = 'Loading...';
+
+    try {
+      const resp = await fetch('/api/session/' + encodeURIComponent(sid) + '/report');
+      if (!resp.ok) throw new Error('Failed to load report');
+      const report = await resp.json();
+      renderReportModal(report);
+    } catch (e) {
+      console.error('Report error:', e);
+      alert('Failed to load optimization report.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Optimization Report';
+    }
+  }
+
+  function renderReportModal(report) {
+    // Remove any existing modal
+    const existing = document.getElementById('report-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'report-overlay';
+    overlay.className = 'report-modal-overlay';
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+    let wasteHTML = '';
+    if (report.waste_items && report.waste_items.length > 0) {
+      wasteHTML = '<table class="waste-table"><thead><tr>' +
+        '<th>Category</th><th>Description</th><th>Tokens</th><th>Est. Cost</th><th>Suggestion</th>' +
+        '</tr></thead><tbody>';
+      for (const w of report.waste_items) {
+        wasteHTML += '<tr>' +
+          '<td><span class="waste-category">' + w.category.replace(/_/g, ' ') + '</span></td>' +
+          '<td>' + w.description + '</td>' +
+          '<td style="font-family:var(--mono);white-space:nowrap">' + fmt(w.tokens) + '</td>' +
+          '<td style="font-family:var(--mono);white-space:nowrap">' + fmtCost(w.estimated_cost) + '</td>' +
+          '<td class="waste-suggestion">' + w.suggestion + '</td>' +
+          '</tr>';
+      }
+      wasteHTML += '</tbody></table>';
+    } else {
+      wasteHTML = '<div class="report-no-waste">No significant waste detected. This session was efficient.</div>';
+    }
+
+    let splitHTML = '';
+    if (report.split_recommendation) {
+      const sr = report.split_recommendation;
+      splitHTML = '<div class="split-card">' +
+        '<h4>Session Split Recommendation</h4>' +
+        '<p>' + sr.reason + '</p>' +
+        '<p>Current cost: <strong>' + fmtCost(sr.current_cost) + '</strong> ' +
+        ' &rarr; Projected: <strong>' + fmtCost(sr.projected_cost) + '</strong></p>' +
+        '<p>Potential savings: <span class="split-savings">' + fmtCost(sr.savings) + '</span></p>' +
+        '</div>';
+    }
+
+    const totalSavings = (report.total_waste_cost || 0) +
+      (report.split_recommendation ? report.split_recommendation.savings : 0);
+
+    overlay.innerHTML =
+      '<div class="report-modal">' +
+        '<button class="report-modal-close" onclick="document.getElementById(\'report-overlay\').remove()">&times;</button>' +
+        '<h3>Optimization Report</h3>' +
+        '<div class="report-summary">' +
+          '<div class="report-stat"><div class="report-stat-label">Total Cost</div><div class="report-stat-value">' + fmtCost(report.total_cost) + '</div></div>' +
+          '<div class="report-stat"><div class="report-stat-label">API Calls</div><div class="report-stat-value">' + (report.total_api_calls || 0) + '</div></div>' +
+          '<div class="report-stat"><div class="report-stat-label">Peak Context</div><div class="report-stat-value">' + fmtTokensK(report.peak_context || 0) + '</div></div>' +
+          '<div class="report-stat"><div class="report-stat-label">Waste Tokens</div><div class="report-stat-value">' + fmt(report.total_waste_tokens || 0) + '</div></div>' +
+          '<div class="report-stat"><div class="report-stat-label">Potential Savings</div><div class="report-stat-value split-savings">' + fmtCost(totalSavings) + '</div></div>' +
+        '</div>' +
+        '<div class="report-section-title">Waste Analysis</div>' +
+        wasteHTML +
+        (splitHTML ? '<div class="report-section-title">Split Analysis</div>' + splitHTML : '') +
+      '</div>';
+
+    document.body.appendChild(overlay);
+  }
+
+  document.getElementById('report-btn').addEventListener('click', openReportModal);
 
   init();
 })();
