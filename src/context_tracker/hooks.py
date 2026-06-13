@@ -19,6 +19,7 @@ from context_tracker.models import (
     SubagentStopEvent,
     UserPromptEvent,
 )
+from context_tracker.nudges import evaluate_nudges
 from context_tracker.storage import append_event
 
 logger = logging.getLogger(__name__)
@@ -132,6 +133,16 @@ def main() -> None:
     event = process_hook_input(raw)
     if event is not None:
         append_event(event)
+
+        # Evaluate and display nudges after UserPromptSubmit events
+        if isinstance(event, UserPromptEvent):
+            try:
+                nudges = evaluate_nudges(event.session_id)
+                for nudge in nudges:
+                    print(nudge.message, file=sys.stderr)
+            except Exception:
+                # Never let nudge evaluation break the hook
+                logger.debug("Nudge evaluation failed", exc_info=True)
 
 
 if __name__ == "__main__":

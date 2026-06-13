@@ -528,6 +528,52 @@ html, body {
   transition: width 0.3s ease;
 }
 
+/* ===== NUDGES ===== */
+.nudges-panel {
+  margin-bottom: 20px;
+}
+.nudges-panel.hidden { display: none; }
+.nudge-panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+.nudge-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.nudge-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+.nudge-badge.critical {
+  border-left: 3px solid #f87171;
+  background: #fef2f2;
+  color: #991b1b;
+}
+.nudge-badge.warning {
+  border-left: 3px solid #fbbf24;
+  background: #fffbeb;
+  color: #92400e;
+}
+.nudge-badge.info {
+  border-left: 3px solid #60a5fa;
+  background: #eff6ff;
+  color: #1e40af;
+}
+
 /* ===== RECOMMENDATIONS ===== */
 .recommendations-panel {
   margin-bottom: 20px;
@@ -592,6 +638,72 @@ html, body {
 .flash-highlight {
   animation: flash-highlight 1s ease-out;
 }
+
+/* ===== PROMPT EFFICIENCY PANEL ===== */
+.prompt-efficiency-panel {
+  margin-bottom: 20px;
+}
+.prompt-efficiency-panel.hidden { display: none; }
+.prompt-panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+.prompt-summary {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.prompt-summary-stat {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.prompt-summary-stat .label { color: var(--text-secondary); font-size: 11px; }
+.prompt-summary-stat .value { font-weight: 600; font-family: var(--mono); font-size: 13px; }
+.prompt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.prompt-table th {
+  text-align: left;
+  padding: 6px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+.prompt-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+.prompt-table tr.prompt-specific { background: rgba(52, 211, 153, 0.06); }
+.prompt-table tr.prompt-moderate { background: rgba(251, 191, 36, 0.06); }
+.prompt-table tr.prompt-vague { background: rgba(248, 113, 113, 0.06); }
+.prompt-score-bar {
+  display: inline-block;
+  height: 6px;
+  border-radius: 3px;
+  min-width: 4px;
+  max-width: 80px;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+.prompt-score-bar.high { background: #34d399; }
+.prompt-score-bar.medium { background: #fbbf24; }
+.prompt-score-bar.low { background: #f87171; }
 
 /* ===== DEAD WEIGHT TAB ===== */
 .tab-toggle {
@@ -1260,6 +1372,278 @@ html, body {
   color: rgba(255,255,255,0.65);
   text-align: center;
 }
+
+/* ===== OPTIMIZATION REPORT ===== */
+.report-btn {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-left: 10px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.report-btn:hover { border-color: var(--accent); background: rgba(59,130,246,0.1); }
+.report-btn:disabled { opacity: 0.5; cursor: default; }
+
+.report-modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.report-modal {
+  background: var(--card);
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+  max-width: 720px;
+  width: 92%;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 28px 32px;
+}
+.report-modal h3 {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 18px;
+}
+.report-modal-close {
+  float: right;
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+}
+.report-modal-close:hover { color: var(--text); }
+
+.report-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.report-stat {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+.report-stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.report-stat-value {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.report-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 18px 0 10px;
+  color: var(--text);
+}
+
+.waste-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+.waste-table th {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.waste-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  vertical-align: top;
+}
+.waste-table tr:last-child td { border-bottom: none; }
+.waste-category {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(59,130,246,0.12);
+  color: var(--accent);
+}
+.waste-suggestion {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.split-card {
+  background: rgba(59,130,246,0.08);
+  border: 1px solid rgba(59,130,246,0.2);
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 12px;
+}
+.split-card h4 {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--accent);
+}
+.split-card p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin: 4px 0;
+}
+.split-savings {
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 700;
+  color: #22c55e;
+}
+
+.report-no-waste {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* ===== COMPACT ADVISOR ===== */
+.compact-advisor {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 20px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow);
+}
+.compact-advisor.hidden { display: none; }
+.compact-advisor-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.compact-advisor-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+}
+.compact-advisor-body {
+  display: grid;
+  grid-template-columns: 100px 1fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+.ca-gauge-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.ca-gauge-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.ca-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ca-bar-track {
+  width: 100%;
+  height: 14px;
+  background: #e5e7eb;
+  border-radius: 7px;
+  overflow: hidden;
+  display: flex;
+}
+.ca-bar-active {
+  background: var(--working);
+  height: 100%;
+  transition: width 0.3s ease;
+}
+.ca-bar-stale {
+  background: #f87171;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+.ca-bar-legend {
+  display: flex;
+  gap: 14px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: var(--mono);
+}
+.ca-bar-legend span::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.ca-bar-legend .active-legend::before { background: var(--working); }
+.ca-bar-legend .stale-legend::before { background: #f87171; }
+.ca-stale-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.ca-stale-list li {
+  font-size: 12px;
+  font-family: var(--mono);
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ca-stale-list li:last-child { border-bottom: none; }
+.ca-stale-label { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+.ca-stale-cat { color: var(--text-muted); font-size: 10px; }
+.ca-stale-tokens { color: var(--danger); font-weight: 500; white-space: nowrap; }
+.ca-savings {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.ca-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ca-detail-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+@media (max-width: 900px) {
+  .compact-advisor-body { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
@@ -1281,6 +1665,7 @@ html, body {
         <select id="session-picker" class="session-picker">
           <option value="">Loading sessions...</option>
         </select>
+        <button class="report-btn" id="report-btn" disabled title="Optimization Report">Optimization Report</button>
       </div>
       <div class="header-right">
         <a href="/sessions" class="nav-link">All Sessions</a>
@@ -1387,6 +1772,39 @@ html, body {
       <button class="scrubber-btn speed-btn" id="btn-speed" title="Speed">1x</button>
     </div>
 
+    <!-- Section 4b: Compact Advisor -->
+    <div class="compact-advisor hidden" id="compact-advisor">
+      <div class="compact-advisor-header">
+        <div class="compact-advisor-title">Compact Advisor</div>
+      </div>
+      <div class="compact-advisor-body">
+        <!-- Gauge -->
+        <div class="ca-gauge-wrap">
+          <canvas id="ca-gauge" width="90" height="90"></canvas>
+          <div class="ca-gauge-label" id="ca-gauge-label">--</div>
+        </div>
+        <!-- Breakdown bar + savings -->
+        <div class="ca-breakdown">
+          <div class="ca-bar-track">
+            <div class="ca-bar-active" id="ca-bar-active" style="width:100%"></div>
+            <div class="ca-bar-stale" id="ca-bar-stale" style="width:0%"></div>
+          </div>
+          <div class="ca-bar-legend">
+            <span class="active-legend" id="ca-active-label">Active: --</span>
+            <span class="stale-legend" id="ca-stale-label">Stale: --</span>
+          </div>
+          <div class="ca-savings" id="ca-savings">--</div>
+        </div>
+        <!-- Top stale blocks -->
+        <div class="ca-details">
+          <div class="ca-detail-title">Top Stale Blocks</div>
+          <ul class="ca-stale-list" id="ca-stale-list">
+            <li><span class="ca-stale-label">--</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
     <!-- Section 5: Three-Column Bottom -->
     <div class="bottom-grid">
       <!-- Col 1: Composition / Tools / Agents (tabbed) -->
@@ -1436,10 +1854,36 @@ html, body {
       </div>
     </div>
 
+    <!-- Section 5b: Nudges (real-time session warnings) -->
+    <div class="nudges-panel hidden" id="nudges-panel">
+      <div class="nudge-panel-title">Session Nudges</div>
+      <div class="nudge-list" id="nudge-list"></div>
+    </div>
+
     <!-- Section 6: Recommendations (below bottom grid) -->
     <div class="recommendations-panel hidden" id="recommendations-panel">
       <div class="rec-panel-title">Recommendations</div>
       <div class="rec-grid" id="rec-grid"></div>
+    </div>
+
+    <!-- Section 7: Prompt Efficiency (below recommendations) -->
+    <div class="prompt-efficiency-panel hidden" id="prompt-efficiency-panel">
+      <div class="prompt-panel-title">Prompt Efficiency</div>
+      <div class="prompt-summary" id="prompt-summary"></div>
+      <div style="max-height: 400px; overflow-y: auto;">
+        <table class="prompt-table">
+          <thead>
+            <tr>
+              <th>Turn</th>
+              <th>Prompt</th>
+              <th>Specificity</th>
+              <th>API Calls</th>
+              <th>Cost</th>
+            </tr>
+          </thead>
+          <tbody id="prompt-table-body"></tbody>
+        </table>
+      </div>
     </div>
 
   </div>
@@ -1484,6 +1928,9 @@ html, body {
   let selfCorrectionTurnSet = new Set(); // turns with self-corrections
   let toolIntelData = null;    // from /api/session/{id}/tool-intelligence
   let subagentData = null;     // from /api/session/{id}/subagents
+  let nudgeData = null;        // from /api/session/{id}/nudges
+  let promptData = null;       // from /api/session/{id}/prompts
+  let freshnessCache = {};     // turn -> freshness data (compact advisor)
 
   // Derived data (computed once)
   let labels = [];
@@ -1606,6 +2053,8 @@ html, body {
       fetchErrorData(sessionId);
       fetchToolIntelData(sessionId);
       fetchSubagentData(sessionId);
+      fetchNudgeData(sessionId);
+      fetchPromptData(sessionId);
 
       return true;
     } catch(e) {
@@ -1635,6 +2084,9 @@ html, body {
     selfCorrectionTurnSet = new Set();
     toolIntelData = null;
     subagentData = null;
+    nudgeData = null;
+    promptData = null;
+    freshnessCache = {};
 
     // Destroy existing charts
     if (growthChart) { growthChart.destroy(); growthChart = null; }
@@ -1678,6 +2130,9 @@ html, body {
     // Update picker selection
     picker.value = sessionId;
     picker.classList.remove('loading');
+
+    // Enable report button
+    document.getElementById('report-btn').disabled = false;
   }
 
   function sessionLabel(s) {
@@ -3189,6 +3644,33 @@ html, body {
     } catch(e) { /* non-blocking */ }
   }
 
+  // ===== NUDGE DATA FETCHING =====
+  async function fetchNudgeData(sessionId) {
+    try {
+      const resp = await fetch('/api/session/' + encodeURIComponent(sessionId) + '/nudges');
+      if (!resp.ok) return;
+      nudgeData = await resp.json();
+      renderNudges();
+    } catch(e) { /* non-blocking */ }
+  }
+
+  function renderNudges() {
+    const panel = document.getElementById('nudges-panel');
+    const list = document.getElementById('nudge-list');
+    if (!nudgeData || !nudgeData.nudges || nudgeData.nudges.length === 0) {
+      panel.classList.add('hidden');
+      return;
+    }
+    panel.classList.remove('hidden');
+    list.innerHTML = '';
+    for (const nudge of nudgeData.nudges) {
+      const badge = document.createElement('div');
+      badge.className = 'nudge-badge ' + (nudge.severity || 'info');
+      badge.textContent = nudge.message;
+      list.appendChild(badge);
+    }
+  }
+
   // ===== ERROR DATA FETCHING =====
   async function fetchErrorData(sessionId) {
     try {
@@ -3215,6 +3697,76 @@ html, body {
       // Re-render recommendations to merge error recs
       renderRecommendations();
     } catch(e) { /* non-blocking */ }
+  }
+
+  async function fetchPromptData(sessionId) {
+    try {
+      const resp = await fetch('/api/session/' + encodeURIComponent(sessionId) + '/prompts');
+      if (!resp.ok) return;
+      promptData = await resp.json();
+      renderPromptEfficiency();
+    } catch(e) { /* non-blocking */ }
+  }
+
+  // ===== PROMPT EFFICIENCY =====
+  function renderPromptEfficiency() {
+    var panel = document.getElementById('prompt-efficiency-panel');
+    var summaryEl = document.getElementById('prompt-summary');
+    var tbody = document.getElementById('prompt-table-body');
+    if (!panel || !promptData || !promptData.prompts || promptData.prompts.length === 0) {
+      if (panel) panel.classList.add('hidden');
+      return;
+    }
+
+    panel.classList.remove('hidden');
+    var agg = promptData.aggregate || {};
+
+    // Summary stats
+    var specificAvg = agg.specific_prompts ? '$' + agg.specific_prompts.avg_cost.toFixed(4) : '$0';
+    var vagueAvg = agg.vague_prompts ? '$' + agg.vague_prompts.avg_cost.toFixed(4) : '$0';
+    var specificCount = agg.specific_prompts ? agg.specific_prompts.count : 0;
+    var vagueCount = agg.vague_prompts ? agg.vague_prompts.count : 0;
+
+    summaryEl.innerHTML =
+      '<div class="prompt-summary-stat">' +
+        '<div class="label">Specific prompts (&gt;0.6)</div>' +
+        '<div class="value" style="color:#34d399">' + specificCount + ' prompts, avg ' + specificAvg + '</div>' +
+      '</div>' +
+      '<div class="prompt-summary-stat">' +
+        '<div class="label">Vague prompts (&lt;0.3)</div>' +
+        '<div class="value" style="color:#f87171">' + vagueCount + ' prompts, avg ' + vagueAvg + '</div>' +
+      '</div>' +
+      '<div class="prompt-summary-stat">' +
+        '<div class="label">Avg specificity</div>' +
+        '<div class="value">' + ((agg.avg_specificity || 0) * 100).toFixed(0) + '%</div>' +
+      '</div>';
+
+    // Table rows
+    var html = '';
+    for (var i = 0; i < promptData.prompts.length; i++) {
+      var p = promptData.prompts[i];
+      var score = p.specificity_score;
+      var rowClass = score > 0.6 ? 'prompt-specific' : (score >= 0.3 ? 'prompt-moderate' : 'prompt-vague');
+      var barClass = score > 0.6 ? 'high' : (score >= 0.3 ? 'medium' : 'low');
+      var barWidth = Math.max(4, Math.round(score * 80));
+      var preview = (p.prompt_preview || '').substring(0, 80);
+      if ((p.prompt_preview || '').length > 80) preview += '...';
+
+      html += '<tr class="' + rowClass + '">' +
+        '<td>' + p.turn_number + '</td>' +
+        '<td title="' + (p.prompt_preview || '').replace(/"/g, '&quot;') + '">' + escapeHtml(preview) + '</td>' +
+        '<td><span class="prompt-score-bar ' + barClass + '" style="width:' + barWidth + 'px"></span>' + (score * 100).toFixed(0) + '%</td>' +
+        '<td>' + p.resolution_turns + '</td>' +
+        '<td>$' + p.resolution_cost.toFixed(4) + '</td>' +
+        '</tr>';
+    }
+    tbody.innerHTML = html;
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
   }
 
   // ===== ERROR SCORECARD =====
@@ -3773,6 +4325,110 @@ html, body {
       '</div>';
   }
 
+  // ===== COMPACT ADVISOR =====
+  function drawGauge(score) {
+    const canvas = document.getElementById('ca-gauge');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const cx = 45, cy = 45, r = 36;
+    ctx.clearRect(0, 0, 90, 90);
+
+    // Background arc
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0.75 * Math.PI, 0.25 * Math.PI);
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // Colored arc
+    const fraction = Math.min(score / 100, 1);
+    const startAngle = 0.75 * Math.PI;
+    const endAngle = startAngle + fraction * 1.5 * Math.PI;
+    let color = '#34d399';  // green
+    if (score >= 60) color = '#ef4444';       // red
+    else if (score >= 30) color = '#fbbf24';  // yellow
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, startAngle, endAngle);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // Score text
+    ctx.fillStyle = color;
+    ctx.font = 'bold 18px Inter, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(score), cx, cy);
+  }
+
+  async function fetchFreshness(turn) {
+    const sid = meta.session_id;
+    if (!sid) return null;
+    const key = sid + ':' + turn;
+    if (freshnessCache[key]) return freshnessCache[key];
+    try {
+      const url = '/api/session/' + sid + '/freshness' + (turn != null ? '?turn=' + turn : '');
+      const resp = await fetch(url);
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      freshnessCache[key] = data;
+      return data;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function renderCompactAdvisor() {
+    const panel = document.getElementById('compact-advisor');
+    if (!panel) return;
+
+    const data = await fetchFreshness(currentTurn);
+    if (!data || (data.total_tokens === 0 && data.stale_tokens === 0)) {
+      panel.classList.add('hidden');
+      return;
+    }
+    panel.classList.remove('hidden');
+
+    // Draw gauge
+    drawGauge(data.compact_readiness_score);
+    document.getElementById('ca-gauge-label').textContent = 'Readiness';
+
+    // Breakdown bar
+    const total = Math.max(data.total_tokens, 1);
+    const activePct = ((data.active_tokens / total) * 100).toFixed(1);
+    const stalePct = ((data.stale_tokens / total) * 100).toFixed(1);
+    document.getElementById('ca-bar-active').style.width = activePct + '%';
+    document.getElementById('ca-bar-stale').style.width = stalePct + '%';
+    document.getElementById('ca-active-label').textContent = 'Active: ' + fmt(data.active_tokens);
+    document.getElementById('ca-stale-label').textContent = 'Stale: ' + fmt(data.stale_tokens);
+
+    // Savings
+    const savingsTokensK = (data.stale_tokens / 1000).toFixed(0);
+    const savingsUSD = data.estimated_savings_per_call.toFixed(4);
+    document.getElementById('ca-savings').textContent =
+      'Compacting now would save ~' + savingsTokensK + 'K tokens ($' + savingsUSD + '/call)';
+
+    // Top stale blocks
+    const listEl = document.getElementById('ca-stale-list');
+    const top5 = (data.safe_to_drop || []).slice(0, 5);
+    if (top5.length === 0) {
+      listEl.innerHTML = '<li><span class="ca-stale-label">No stale blocks</span></li>';
+    } else {
+      listEl.innerHTML = top5.map(function(sb) {
+        const label = sb.label || sb.block_id;
+        const shortLabel = label.length > 35 ? '…' + label.slice(-34) : label;
+        return '<li>' +
+          '<span class="ca-stale-label" title="' + escapeHtml(label) + '">' + escapeHtml(shortLabel) + '</span>' +
+          '<span class="ca-stale-cat">' + escapeHtml(sb.category) + '</span>' +
+          '<span class="ca-stale-tokens">' + fmt(sb.tokens) + '</span>' +
+          '</li>';
+      }).join('');
+    }
+  }
+
   // ===== RENDER ALL BOTTOM COLUMNS =====
   function renderTurnDetails() {
     renderComposition();
@@ -3780,6 +4436,7 @@ html, body {
     renderTopGrowth();
     renderMessages();
     renderAgentsTab();
+    renderCompactAdvisor();
   }
 
   // ===== SCRUBBER =====
@@ -4007,7 +4664,101 @@ html, body {
 
     // Populate session picker (async, non-blocking)
     populateSessionPicker();
+
+    // Enable report button once a session is loaded
+    document.getElementById('report-btn').disabled = false;
   }
+
+  // ---- Optimization Report ----
+  function fmtCost(v) { return '$' + (v || 0).toFixed(4); }
+  function fmtTokensK(v) { return (v / 1000).toFixed(1) + 'K'; }
+
+  async function openReportModal() {
+    const sid = meta.session_id;
+    if (!sid) return;
+
+    const btn = document.getElementById('report-btn');
+    btn.disabled = true;
+    btn.textContent = 'Loading...';
+
+    try {
+      const resp = await fetch('/api/session/' + encodeURIComponent(sid) + '/report');
+      if (!resp.ok) throw new Error('Failed to load report');
+      const report = await resp.json();
+      renderReportModal(report);
+    } catch (e) {
+      console.error('Report error:', e);
+      alert('Failed to load optimization report.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Optimization Report';
+    }
+  }
+
+  function renderReportModal(report) {
+    // Remove any existing modal
+    const existing = document.getElementById('report-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'report-overlay';
+    overlay.className = 'report-modal-overlay';
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+    let wasteHTML = '';
+    if (report.waste_items && report.waste_items.length > 0) {
+      wasteHTML = '<table class="waste-table"><thead><tr>' +
+        '<th>Category</th><th>Description</th><th>Tokens</th><th>Est. Cost</th><th>Suggestion</th>' +
+        '</tr></thead><tbody>';
+      for (const w of report.waste_items) {
+        wasteHTML += '<tr>' +
+          '<td><span class="waste-category">' + w.category.replace(/_/g, ' ') + '</span></td>' +
+          '<td>' + w.description + '</td>' +
+          '<td style="font-family:var(--mono);white-space:nowrap">' + fmt(w.tokens) + '</td>' +
+          '<td style="font-family:var(--mono);white-space:nowrap">' + fmtCost(w.estimated_cost) + '</td>' +
+          '<td class="waste-suggestion">' + w.suggestion + '</td>' +
+          '</tr>';
+      }
+      wasteHTML += '</tbody></table>';
+    } else {
+      wasteHTML = '<div class="report-no-waste">No significant waste detected. This session was efficient.</div>';
+    }
+
+    let splitHTML = '';
+    if (report.split_recommendation) {
+      const sr = report.split_recommendation;
+      splitHTML = '<div class="split-card">' +
+        '<h4>Session Split Recommendation</h4>' +
+        '<p>' + sr.reason + '</p>' +
+        '<p>Current cost: <strong>' + fmtCost(sr.current_cost) + '</strong> ' +
+        ' &rarr; Projected: <strong>' + fmtCost(sr.projected_cost) + '</strong></p>' +
+        '<p>Potential savings: <span class="split-savings">' + fmtCost(sr.savings) + '</span></p>' +
+        '</div>';
+    }
+
+    const totalSavings = (report.total_waste_cost || 0) +
+      (report.split_recommendation ? report.split_recommendation.savings : 0);
+
+    overlay.innerHTML =
+      '<div class="report-modal">' +
+        '<button class="report-modal-close" onclick="document.getElementById(\'report-overlay\').remove()">&times;</button>' +
+        '<h3>Optimization Report</h3>' +
+        '<div class="report-summary">' +
+          '<div class="report-stat"><div class="report-stat-label">Total Cost</div><div class="report-stat-value">' + fmtCost(report.total_cost) + '</div></div>' +
+          '<div class="report-stat"><div class="report-stat-label">API Calls</div><div class="report-stat-value">' + (report.total_api_calls || 0) + '</div></div>' +
+          '<div class="report-stat"><div class="report-stat-label">Peak Context</div><div class="report-stat-value">' + fmtTokensK(report.peak_context || 0) + '</div></div>' +
+          '<div class="report-stat"><div class="report-stat-label">Waste Tokens</div><div class="report-stat-value">' + fmt(report.total_waste_tokens || 0) + '</div></div>' +
+          '<div class="report-stat"><div class="report-stat-label">Potential Savings</div><div class="report-stat-value split-savings">' + fmtCost(totalSavings) + '</div></div>' +
+        '</div>' +
+        '<div class="report-section-title">Waste Analysis</div>' +
+        wasteHTML +
+        (splitHTML ? '<div class="report-section-title">Split Analysis</div>' + splitHTML : '') +
+      '</div>';
+
+    document.body.appendChild(overlay);
+  }
+
+  document.getElementById('report-btn').addEventListener('click', openReportModal);
 
   init();
 })();

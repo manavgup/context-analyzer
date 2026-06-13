@@ -24,7 +24,12 @@ from context_tracker.analysis.health import (
     generate_recommendations,
 )
 from context_tracker.analysis.models import BlockType, ContextBlock
+from context_tracker.analysis.prompts import (
+    analyze_session_prompts,
+    compute_aggregate_stats,
+)
 from context_tracker.analysis.reconstruction import reconstruct_session
+from context_tracker.analysis.report import generate_report
 from context_tracker.analysis.staleness import (
     compute_staleness,
     detect_superseded,
@@ -44,6 +49,7 @@ from context_tracker.db import (
     get_session_factory,
 )
 from context_tracker.ingest import ingest_session
+from context_tracker.nudges import evaluate_nudges
 from context_tracker.storage import DEFAULT_TRACE_DIR, list_sessions, read_events
 from context_tracker.transcript_parser import parse_raw_transcript
 
@@ -1326,6 +1332,23 @@ def create_app(
             "recommendations": recommendations,
         }
 
+    @app.get("/api/session/{session_id}/nudges")
+    def get_session_nudges(session_id: str) -> dict:
+        """Return current nudges for a session."""
+        _validate_session_id(session_id)
+        nudges = evaluate_nudges(session_id, db_path=db_path, trace_dir=trace_dir)
+        return {
+            "session_id": session_id,
+            "nudges": [
+                {
+                    "code": n.code,
+                    "severity": n.severity,
+                    "message": n.message,
+                }
+                for n in nudges
+            ],
+        }
+
     @app.get("/api/session/{session_id}/errors")
     def get_session_errors(session_id: str) -> dict:
         """Error analysis: tool failures, retry patterns, self-corrections."""
@@ -1565,6 +1588,39 @@ def create_app(
             "recommendations": error_recommendations,
         }
 
+    # ------------------------------------------------------------------
+    # Freshness / Compact Advisor endpoint
+    # ------------------------------------------------------------------
+    @app.get("/api/session/{session_id}/freshness")
+    def get_session_freshness(session_id: str, turn: int | None = None) -> dict:
+        """Context freshness analysis for compact advisor."""
+        _validate_session_id(session_id)
+        _ensure_ingested(session_id, trace_dir, db_path, transcript_dir)
+
+        from context_tracker.analysis.freshness import analyze_freshness
+
+        engine = get_engine(db_path)
+        factory = get_session_factory(engine)
+        with factory() as db:
+            report = analyze_freshness(session_id, turn, db)
+            return {
+                "total_tokens": report.total_tokens,
+                "active_tokens": report.active_tokens,
+                "stale_tokens": report.stale_tokens,
+                "stale_breakdown": report.stale_breakdown,
+                "compact_readiness_score": report.compact_readiness_score,
+                "safe_to_drop": [
+                    {
+                        "block_id": sb.block_id,
+                        "label": sb.label,
+                        "category": sb.category,
+                        "tokens": sb.tokens,
+                    }
+                    for sb in report.safe_to_drop[:15]
+                ],
+                "estimated_savings_per_call": report.estimated_savings_per_call,
+            }
+
     @app.get("/api/session/{session_id}/dead_weight")
     def get_session_dead_weight(session_id: str) -> dict:
         """Per-turn dead weight data and top stale blocks."""
@@ -1709,6 +1765,63 @@ def create_app(
             "top_blocks": top_blocks,
             "per_turn": per_turn,
         }
+
+    # ------------------------------------------------------------------
+    # Prompt Efficiency endpoint
+    # ------------------------------------------------------------------
+    @app.get("/api/session/{session_id}/prompts")
+    def get_prompt_analysis(session_id: str) -> dict:
+        """Prompt specificity analysis with resolution tracking."""
+        _validate_session_id(session_id)
+        _ensure_ingested(session_id, trace_dir, db_path, transcript_dir)
+
+        engine = get_engine(db_path)
+        factory = get_session_factory(engine)
+        with factory() as db:
+            rec = db.get(SessionRecord, session_id)
+            if not rec:
+                raise HTTPException(status_code=404, detail="Session not found")
+            model = rec.model or "_default"
+            analyses = analyze_session_prompts(session_id, db, model)
+
+        prompts_out = [
+            {
+                "turn_number": a.turn_number,
+                "prompt_preview": a.prompt_preview[:120],
+                "specificity_score": a.specificity_score,
+                "signals": a.signals,
+                "resolution_turns": a.resolution_turns,
+                "resolution_cost": a.resolution_cost,
+                "tool_failures": a.tool_failures,
+            }
+            for a in analyses
+        ]
+
+        aggregate = compute_aggregate_stats(analyses)
+
+        return {
+            "session_id": session_id,
+            "prompts": prompts_out,
+            "aggregate": aggregate,
+        }
+
+    # ------------------------------------------------------------------
+    # Optimization Report endpoint
+    # ------------------------------------------------------------------
+    @app.get("/api/session/{session_id}/report")
+    def get_session_report(session_id: str) -> dict:
+        """Post-session optimization report with waste analysis and split recommendation."""
+        _validate_session_id(session_id)
+        _ensure_ingested(session_id, trace_dir, db_path, transcript_dir)
+
+        engine = get_engine(db_path)
+        factory = get_session_factory(engine)
+        with factory() as db:
+            rec = db.get(SessionRecord, session_id)
+            if not rec:
+                raise HTTPException(status_code=404, detail="Session not found")
+            report = generate_report(session_id, db)
+            return report.to_dict()
 
     @app.get("/api/session/{session_id}/turn/{turn_number}/messages")
     def get_turn_messages(session_id: str, turn_number: int) -> dict:
