@@ -528,6 +528,52 @@ html, body {
   transition: width 0.3s ease;
 }
 
+/* ===== NUDGES ===== */
+.nudges-panel {
+  margin-bottom: 20px;
+}
+.nudges-panel.hidden { display: none; }
+.nudge-panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+.nudge-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.nudge-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+.nudge-badge.critical {
+  border-left: 3px solid #f87171;
+  background: #fef2f2;
+  color: #991b1b;
+}
+.nudge-badge.warning {
+  border-left: 3px solid #fbbf24;
+  background: #fffbeb;
+  color: #92400e;
+}
+.nudge-badge.info {
+  border-left: 3px solid #60a5fa;
+  background: #eff6ff;
+  color: #1e40af;
+}
+
 /* ===== RECOMMENDATIONS ===== */
 .recommendations-panel {
   margin-bottom: 20px;
@@ -1435,6 +1481,12 @@ html, body {
       </div>
     </div>
 
+    <!-- Section 5b: Nudges (real-time session warnings) -->
+    <div class="nudges-panel hidden" id="nudges-panel">
+      <div class="nudge-panel-title">Session Nudges</div>
+      <div class="nudge-list" id="nudge-list"></div>
+    </div>
+
     <!-- Section 6: Recommendations (below bottom grid) -->
     <div class="recommendations-panel hidden" id="recommendations-panel">
       <div class="rec-panel-title">Recommendations</div>
@@ -1483,6 +1535,7 @@ html, body {
   let selfCorrectionTurnSet = new Set(); // turns with self-corrections
   let toolIntelData = null;    // from /api/session/{id}/tool-intelligence
   let subagentData = null;     // from /api/session/{id}/subagents
+  let nudgeData = null;        // from /api/session/{id}/nudges
 
   // Derived data (computed once)
   let labels = [];
@@ -1605,6 +1658,7 @@ html, body {
       fetchErrorData(sessionId);
       fetchToolIntelData(sessionId);
       fetchSubagentData(sessionId);
+      fetchNudgeData(sessionId);
 
       return true;
     } catch(e) {
@@ -1634,6 +1688,7 @@ html, body {
     selfCorrectionTurnSet = new Set();
     toolIntelData = null;
     subagentData = null;
+    nudgeData = null;
 
     // Destroy existing charts
     if (growthChart) { growthChart.destroy(); growthChart = null; }
@@ -3186,6 +3241,33 @@ html, body {
       deadWeightData = await resp.json();
       renderDeadWeightTab();
     } catch(e) { /* non-blocking */ }
+  }
+
+  // ===== NUDGE DATA FETCHING =====
+  async function fetchNudgeData(sessionId) {
+    try {
+      const resp = await fetch('/api/session/' + encodeURIComponent(sessionId) + '/nudges');
+      if (!resp.ok) return;
+      nudgeData = await resp.json();
+      renderNudges();
+    } catch(e) { /* non-blocking */ }
+  }
+
+  function renderNudges() {
+    const panel = document.getElementById('nudges-panel');
+    const list = document.getElementById('nudge-list');
+    if (!nudgeData || !nudgeData.nudges || nudgeData.nudges.length === 0) {
+      panel.classList.add('hidden');
+      return;
+    }
+    panel.classList.remove('hidden');
+    list.innerHTML = '';
+    for (const nudge of nudgeData.nudges) {
+      const badge = document.createElement('div');
+      badge.className = 'nudge-badge ' + (nudge.severity || 'info');
+      badge.textContent = nudge.message;
+      list.appendChild(badge);
+    }
   }
 
   // ===== ERROR DATA FETCHING =====
