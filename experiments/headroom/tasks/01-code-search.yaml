@@ -1,0 +1,28 @@
+# Task shape: code-search heavy — lots of Grep/Glob tool calls, little editing.
+id: code-search
+name: Trace cache_read token flow through the codebase
+shape: code-search
+
+# Target repo pinned for reproducibility (this project at a fixed commit).
+repo: https://github.com/manavgup/context-analyzer
+commit: 5abbf7f5a9f942b04e06c51267ee815aa321cbb1
+
+# Run inside an empty per-arm workspace directory ($PWD is the workspace).
+setup: |
+  git clone --quiet https://github.com/manavgup/context-analyzer .
+  git checkout --quiet 5abbf7f5a9f942b04e06c51267ee815aa321cbb1
+
+prompt: |
+  Trace how cache_read token counts flow from a Claude Code transcript all the
+  way into the SQLite `sessions.total_cache_read` column in this repository.
+  Search the codebase; do not guess. Write your answer to a new file ANSWER.md
+  at the repo root: an ordered list of every file (with function names) the
+  value passes through, from transcript parsing to the database write. Do not
+  modify any other file.
+
+# Exit 0 = task succeeded. Runs in the workspace after the session ends.
+success_check: |
+  test -f ANSWER.md
+  grep -q "ingest" ANSWER.md
+  grep -q "db.py" ANSWER.md
+  grep -qi "parse_transcript\|reconcile" ANSWER.md

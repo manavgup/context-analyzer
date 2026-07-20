@@ -1,0 +1,27 @@
+# Task shape: file-read heavy — the agent must read many whole modules.
+# This is the shape headroom's compression should help most (large tool results
+# resident in context), so it is the best case for the savings claim.
+id: file-read
+name: Summarize every analysis module into a module map
+shape: file-read
+
+repo: https://github.com/manavgup/context-analyzer
+commit: 5abbf7f5a9f942b04e06c51267ee815aa321cbb1
+
+setup: |
+  git clone --quiet https://github.com/manavgup/context-analyzer .
+  git checkout --quiet 5abbf7f5a9f942b04e06c51267ee815aa321cbb1
+
+prompt: |
+  Read every Python module in src/context_tracker/analysis/ in full, then write
+  a new file MODULE_MAP.md at the repo root. For each module include: one
+  paragraph on what it does, its public entry-point functions with their
+  signatures, and which other analysis modules it imports. Base this only on
+  the actual file contents you read, not on file names. Do not modify any
+  other file.
+
+success_check: |
+  test -f MODULE_MAP.md
+  for m in health patterns prompts staleness freshness claude_md reconstruction report config models; do
+    grep -q "$m" MODULE_MAP.md || exit 1
+  done
