@@ -89,17 +89,23 @@ def test_parse_blocks(parsed):
     for b in blocks:
         by_type.setdefault(b["type"], []).append(b)
 
-    # Pinned instructions block from session_meta.
+    # Pinned instructions block from session_meta (base_instructions.text shape).
     assert len(by_type["system"]) == 1
     assert by_type["system"][0]["cached"] is True
     assert by_type["system"][0]["enter"] == 0
+    assert by_type["system"][0]["label"] == "base instructions (system prompt)"
+    assert by_type["system"][0]["content"].startswith("You are Codex")
 
-    # 2 meta user messages + 2 real prompts.
-    assert len(by_type["user"]) == 4
+    # 2 meta user messages + 1 developer bootstrap + 2 real prompts.
+    assert len(by_type["user"]) == 5
     meta = [b for b in by_type["user"] if "meta" in b["label"]]
     prompts = [b for b in by_type["user"] if b["label"] == "user prompt"]
-    assert len(meta) == 2
+    assert len(meta) == 3
+    # The developer bootstrap record is meta even though its text matches
+    # no _META_PREFIXES entry.
+    assert any(b["label"] == "meta prompt (developer)" for b in meta)
     assert len(prompts) == 2
+    # First real user prompt is the user's request, not injected metadata.
     assert prompts[0]["content"].startswith("Add a retry helper")
 
     assert len(by_type["thinking"]) == 1
@@ -139,6 +145,95 @@ def test_parse_turn_map(parsed):
     assert turn_map[0]["user_prompt"].startswith("Add a retry helper")
     assert turn_map[1]["first_call"] == 2
     assert turn_map[1]["last_call"] == 2
+
+
+def _write_rollout(tmp_path, records):
+    rollout = tmp_path / "rollout-2026-01-01T00-00-00-0199eeee-0000-7000-8000-000000000abc.jsonl"
+    rollout.write_text("\n".join(json.dumps(r) for r in records) + "\n")
+    return rollout
+
+
+def test_session_meta_legacy_instructions_shape(tmp_path):
+    """Older rollouts store AGENTS.md content in payload.instructions."""
+    records = [
+        {"type": "session_meta", "payload": {"id": "s", "instructions": "# Example project\nRun make test."}},
+    ]
+    parsed = parse_codex_rollout(_write_rollout(tmp_path, records))
+    systems = [b for b in parsed["blocks"] if b["type"] == "system"]
+    assert len(systems) == 1
+    assert systems[0]["label"] == "instructions (AGENTS.md)"
+    assert systems[0]["content"].startswith("# Example project")
+
+
+def test_session_meta_base_instructions_string_shape(tmp_path):
+    """A plain-string base_instructions is tolerated too."""
+    records = [
+        {"type": "session_meta", "payload": {"id": "s", "base_instructions": "Plain string base prompt."}},
+    ]
+    parsed = parse_codex_rollout(_write_rollout(tmp_path, records))
+    systems = [b for b in parsed["blocks"] if b["type"] == "system"]
+    assert len(systems) == 1
+    assert systems[0]["content"].startswith("Plain string base prompt")
+
+
+def test_session_meta_instructions_preferred_over_base_instructions(tmp_path):
+    records = [
+        {
+            "type": "session_meta",
+            "payload": {
+                "id": "s",
+                "instructions": "# AGENTS.md wins",
+                "base_instructions": {"text": "base prompt"},
+            },
+        },
+    ]
+    parsed = parse_codex_rollout(_write_rollout(tmp_path, records))
+    systems = [b for b in parsed["blocks"] if b["type"] == "system"]
+    assert len(systems) == 1
+    assert systems[0]["content"].startswith("# AGENTS.md wins")
+
+
+def test_session_meta_without_any_instructions_emits_no_system_block(tmp_path):
+    records = [{"type": "session_meta", "payload": {"id": "s", "cwd": "/tmp"}}]
+    parsed = parse_codex_rollout(_write_rollout(tmp_path, records))
+    assert [b for b in parsed["blocks"] if b["type"] == "system"] == []
+
+
+def test_developer_messages_are_not_conversation_turns(tmp_path):
+    """role=developer bootstrap records are meta regardless of text content."""
+    records = [
+        {"type": "session_meta", "payload": {"id": "s", "base_instructions": {"text": "base prompt"}}},
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "developer",
+                # Deliberately does NOT match any _META_PREFIXES entry.
+                "content": [{"type": "input_text", "text": 'Approved command prefix saved:\n- ["git", "push"]'}],
+            },
+        },
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "Fix the login bug"}],
+            },
+        },
+        {
+            "type": "event_msg",
+            "payload": {
+                "type": "token_count",
+                "info": {"last_token_usage": {"input_tokens": 100, "cached_input_tokens": 0, "output_tokens": 10}},
+            },
+        },
+    ]
+    parsed = parse_codex_rollout(_write_rollout(tmp_path, records))
+    # One conversation turn, anchored to the real user request.
+    assert len(parsed["turn_map"]) == 1
+    assert parsed["turn_map"][0]["user_prompt"] == "Fix the login bug"
+    dev = next(b for b in parsed["blocks"] if b["content"].startswith("Approved command prefix"))
+    assert dev["label"] == "meta prompt (developer)"
 
 
 def test_parser_tolerates_unknown_and_malformed(tmp_path):

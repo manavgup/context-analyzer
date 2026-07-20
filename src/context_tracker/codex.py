@@ -5,7 +5,9 @@ Codex CLI stores each session as a JSONL "rollout" file under
 
 Record types (top-level ``type`` field):
 
-- ``session_meta``: session id, cwd, cli_version, instructions (AGENTS.md)
+- ``session_meta``: session id, cwd, cli_version, fixed prompt — older
+  rollouts store AGENTS.md content in ``payload.instructions``; current
+  rollouts store the base system prompt in ``payload.base_instructions.text``
 - ``turn_context``: per-turn model / sandbox settings
 - ``response_item``: conversation items -- payload.type in
   {message, reasoning, function_call, function_call_output, ...}
@@ -38,7 +40,9 @@ MAX_CONTENT_CHARS = 500
 # UUID suffix in rollout filenames: rollout-<timestamp>-<uuid>.jsonl
 _ROLLOUT_RE = re.compile(r"^rollout-.*-([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$")
 
-# User-message prefixes that are injected context, not typed prompts.
+# Prefixes marking role="user" messages that are injected context, not typed
+# prompts. Secondary heuristic only: role="developer" messages are always
+# classified as meta, regardless of text.
 _META_PREFIXES = (
     "<user_instructions>",
     "<environment_context>",
@@ -116,6 +120,31 @@ def _reasoning_text(payload: dict) -> str:
 
 def _is_meta_user_text(text: str) -> bool:
     return text.lstrip().startswith(_META_PREFIXES)
+
+
+def _session_instructions(payload: dict) -> tuple[str, str]:
+    """Extract the fixed prompt text + block label from a session_meta payload.
+
+    Two shapes exist in the wild (verified against real rollouts):
+
+    - older rollouts: ``payload.instructions`` (string, AGENTS.md content)
+    - current rollouts: ``payload.base_instructions.text`` (the base system
+      prompt); tolerate a plain-string ``base_instructions`` too
+
+    Prefers whichever is present; ``instructions`` wins if both exist.
+    Returns ``("", "")`` when neither shape carries text.
+    """
+    instructions = payload.get("instructions")
+    if isinstance(instructions, str) and instructions:
+        return instructions, "instructions (AGENTS.md)"
+    base = payload.get("base_instructions")
+    if isinstance(base, dict):
+        text = base.get("text")
+        if isinstance(text, str) and text:
+            return text, "base instructions (system prompt)"
+    elif isinstance(base, str) and base:
+        return base, "base instructions (system prompt)"
+    return "", ""
 
 
 def _function_call_label(name: str, arguments: str) -> str:
@@ -198,13 +227,13 @@ def parse_codex_rollout(rollout_path: Path) -> dict[str, Any]:
                 session_id = str(payload.get("id", "")) or session_id
                 cwd = payload.get("cwd") or cwd
                 cli_version = payload.get("cli_version") or cli_version
-                instructions = payload.get("instructions") or ""
+                instructions, instructions_label = _session_instructions(payload)
                 if instructions:
                     blocks.append(
                         {
                             "id": "instructions",
                             "type": "system",
-                            "label": "instructions (AGENTS.md)",
+                            "label": instructions_label,
                             "tokens": max(1, len(instructions) // 4),
                             "enter": 0,
                             "exit": None,
@@ -318,6 +347,12 @@ def _parse_response_item(payload: dict, call_names: dict[str, str]) -> dict[str,
         if role == "assistant":
             btype, label = "assistant", "assistant"
             meta = False
+        elif role == "developer":
+            # Bootstrap records (permissions, approved command prefixes,
+            # recommended plugins, ...) — injected metadata regardless of
+            # text content, never a typed user prompt.
+            btype, meta = "user", True
+            label = "meta prompt (developer)"
         else:
             btype = "user"
             meta = _is_meta_user_text(text)
