@@ -33,6 +33,7 @@ class StatsCard:
     total_spend_usd: float = 0.0
     wasted_spend_usd: float = 0.0
     cache_read_tokens: int = 0
+    cache_creation_tokens: int = 0
     input_tokens: int = 0
     # Most expensive session — identified by date only (never by id/path).
     top_session_cost_usd: float = 0.0
@@ -41,8 +42,15 @@ class StatsCard:
 
     @property
     def cache_efficiency(self) -> float:
-        """Fraction of prompt tokens served from cache: cache_read / (cache_read + uncached input)."""
-        denom = self.cache_read_tokens + self.input_tokens
+        """Fraction of prompt tokens served from cache.
+
+        cache_read / (cache_read + cache_creation + input) — the same
+        cache-hit-rate formula used in ``server.mcp_get_session_summary``.
+        Cache-creation tokens are prompt tokens that were NOT served from
+        cache, so they belong in the denominator; omitting them would
+        overstate efficiency.
+        """
+        denom = self.cache_read_tokens + self.cache_creation_tokens + self.input_tokens
         return self.cache_read_tokens / denom if denom else 0.0
 
     @property
@@ -82,8 +90,15 @@ def _estimate_wasted_spend(db: DbSession, rec: SessionRecord) -> float:
     are API-call indices; ``exit_turn IS NULL`` means the block stayed until
     the end of the session):
 
-        residency(block) = (exit_turn or last_call_index) - enter_turn
+        residency(block) = (exit_turn or total_api_calls) - enter_turn
         token_calls(block) = tokens * residency(block)
+
+    Blocks still present at session end (``exit_turn IS NULL``) count
+    through ``total_api_calls`` — the same effective-exit convention as
+    ``analysis.report._detect_stale_content`` — because ``enter_turn`` is
+    itself a call where the block is resident. Using ``total_api_calls - 1``
+    would undercount every surviving block by one call and give zero
+    residency in a one-call session.
 
     The session's waste fraction is the share of total token-call volume
     attributable to dead-weight blocks, and the wasted spend is that
@@ -96,14 +111,14 @@ def _estimate_wasted_spend(db: DbSession, rec: SessionRecord) -> float:
     ignores per-token price differences between cached/uncached/output
     tokens.
     """
-    last_call = max(int(rec.total_api_calls or 1) - 1, 0)
+    end_turn = int(rec.total_api_calls or 0)
 
     total_token_calls = 0
     dead_token_calls = 0
     for block in db.query(BlockRecord).filter_by(session_id=rec.session_id):
         tokens = int(block.tokens or 0)
         enter = int(block.enter_turn or 0)
-        exit_ = int(block.exit_turn) if block.exit_turn is not None else last_call
+        exit_ = int(block.exit_turn) if block.exit_turn is not None else end_turn
         residency = max(exit_ - enter, 0)
         token_calls = tokens * residency
         total_token_calls += token_calls
@@ -126,6 +141,7 @@ def compute_stats(db: DbSession) -> StatsCard:
         card.total_api_calls += int(rec.total_api_calls or 0)
         card.total_spend_usd += float(rec.total_cost_usd or 0.0)
         card.cache_read_tokens += int(rec.total_cache_read or 0)
+        card.cache_creation_tokens += int(rec.total_cache_creation or 0)
         card.input_tokens += int(rec.total_input_tokens or 0)
         card.wasted_spend_usd += _estimate_wasted_spend(db, rec)
         if top is None or float(rec.total_cost_usd or 0.0) > float(top.total_cost_usd or 0.0):
