@@ -109,7 +109,9 @@ def _validate_session_id(session_id: str) -> None:
 
 
 DEFAULT_TRANSCRIPT_DIR = Path.home() / ".claude" / "projects"
-DEFAULT_STATIC_DIR = Path(__file__).parent.parent.parent / "static"
+# Dashboard HTML ships inside the package so pip/uv installs work without a
+# repo checkout. (Was previously the repo-root static/ directory.)
+DEFAULT_STATIC_DIR = Path(__file__).parent / "static"
 
 
 def _find_transcript(session_id: str, transcript_dir: Path) -> Path | None:

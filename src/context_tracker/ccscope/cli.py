@@ -17,7 +17,9 @@ from context_tracker.ccscope.parse_transcript import build_turn_map
 from context_tracker.ccscope.reconcile import find_session_paths, reconcile, write_output
 
 DEFAULT_PROJECTS_DIR = Path.home() / ".claude" / "projects"
-DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "static"
+# Write build artifacts next to the packaged dashboard HTML so the dashboard's
+# /blocks.json etc. routes (which read from the package static dir) find them.
+DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent / "static"
 
 
 def cmd_list(args: argparse.Namespace) -> int:
