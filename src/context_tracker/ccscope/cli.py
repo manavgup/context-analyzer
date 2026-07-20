@@ -9,6 +9,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import webbrowser
 from pathlib import Path
@@ -17,9 +18,22 @@ from context_tracker.ccscope.parse_transcript import build_turn_map
 from context_tracker.ccscope.reconcile import find_session_paths, reconcile, write_output
 
 DEFAULT_PROJECTS_DIR = Path.home() / ".claude" / "projects"
-# Write build artifacts next to the packaged dashboard HTML so the dashboard's
-# /blocks.json etc. routes (which read from the package static dir) find them.
-DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent / "static"
+
+
+def default_output_dir() -> Path:
+    """User-writable default location for build artifacts.
+
+    The packaged dashboard HTML may live in a read-only site-packages (wheel
+    installs into system-managed environments), so generated data
+    (blocks.json, churn.json, meta.json, turn_map.json) must not be written
+    next to it. Default to the user cache directory instead:
+    ``$XDG_CACHE_HOME/context-tracker/ccscope`` when set, otherwise
+    ``~/.cache/context-tracker/ccscope``. The dashboard is pointed at this
+    directory via ``create_app(data_dir=...)``.
+    """
+    cache_home = os.environ.get("XDG_CACHE_HOME", "").strip()
+    base = Path(cache_home) if cache_home else Path.home() / ".cache"
+    return base / "context-tracker" / "ccscope"
 
 
 def cmd_list(args: argparse.Namespace) -> int:
@@ -78,7 +92,7 @@ def cmd_build(args: argparse.Namespace) -> int:
         print("Usage: ccscope build <SESSION_ID>", file=sys.stderr)
         return 1
 
-    output_dir = Path(args.output) if args.output else DEFAULT_OUTPUT_DIR
+    output_dir = Path(args.output) if args.output else default_output_dir()
 
     print(f"Building Context Scope data for session {session_id}...")
 
@@ -88,6 +102,7 @@ def cmd_build(args: argparse.Namespace) -> int:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
+    output_dir.mkdir(parents=True, exist_ok=True)
     blocks_path, churn_path = write_output(blocks, churn, output_dir)
 
     # Write meta.json for the dashboard to know the session ID
@@ -134,8 +149,9 @@ def cmd_open(args: argparse.Namespace) -> int:
         print("Usage: ccscope open <SESSION_ID>", file=sys.stderr)
         return 1
 
-    # Build first
-    args.output = None  # use default output dir
+    # Build first (into a user-writable dir; site-packages may be read-only).
+    output_dir = Path(args.output) if getattr(args, "output", None) else default_output_dir()
+    args.output = str(output_dir)
     result = cmd_build(args)
     if result != 0:
         return result
@@ -151,7 +167,7 @@ def cmd_open(args: argparse.Namespace) -> int:
 
     from context_tracker.dashboard import create_app
 
-    app = create_app()
+    app = create_app(data_dir=output_dir)
     uvicorn.run(app, host=host, port=port)
 
     return 0
@@ -177,6 +193,7 @@ def main() -> None:
     # open
     open_parser = subparsers.add_parser("open", help="Build + serve + open browser")
     open_parser.add_argument("session", nargs="?", help="Session ID")
+    open_parser.add_argument("--output", "-o", default=None, help="Output directory")
     open_parser.add_argument("--host", default="127.0.0.1")
     open_parser.add_argument("--port", type=int, default=9201)
     open_parser.add_argument("--projects-dir", default=None)

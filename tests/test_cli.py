@@ -218,6 +218,55 @@ def test_main_dispatches_install_and_uninstall(monkeypatch):
     assert calls == ["install", "uninstall"]
 
 
+@pytest.fixture
+def guarded_settings(monkeypatch, tmp_path):
+    """Route every hook-mutation path in cli.main at a temp settings.json.
+
+    The wrappers call the *real* installer/uninstaller against a temp file, so
+    if main() ever reaches a side-effectful branch when it should not (e.g.
+    ``down --help``), the mutation is visible in the returned settings file.
+    """
+    from context_tracker import installer
+
+    settings_path = tmp_path / "settings.json"
+    original = json.dumps({"theme": "dark"})
+    settings_path.write_text(original)
+
+    original_down = cli.down
+    monkeypatch.setattr(cli, "install_hooks", lambda: installer.install_hooks(settings_path=settings_path))
+    monkeypatch.setattr(cli, "uninstall_hooks", lambda: installer.uninstall_hooks(settings_path=settings_path))
+    monkeypatch.setattr(cli, "down", lambda: original_down(settings_path=settings_path))
+    return settings_path, original
+
+
+@pytest.mark.parametrize("subcommand", ["down", "install", "uninstall"])
+def test_help_prints_help_without_mutating_settings(guarded_settings, monkeypatch, capsys, subcommand):
+    """`context-tracker down --help` (etc.) must show help, not run the command."""
+    settings_path, original = guarded_settings
+    monkeypatch.setattr(sys, "argv", ["context-tracker", subcommand, "--help"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    assert exc_info.value.code == 0
+    assert "usage" in capsys.readouterr().out.lower()
+    assert settings_path.read_text() == original  # no hooks installed/removed
+
+
+@pytest.mark.parametrize("subcommand", ["down", "install", "uninstall"])
+def test_unknown_extra_args_error_without_mutating_settings(guarded_settings, monkeypatch, capsys, subcommand):
+    """`context-tracker install --bogus` (etc.) must error out with no side effects."""
+    settings_path, original = guarded_settings
+    monkeypatch.setattr(sys, "argv", ["context-tracker", subcommand, "--bogus"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    assert exc_info.value.code == 2  # argparse usage error
+    assert "usage" in capsys.readouterr().err.lower()
+    assert settings_path.read_text() == original  # no hooks installed/removed
+
+
 def test_main_delegates_unknown_commands_to_server(monkeypatch):
     """MCP server compatibility: no subcommand (and `dashboard`) go to server.main."""
     import context_tracker.server as server

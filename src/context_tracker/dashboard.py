@@ -436,8 +436,23 @@ def create_app(
     transcript_dir: Path = DEFAULT_TRANSCRIPT_DIR,
     static_dir: Path = DEFAULT_STATIC_DIR,
     db_path: Path = DEFAULT_DB_PATH,
+    data_dir: Path | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Context Analyzer", version="0.4.0")
+
+    # ccscope build artifacts (blocks.json, churn.json, meta.json,
+    # turn_map.json) may live in a user-writable cache dir rather than next to
+    # the packaged HTML (site-packages can be read-only). When ``data_dir`` is
+    # given it is searched first, with ``static_dir`` kept as a fallback for
+    # legacy in-repo builds.
+    _artifact_dirs = [static_dir] if data_dir is None else [data_dir, static_dir]
+
+    def _find_artifact(name: str) -> Path | None:
+        for directory in _artifact_dirs:
+            candidate = directory / name
+            if candidate.exists():
+                return candidate
+        return None
 
     @app.get("/api/health")
     def health_check() -> dict:
@@ -2404,29 +2419,29 @@ def create_app(
 
     @app.get("/blocks.json")
     def get_blocks_json() -> Response:
-        blocks_path = static_dir / "blocks.json"
-        if blocks_path.exists():
+        blocks_path = _find_artifact("blocks.json")
+        if blocks_path is not None:
             return FileResponse(str(blocks_path), media_type="application/json")
         raise HTTPException(status_code=404, detail="Run ccscope build first")
 
     @app.get("/churn.json")
     def get_churn_json() -> Response:
-        churn_path = static_dir / "churn.json"
-        if churn_path.exists():
+        churn_path = _find_artifact("churn.json")
+        if churn_path is not None:
             return FileResponse(str(churn_path), media_type="application/json")
         raise HTTPException(status_code=404, detail="Run ccscope build first")
 
     @app.get("/meta.json")
     def get_meta_json() -> Response:
-        meta_path = static_dir / "meta.json"
-        if meta_path.exists():
+        meta_path = _find_artifact("meta.json")
+        if meta_path is not None:
             return FileResponse(str(meta_path), media_type="application/json")
         raise HTTPException(status_code=404, detail="No meta.json")
 
     @app.get("/turn_map.json")
     def get_turn_map_json() -> Response:
-        path = static_dir / "turn_map.json"
-        if path.exists():
+        path = _find_artifact("turn_map.json")
+        if path is not None:
             return FileResponse(str(path), media_type="application/json")
         raise HTTPException(status_code=404, detail="Run ccscope build first")
 

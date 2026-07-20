@@ -121,6 +121,17 @@ def _up_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _no_args_parser(name: str, description: str) -> argparse.ArgumentParser:
+    """Parser for subcommands that take no arguments.
+
+    Parsing before dispatch guarantees ``--help`` prints help (exit 0) and any
+    unexpected argument is a usage error (exit 2) — in both cases *before* the
+    side-effectful installer/uninstaller ever runs, so ``settings.json`` is
+    never mutated by e.g. ``context-tracker down --help``.
+    """
+    return argparse.ArgumentParser(prog=f"context-tracker {name}", description=description)
+
+
 def main() -> None:
     """Dispatch up/down/install/uninstall; delegate everything else to the MCP server CLI."""
     argv = sys.argv[1:]
@@ -135,10 +146,22 @@ def main() -> None:
             open_browser=args.open,
         )
     elif command == "down":
+        _no_args_parser(
+            "down",
+            "Remove context-tracker's hook entries from ~/.claude/settings.json (other hooks are left untouched).",
+        ).parse_args(argv[1:])
         down()
     elif command == "install":
+        _no_args_parser(
+            "install",
+            "Install Claude Code hooks into ~/.claude/settings.json (no dashboard).",
+        ).parse_args(argv[1:])
         install_hooks()
     elif command == "uninstall":
+        _no_args_parser(
+            "uninstall",
+            "Remove context-tracker's hook entries from ~/.claude/settings.json (no dashboard).",
+        ).parse_args(argv[1:])
         uninstall_hooks()
     else:
         # Backward compatibility: `context-tracker` (MCP server over stdio),
