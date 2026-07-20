@@ -1,5 +1,7 @@
 """Tests for cross-session pattern detection and trend analysis."""
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -12,6 +14,16 @@ from context_tracker.analysis.patterns import (
     analyze_trends,
 )
 from context_tracker.db import Base, HookEventRecord, SessionRecord
+
+
+def _day(d: int, hour: int = 10) -> str:
+    """ISO timestamp for 'day d' of a recent 8-day window (d=1 oldest).
+
+    Dates must be relative to now: analyze_trends filters by period_days,
+    so hardcoded dates silently age out of the window and flip test behavior.
+    """
+    ts = datetime.now(UTC) - timedelta(days=9 - d)
+    return ts.strftime(f"%Y-%m-%dT{hour:02d}:00:00Z")
 
 
 @pytest.fixture
@@ -148,7 +160,7 @@ class TestMinimumSessionThreshold:
             db_session.add(
                 _make_session(
                     f"s{i}",
-                    f"2026-06-0{i + 1}T10:00:00Z",
+                    _day(i + 1),
                     total_turns=10,
                     total_cost_usd=1.0,
                 )
@@ -162,12 +174,12 @@ class TestMinimumSessionThreshold:
         """With 5+ sessions (varying data), patterns can be detected."""
         # Create sessions with varying turn counts to trigger sweet spot
         configs = [
-            ("s0", "2026-06-01T10:00:00Z", 5, 0.50),
-            ("s1", "2026-06-02T10:00:00Z", 5, 0.45),
-            ("s2", "2026-06-03T10:00:00Z", 15, 2.0),
-            ("s3", "2026-06-04T10:00:00Z", 15, 1.8),
-            ("s4", "2026-06-05T10:00:00Z", 35, 8.0),
-            ("s5", "2026-06-06T10:00:00Z", 35, 9.0),
+            ("s0", _day(1), 5, 0.50),
+            ("s1", _day(2), 5, 0.45),
+            ("s2", _day(3), 15, 2.0),
+            ("s3", _day(4), 15, 1.8),
+            ("s4", _day(5), 35, 8.0),
+            ("s5", _day(6), 35, 9.0),
         ]
         for sid, ts, turns, cost in configs:
             db_session.add(_make_session(sid, ts, total_turns=turns, total_cost_usd=cost))
@@ -188,7 +200,7 @@ class TestSessionLengthSweetSpot:
             db_session.add(
                 _make_session(
                     f"short-{i}",
-                    f"2026-06-0{i + 1}T10:00:00Z",
+                    _day(i + 1),
                     total_turns=5,
                     total_cost_usd=0.5,
                 )
@@ -198,7 +210,7 @@ class TestSessionLengthSweetSpot:
             db_session.add(
                 _make_session(
                     f"long-{i}",
-                    f"2026-06-0{i + 4}T10:00:00Z",
+                    _day(i + 4),
                     total_turns=35,
                     total_cost_usd=10.0,
                 )
@@ -222,7 +234,7 @@ class TestTimeOfDayPatterns:
             db_session.add(
                 _make_session(
                     f"morning-{i}",
-                    f"2026-06-0{i + 1}T09:00:00Z",
+                    _day(i + 1, hour=9),
                     total_cost_usd=1.0,
                 )
             )
@@ -231,7 +243,7 @@ class TestTimeOfDayPatterns:
             db_session.add(
                 _make_session(
                     f"evening-{i}",
-                    f"2026-06-0{i + 4}T20:00:00Z",
+                    _day(i + 4, hour=20),
                     total_cost_usd=5.0,
                 )
             )
@@ -249,7 +261,7 @@ class TestTimeOfDayPatterns:
             db_session.add(
                 _make_session(
                     f"session-{i}",
-                    f"2026-06-0{i + 1}T{hour:02d}:00:00Z",
+                    _day(i + 1, hour=hour),
                     total_cost_usd=2.0,
                 )
             )
@@ -267,7 +279,7 @@ class TestCostTrajectory:
             db_session.add(
                 _make_session(
                     f"s{i}",
-                    f"2026-06-0{i + 1}T10:00:00Z",
+                    _day(i + 1),
                     total_cost_usd=1.0 + i * 2.0,
                 )
             )
@@ -284,7 +296,7 @@ class TestCostTrajectory:
             db_session.add(
                 _make_session(
                     f"s{i}",
-                    f"2026-06-0{i + 1}T10:00:00Z",
+                    _day(i + 1),
                     total_cost_usd=10.0 - i * 1.5,
                 )
             )
@@ -301,7 +313,7 @@ class TestCostTrajectory:
             db_session.add(
                 _make_session(
                     f"s{i}",
-                    f"2026-06-0{i + 1}T10:00:00Z",
+                    _day(i + 1),
                     total_cost_usd=5.0,
                 )
             )
@@ -317,7 +329,7 @@ class TestErrorRateTrend:
         """Sessions with increasing error rates should be detected."""
         for i in range(6):
             sid = f"s{i}"
-            db_session.add(_make_session(sid, f"2026-06-0{i + 1}T10:00:00Z"))
+            db_session.add(_make_session(sid, _day(i + 1)))
             # Add tool events: increasing failure rate
             success_count = 10 - i
             failure_count = i * 2
@@ -339,7 +351,7 @@ class TestToolPreferenceShifts:
         # Old sessions: heavy Bash usage
         for i in range(3):
             sid = f"old-{i}"
-            db_session.add(_make_session(sid, f"2026-06-0{i + 1}T10:00:00Z"))
+            db_session.add(_make_session(sid, _day(i + 1)))
             for _ in range(10):
                 db_session.add(_make_hook_event(sid, "post_tool_use", tool_name="Bash"))
             for _ in range(2):
@@ -348,7 +360,7 @@ class TestToolPreferenceShifts:
         # New sessions: heavy Read usage
         for i in range(3):
             sid = f"new-{i}"
-            db_session.add(_make_session(sid, f"2026-06-0{i + 4}T10:00:00Z"))
+            db_session.add(_make_session(sid, _day(i + 4)))
             for _ in range(2):
                 db_session.add(_make_hook_event(sid, "post_tool_use", tool_name="Bash"))
             for _ in range(10):
@@ -374,7 +386,7 @@ class TestAnalyzeTrends:
             db_session.add(
                 _make_session(
                     sid,
-                    f"2026-06-0{i + 1}T10:00:00Z",
+                    _day(i + 1),
                     total_turns=10 + i,
                     total_cost_usd=1.0 + i * 0.5,
                 )
@@ -401,7 +413,7 @@ class TestAnalyzeTrends:
 
     def test_too_few_sessions(self, db_session):
         """With only 1 session, trends should be empty."""
-        db_session.add(_make_session("s0", "2026-06-01T10:00:00Z"))
+        db_session.add(_make_session("s0", _day(1)))
         db_session.commit()
 
         trends = analyze_trends(db_session, period_days=30)
@@ -413,7 +425,7 @@ class TestAnalyzeTrends:
             db_session.add(
                 _make_session(
                     f"s{i}",
-                    f"2026-06-0{i + 1}T10:00:00Z",
+                    _day(i + 1),
                     total_cost_usd=10.0 - i * 1.5,
                     total_turns=10,
                 )
@@ -431,7 +443,7 @@ class TestAnalyzeTrends:
             db_session.add(
                 _make_session(
                     f"s{i}",
-                    f"2026-06-0{i + 1}T10:00:00Z",
+                    _day(i + 1),
                     total_cost_usd=1.0 + i * 3.0,
                     total_turns=10,
                 )
@@ -469,7 +481,7 @@ class TestAnalyzeTrends:
             db_session.add(
                 _make_session(
                     f"s{i}",
-                    f"2026-06-{i + 1:02d}T10:00:00Z",
+                    _day(i + 1),
                     total_cost_usd=float(i + 1),
                     total_turns=10,
                 )
@@ -526,12 +538,12 @@ class TestDashboardEndpoints:
         factory = get_session_factory(engine)
         with factory() as db:
             configs = [
-                ("s0", "2026-06-01T10:00:00Z", 5, 0.50),
-                ("s1", "2026-06-02T10:00:00Z", 5, 0.45),
-                ("s2", "2026-06-03T10:00:00Z", 15, 2.0),
-                ("s3", "2026-06-04T10:00:00Z", 15, 1.8),
-                ("s4", "2026-06-05T10:00:00Z", 35, 8.0),
-                ("s5", "2026-06-06T10:00:00Z", 35, 9.0),
+                ("s0", _day(1), 5, 0.50),
+                ("s1", _day(2), 5, 0.45),
+                ("s2", _day(3), 15, 2.0),
+                ("s3", _day(4), 15, 1.8),
+                ("s4", _day(5), 35, 8.0),
+                ("s5", _day(6), 35, 9.0),
             ]
             for sid, ts, turns, cost in configs:
                 db.add(
@@ -566,7 +578,7 @@ class TestDashboardEndpoints:
                 db.add(
                     SessionRecord(
                         session_id=f"s{i}",
-                        started_at=f"2026-06-0{i + 1}T10:00:00Z",
+                        started_at=_day(i + 1),
                         total_turns=10,
                         total_cost_usd=1.0 + i * 0.5,
                     )
