@@ -573,9 +573,9 @@ def main() -> None:
     if args.command == "dashboard":
         import uvicorn
 
-        from context_tracker.dashboard import create_app
+        from context_tracker.dashboard import create_default_app
 
-        app = create_app()
+        app = create_default_app()
         uvicorn.run(app, host=args.dash_host, port=args.dash_port)
     else:
         if args.transport == "stdio":

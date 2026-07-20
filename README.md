@@ -1,6 +1,6 @@
 # Context Analyzer
 
-Context window usage analyzer for Claude Code. Tracks how context is consumed across tools, compaction, skills, and user interactions — then visualizes it so you can optimize your sessions.
+Context window usage analyzer for AI coding agents (deepest support: Claude Code). Tracks how context is consumed across tools, compaction, skills, and user interactions — then visualizes it so you can optimize your sessions.
 
 ![Context Analyzer Demo](docs/screenshots/context-analyzer-demo.gif)
 
@@ -8,6 +8,7 @@ Context window usage analyzer for Claude Code. Tracks how context is consumed ac
 
 - **Hooks** into Claude Code via `~/.claude/settings.json` to capture tool calls, compaction events, session lifecycle, and subagent activity
 - **Parses transcripts** for exact API token usage (input, output, cache_read, cache_creation)
+- **Ingests Codex CLI sessions** from `~/.codex/sessions/` rollout logs — Codex sessions appear in the same dashboard and analytics alongside Claude Code (API-level token forensics; compaction/subagent depth remains Claude Code-only)
 - **SQLite persistence** stores session data (9 tables, 2,900+ rows per session) for fast queries and cross-session analysis
 - **Dashboard** at `/` for single-session visualization: context growth, cache churn, composition, message inspector
 - **Cross-session analytics** at `/sessions` for comparing patterns across sessions: cost/call vs context size, insights, trends

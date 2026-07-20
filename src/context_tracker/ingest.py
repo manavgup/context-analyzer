@@ -11,7 +11,14 @@ from sqlalchemy.orm import Session
 
 from context_tracker.ccscope.reconcile import find_session_paths, reconcile
 from context_tracker.ccscope.subagents import parse_workflows
+from context_tracker.codex import (
+    DEFAULT_CODEX_SESSIONS_DIR,
+    find_codex_rollout,
+    parse_codex_rollout,
+)
 from context_tracker.db import (
+    AGENT_CLAUDE_CODE,
+    AGENT_CODEX,
     DEFAULT_DB_PATH,
     ApiCallRecord,
     BlockRecord,
@@ -209,6 +216,7 @@ def ingest_session(
 
         session_rec = SessionRecord(
             session_id=session_id,
+            agent=AGENT_CLAUDE_CODE,
             model=model,
             total_turns=len(turn_map),
             total_api_calls=len(churn),
@@ -354,6 +362,125 @@ def ingest_session(
                         content_preview=preview,
                     )
                 )
+
+        db.commit()
+        db.refresh(session_rec)
+        return session_rec
+
+
+def ingest_codex_session(
+    session_id: str,
+    codex_dir: Path = DEFAULT_CODEX_SESSIONS_DIR,
+    db_path: Path = DEFAULT_DB_PATH,
+    force: bool = False,
+) -> SessionRecord | None:
+    """Ingest a single Codex CLI session (rollout JSONL) into SQLite.
+
+    Maps rollout records into the same sessions/api_calls/blocks/turns schema
+    used for Claude Code, with ``agent="codex"``. Codex has no hook events,
+    subagents, or tool-result offloads, so those tables are simply left empty
+    for these sessions.
+
+    Returns the SessionRecord if ingested, None if no rollout was found.
+    Idempotent: re-ingests if the rollout file is newer than the stored mtime.
+    """
+    rollout_path = find_codex_rollout(session_id, codex_dir=codex_dir)
+    if rollout_path is None:
+        logger.warning("No Codex rollout found for session %s", session_id)
+        return None
+
+    source_mtime = rollout_path.stat().st_mtime
+
+    engine = get_engine(db_path)
+    session_factory = get_session_factory(engine)
+
+    with session_factory() as db:
+        existing: SessionRecord | None = db.get(SessionRecord, session_id)
+        if existing and not force:
+            if existing.source_mtime >= source_mtime:
+                return existing
+            db.delete(existing)
+            db.flush()
+
+        try:
+            parsed = parse_codex_rollout(rollout_path)
+        except Exception:
+            logger.exception("Failed to parse Codex rollout for %s", session_id)
+            return None
+
+        blocks = parsed["blocks"]
+        churn = parsed["churn"]
+        turn_map = parsed["turn_map"]
+
+        total_input = sum(c.get("input", 0) for c in churn)
+        total_output = sum(c.get("output", 0) for c in churn)
+        total_cache_read = sum(c.get("cache_read", 0) for c in churn)
+        total_cache_creation = sum(c.get("cache_creation", 0) for c in churn)
+
+        peak_context = 0
+        for c in churn:
+            resident = c.get("cache_read", 0) + c.get("cache_creation", 0) + c.get("input", 0)
+            peak_context = max(peak_context, resident)
+
+        session_rec = SessionRecord(
+            session_id=session_id,
+            agent=AGENT_CODEX,
+            project_path=parsed.get("cwd"),
+            started_at=parsed.get("started_at"),
+            ended_at=parsed.get("ended_at"),
+            model=parsed.get("model"),
+            total_turns=len(turn_map),
+            total_api_calls=len(churn),
+            total_blocks=len(blocks),
+            peak_context_tokens=peak_context,
+            total_input_tokens=total_input,
+            total_output_tokens=total_output,
+            total_cache_read=total_cache_read,
+            total_cache_creation=total_cache_creation,
+            # No public pricing mapping for Codex models here — don't fake it.
+            total_cost_usd=0.0,
+            source_mtime=source_mtime,
+        )
+        db.add(session_rec)
+
+        for i, c in enumerate(churn):
+            db.add(
+                ApiCallRecord(
+                    session_id=session_id,
+                    call_index=i,
+                    input_tokens=c.get("input", 0),
+                    output_tokens=c.get("output", 0),
+                    cache_read=c.get("cache_read", 0),
+                    cache_creation=c.get("cache_creation", 0),
+                )
+            )
+
+        for b in blocks:
+            db.add(
+                BlockRecord(
+                    session_id=session_id,
+                    block_id=b.get("id", ""),
+                    block_type=b.get("type", ""),
+                    label=b.get("label"),
+                    tokens=b.get("tokens", 0),
+                    enter_turn=b.get("enter"),
+                    exit_turn=b.get("exit"),
+                    cached=1 if b.get("cached") else 0,
+                    ref=1 if b.get("ref") else 0,
+                    content_preview=b.get("content", "")[:500] if b.get("content") else None,
+                )
+            )
+
+        for i, t in enumerate(turn_map):
+            db.add(
+                TurnRecord(
+                    session_id=session_id,
+                    turn_number=i,
+                    first_api_call=t.get("first_call"),
+                    last_api_call=t.get("last_call"),
+                    prompt_preview=t.get("user_prompt", "")[:200],
+                )
+            )
 
         db.commit()
         db.refresh(session_rec)
