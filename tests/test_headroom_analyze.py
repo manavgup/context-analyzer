@@ -86,7 +86,14 @@ def _add_session(
     )
 
 
-def _manifest_row(task_id: str, pair: int, arm: str, session_id: str, success: bool) -> dict:
+def _manifest_row(
+    task_id: str,
+    pair: int,
+    arm: str,
+    session_id: str,
+    success: bool,
+    cost_usd: float | None = None,
+) -> dict:
     return {
         "task_id": task_id,
         "pair": pair,
@@ -95,6 +102,7 @@ def _manifest_row(task_id: str, pair: int, arm: str, session_id: str, success: b
         "order": "PH",
         "session_id": session_id,
         "success": success,
+        "cost_usd": cost_usd,
         "model": "claude-sonnet-4-5",
         "claude_version": "test",
         "headroom_version": "test",
@@ -117,11 +125,13 @@ def fixture_env(tmp_path: Path) -> tuple[Path, Path]:
         db.commit()
 
     manifest = tmp_path / "manifest.jsonl"
+    # Manifest costs are the model-correct (Sonnet) envelope values — deliberately
+    # ~5x lower than the fixed-Opus-rate DB costs so tests can tell them apart.
     rows = [
-        _manifest_row("code-search", 1, "plain", "sess-plain-1", True),
-        _manifest_row("code-search", 1, "headroom", "sess-head-1", True),
-        _manifest_row("test-fix", 1, "plain", "sess-plain-2", True),
-        _manifest_row("test-fix", 1, "headroom", "sess-head-2", False),
+        _manifest_row("code-search", 1, "plain", "sess-plain-1", True, cost_usd=0.24),
+        _manifest_row("code-search", 1, "headroom", "sess-head-1", True, cost_usd=0.28),
+        _manifest_row("test-fix", 1, "plain", "sess-plain-2", True, cost_usd=0.16),
+        _manifest_row("test-fix", 1, "headroom", "sess-head-2", False, cost_usd=0.17),
     ]
     manifest.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
     return db_path, manifest
@@ -183,14 +193,73 @@ class TestReport:
         assert rc == 0
         # Per-pair table with both arms' values and the delta.
         assert "## Per-pair results" in out
-        assert "| Task | Pair | Metric | Plain | Headroom | Delta | Delta % | Both OK |" in out
-        assert "| code-search | 1 | Input tok | 100,000 | 60,000 | -40,000 | -40.0% | yes |" in out
+        assert "| Task | Pair | Metric | Plain | Headroom | Delta | Delta % |" in out
+        assert "| code-search | 1 | Input tok | 100,000 | 60,000 | -40,000 | -40.0% |" in out
         # Aggregate excludes the parity-failed pair and says so.
         assert "## Aggregate" in out
         assert "usable (both arms succeeded, both ingested): 1" in out
         assert "Outcome-parity failures (excluded): test-fix#1" in out
         # Retrieval round-trips surfaced.
         assert "Retrievals" in out
+
+    def test_manifest_cost_preferred_over_db(self, fixture_env, capsys):
+        """Cost rows use the model-correct manifest cost, not the fixed-Opus-rate DB cost."""
+        db_path, manifest = fixture_env
+        rc = analyze.main(["--manifest", str(manifest), "--db", str(db_path)])
+        captured = capsys.readouterr()
+        assert rc == 0
+        # Manifest costs (0.24 / 0.28), not DB costs (1.20 / 1.40).
+        assert "| code-search | 1 | Cost $ | 0.2400 | 0.2800 | +0.0400 | +16.7% |" in captured.out
+        assert "1.2000" not in captured.out
+        assert "1.4000" not in captured.out
+        # No fallback warning when the manifest carries costs.
+        assert "fixed" not in captured.err.lower()
+
+    def test_db_cost_fallback_warns_about_fixed_opus_rates(self, fixture_env, capsys):
+        """Without manifest cost_usd, the DB cost is used with an explicit caveat."""
+        db_path, manifest = fixture_env
+        rows = [json.loads(line) for line in manifest.read_text(encoding="utf-8").splitlines()]
+        for r in rows:
+            del r["cost_usd"]  # simulate a manifest that predates cost capture
+        manifest.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+
+        rc = analyze.main(["--manifest", str(manifest), "--db", str(db_path)])
+        captured = capsys.readouterr()
+        assert rc == 0
+        # Falls back to the DB costs...
+        assert "| code-search | 1 | Cost $ | 1.2000 | 1.4000 | +0.2000 | +16.7% |" in captured.out
+        # ...and names the fixed-rate caveat.
+        assert "no cost_usd in manifest" in captured.err
+        assert "fixed Opus rates" in captured.err
+
+    def test_failed_pair_excluded_from_metrics_but_listed_as_parity_failure(self, fixture_env, capsys):
+        """A pair where either arm failed emits NO metric rows anywhere; it is only
+        listed in the outcome-parity failures section (per METHODOLOGY.md)."""
+        db_path, manifest = fixture_env
+        rc = analyze.main(["--manifest", str(manifest), "--db", str(db_path)])
+        out = capsys.readouterr().out
+        assert rc == 0
+        # No per-pair metric row for the failed pair — even though both sessions
+        # are fully ingested in the DB.
+        assert "| test-fix | 1 | Input tok |" not in out
+        assert "| test-fix | 1 | Cost $ |" not in out
+        # Listed in the dedicated parity-failures section with per-arm outcomes.
+        assert "## Outcome-parity failures" in out
+        assert "| test-fix | 1 | yes | NO |" in out
+
+    def test_no_parity_failures_reported_when_all_pairs_pass(self, fixture_env, capsys):
+        db_path, manifest = fixture_env
+        rows = [json.loads(line) for line in manifest.read_text(encoding="utf-8").splitlines()]
+        for r in rows:
+            r["success"] = True
+        manifest.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+
+        rc = analyze.main(["--manifest", str(manifest), "--db", str(db_path)])
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "None — both arms passed success_check in every pair." in out
+        assert "| test-fix | 1 | Input tok | 80,000 | 70,000 | -10,000 | -12.5% |" in out
+        assert "usable (both arms succeeded, both ingested): 2" in out
 
     def test_out_file_written(self, fixture_env, tmp_path, capsys):
         db_path, manifest = fixture_env

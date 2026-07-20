@@ -120,13 +120,14 @@ run_arm() {  # run_arm <arm> <order_position>
     session_cmd=(headroom wrap claude -- -p "$PROMPT" --output-format json ${MODEL_ARGS[@]+"${MODEL_ARGS[@]}"} --dangerously-skip-permissions)
   fi
 
-  local started_at finished_at session_id success
+  local started_at finished_at session_id success cost_usd
   started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
   if [ "$DRY_RUN" -eq 1 ]; then
     echo "[dry-run] (cd $ws && ${session_cmd[*]} > $result_json)"
     session_id="dry-run"
     success=null
+    cost_usd=null
   else
     ( cd "$ws" && "${session_cmd[@]}" > "$result_json" ) || \
       echo "WARNING: session command exited non-zero for arm=$arm (continuing; success_check decides)" >&2
@@ -141,6 +142,19 @@ except Exception:
     print("unknown", end="")
 ' "$result_json")"
 
+    # 3b. Authoritative model-correct cost from the same envelope
+    #     (`total_cost_usd`). This is the cost source analyze.py reports;
+    #     the DB's sessions.total_cost_usd is computed with fixed Opus rates
+    #     and is only a warned-about fallback.
+    cost_usd="$("$PY" -c '
+import json, sys
+try:
+    v = json.load(open(sys.argv[1])).get("total_cost_usd")
+    print("null" if v is None else json.dumps(v), end="")
+except Exception:
+    print("null", end="")
+' "$result_json")"
+
     # 4. Objective success check, in the workspace, fail-fast semantics.
     if ( cd "$ws" && bash -euo pipefail -c "$SUCCESS_CHECK" ); then
       success=true
@@ -150,9 +164,11 @@ except Exception:
   fi
   finished_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-  echo "    session_id=$session_id success=$success"
+  echo "    session_id=$session_id success=$success cost_usd=$cost_usd"
 
   # 5. Manifest row: the arm <-> session_id mapping analyze.py joins on.
+  #    cost_usd is the authoritative model-correct cost from the print-mode
+  #    JSON envelope (null when unavailable, e.g. dry runs).
   "$PY" -c '
 import json, sys
 row = {
@@ -163,17 +179,18 @@ row = {
     "order": sys.argv[5],
     "session_id": sys.argv[6],
     "success": json.loads(sys.argv[7]),
-    "started_at": sys.argv[8],
-    "finished_at": sys.argv[9],
-    "model": sys.argv[10] or None,
-    "claude_version": sys.argv[11],
-    "headroom_version": sys.argv[12],
-    "workspace": sys.argv[13],
+    "cost_usd": json.loads(sys.argv[8]),
+    "started_at": sys.argv[9],
+    "finished_at": sys.argv[10],
+    "model": sys.argv[11] or None,
+    "claude_version": sys.argv[12],
+    "headroom_version": sys.argv[13],
+    "workspace": sys.argv[14],
 }
-with open(sys.argv[14], "a") as f:
+with open(sys.argv[15], "a") as f:
     f.write(json.dumps(row) + "\n")
 ' "$TASK_ID" "$PAIR_INDEX" "$arm" "$position" "$ORDER" "$session_id" "$success" \
-  "$started_at" "$finished_at" "$MODEL" "$CLAUDE_VERSION" "$HEADROOM_VERSION" \
+  "$cost_usd" "$started_at" "$finished_at" "$MODEL" "$CLAUDE_VERSION" "$HEADROOM_VERSION" \
   "$ws" "$MANIFEST"
 }
 

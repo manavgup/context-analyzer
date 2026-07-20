@@ -19,6 +19,12 @@ Schema dependency (src/context_tracker/db.py):
                total_api_calls
     blocks:    block_type, label  (retrieval round-trips = tool_call blocks
                whose label matches the headroom retrieval tool)
+
+Cost source: the manifest's per-arm `cost_usd` (captured by run_pair.sh from the
+`claude -p --output-format json` envelope's `total_cost_usd`) is authoritative —
+it is model-correct. `sessions.total_cost_usd` is only a fallback: ingest_session
+computes it with fixed Opus rates, so it is ~5x high for Sonnet and wrong for any
+non-Opus model; a warning is emitted whenever the fallback is used.
 """
 
 from __future__ import annotations
@@ -160,20 +166,46 @@ def fetch_session_metrics(
     )
 
 
+def _apply_manifest_cost(pair: Pair, arm: str, row: dict, metrics: SessionMetrics | None) -> None:
+    """Prefer the model-correct manifest cost over the DB's fixed-rate cost.
+
+    run_pair.sh records `cost_usd` from the `claude -p --output-format json`
+    envelope (`total_cost_usd`), which uses the actual model's rates. The DB's
+    sessions.total_cost_usd is computed by ingest_session with fixed Opus rates
+    and is wrong for other models (~5x high for Sonnet), so it is only used as
+    a fallback, with an explicit warning.
+    """
+    if metrics is None:
+        return
+    cost = row.get("cost_usd")
+    if cost is not None:
+        metrics.cost_usd = float(cost)
+    else:
+        print(
+            f"WARNING: {pair.task_id}#{pair.pair} arm={arm}: no cost_usd in manifest; "
+            "falling back to DB sessions.total_cost_usd, which is computed with fixed "
+            "Opus rates and is wrong for other models (~5x high for Sonnet). "
+            "Re-run run_pair.sh (it captures total_cost_usd from the print-mode JSON "
+            "envelope) for model-correct costs.",
+            file=sys.stderr,
+        )
+
+
 def attach_metrics(pairs: list[Pair], db_path: Path, retrieval_pattern: str) -> None:
     conn = sqlite3.connect(db_path)
     try:
         for p in pairs:
             p.plain_metrics = fetch_session_metrics(conn, p.plain["session_id"], retrieval_pattern)
             p.headroom_metrics = fetch_session_metrics(conn, p.headroom["session_id"], retrieval_pattern)
-            for arm, m in (("plain", p.plain_metrics), ("headroom", p.headroom_metrics)):
+            for arm, row, m in (("plain", p.plain, p.plain_metrics), ("headroom", p.headroom, p.headroom_metrics)):
                 if m is None:
                     print(
                         f"WARNING: session for {p.task_id}#{p.pair} arm={arm} not in DB "
-                        f"(id={p.plain['session_id'] if arm == 'plain' else p.headroom['session_id']}); "
-                        "run with --ingest or ingest manually",
+                        f"(id={row['session_id']}); run with --ingest or ingest manually",
                         file=sys.stderr,
                     )
+                else:
+                    _apply_manifest_cost(p, arm, row, m)
     finally:
         conn.close()
 
@@ -193,17 +225,25 @@ def _pct_delta(plain: float, headroom: float) -> str:
 
 
 def render_per_pair_table(pairs: list[Pair]) -> str:
+    """Per-pair metric rows — only for pairs where BOTH arms passed success_check.
+
+    METHODOLOGY.md: token comparisons are only reported when both arms completed
+    the task. Pairs with divergent outcomes appear only in the outcome-parity
+    failures section, never as metric rows.
+    """
     lines = [
         "## Per-pair results",
         "",
-        "| Task | Pair | Metric | Plain | Headroom | Delta | Delta % | Both OK |",
-        "| --- | --- | --- | ---: | ---: | ---: | ---: | :---: |",
+        "Only pairs where both arms passed success_check are shown "
+        "(see Outcome-parity failures below for the rest).",
+        "",
+        "| Task | Pair | Metric | Plain | Headroom | Delta | Delta % |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: |",
     ]
     for p in pairs:
-        if not p.complete:
+        if not p.complete or not p.both_succeeded:
             continue
         assert p.plain_metrics is not None and p.headroom_metrics is not None
-        ok = "yes" if p.both_succeeded else "NO"
         for key, header in METRICS:
             pv = p.plain_metrics.get(key)
             hv = p.headroom_metrics.get(key)
@@ -211,8 +251,36 @@ def render_per_pair_table(pairs: list[Pair]) -> str:
             lines.append(
                 f"| {p.task_id} | {p.pair} | {header} | {_fmt(key, pv)} | {_fmt(key, hv)} "
                 f"| {_fmt(key, delta) if key != 'cost_usd' else f'{delta:+.4f}'} "
-                f"| {_pct_delta(pv, hv)} | {ok} |"
+                f"| {_pct_delta(pv, hv)} |"
             )
+    return "\n".join(lines)
+
+
+def render_parity_failures(pairs: list[Pair]) -> str:
+    """Pairs where either arm failed success_check — excluded from all metrics."""
+    failed = [p for p in pairs if not p.both_succeeded]
+    lines = ["## Outcome-parity failures", ""]
+    if not failed:
+        lines.append("None — both arms passed success_check in every pair.")
+        return "\n".join(lines)
+    lines += [
+        "These pairs are excluded from every metric table and aggregate "
+        "(METHODOLOGY.md: savings on a failed task are worthless). They are a "
+        "finding in their own right — outcome divergence between arms.",
+        "",
+        "| Task | Pair | Plain success | Headroom success |",
+        "| --- | --- | :---: | :---: |",
+    ]
+
+    def _s(v: object) -> str:
+        if v is True:
+            return "yes"
+        if v is False:
+            return "NO"
+        return "unknown"
+
+    for p in failed:
+        lines.append(f"| {p.task_id} | {p.pair} | {_s(p.plain.get('success'))} | {_s(p.headroom.get('success'))} |")
     return "\n".join(lines)
 
 
@@ -225,7 +293,7 @@ def render_aggregate_table(pairs: list[Pair]) -> str:
         f"Pairs total: {len(pairs)} | usable (both arms succeeded, both ingested): {len(usable)}",
         "",
     ]
-    parity_fail = [p for p in pairs if p.complete and not p.both_succeeded]
+    parity_fail = [p for p in pairs if not p.both_succeeded]
     if parity_fail:
         detail = ", ".join(f"{p.task_id}#{p.pair}" for p in parity_fail)
         lines.append(f"Outcome-parity failures (excluded): {detail}")
@@ -266,6 +334,7 @@ def render_report(pairs: list[Pair]) -> str:
         [
             "# Headroom experiment results",
             render_per_pair_table(pairs),
+            render_parity_failures(pairs),
             render_aggregate_table(pairs),
         ]
     )

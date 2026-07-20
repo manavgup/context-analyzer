@@ -31,15 +31,21 @@ the **within-pair difference** (headroom − plain) per metric, aggregated acros
 
 ## Metrics (per arm)
 
-All token/cost numbers are **API-reported** values ingested by context-analyzer into
+All token numbers are **API-reported** values ingested by context-analyzer into
 SQLite (`~/.context-analyzer/analyzer.db`) — not estimates. Column sources are the
-schema in `src/context_tracker/db.py`.
+schema in `src/context_tracker/db.py`. Cost is the exception: the authoritative
+source is the `total_cost_usd` field of the `claude -p --output-format json` result
+envelope, which `run_pair.sh` records per arm into the manifest (`cost_usd`) —
+Claude Code computes it with the actual model's rates. `sessions.total_cost_usd` in
+the DB is **not** model-correct (ingest computes it with fixed Opus rates, ~5x high
+for Sonnet) and is only used as a fallback, with an explicit warning from
+`analyze.py`, for manifests that predate cost capture.
 
 | Metric | Source | What it tests |
 | --- | --- | --- |
 | Total input tokens | `sessions.total_input_tokens` | headline savings claim |
 | Total output tokens | `sessions.total_output_tokens` | does compression change what the model says? |
-| Total $ cost | `sessions.total_cost_usd` | the number that actually matters |
+| Total $ cost | manifest `cost_usd` (from the print-mode JSON envelope's `total_cost_usd`; DB `sessions.total_cost_usd` only as a warned fixed-Opus-rate fallback) | the number that actually matters |
 | Cache hit rate | `total_cache_read / (total_input_tokens + total_cache_read + total_cache_creation)` | headroom's **CacheAligner** claim — does rewriting the context bust Anthropic prompt caches? A drop here can wipe out raw-token savings, because cache reads are ~10x cheaper than uncached input. |
 | Cache creation tokens | `sessions.total_cache_creation` | cache churn — repeated re-writing of cache segments |
 | headroom_retrieve round-trips | count of `blocks` rows with `block_type = 'tool_call'` and a label matching the retrieval tool (default pattern `%headroom%retriev%`) | CCR retrievals clawing back savings: every retrieval is an extra API round-trip *plus* re-injected content |
@@ -83,7 +89,9 @@ outcome-parity failures — they are themselves a finding.
 
 `analyze.py` reports, per metric:
 
-- **Per-pair table:** plain value, headroom value, absolute delta, % delta.
+- **Per-pair table:** plain value, headroom value, absolute delta, % delta —
+  only for pairs where both arms passed success_check; parity-failed pairs never
+  appear as metric rows.
 - **Aggregate:** mean of per-pair deltas, mean % delta, and the sign count
   (pairs where headroom was lower / higher / tied). With small n, the sign count is the
   honest summary; no p-values are reported below n = 10 pairs.

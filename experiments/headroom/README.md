@@ -70,8 +70,9 @@ done
 
 Outputs:
 
-- `manifest.jsonl` — one row per arm: session id, arm, order, success, version pins.
-  This is the join key between the experiment and the context-analyzer DB. Publish it.
+- `manifest.jsonl` — one row per arm: session id, arm, order, success, model-correct
+  cost (`cost_usd`, from the print-mode JSON envelope), version pins. This is the join
+  key between the experiment and the context-analyzer DB. Publish it.
 - `results.md` — per-pair and aggregate markdown tables (from `analyze.py`).
 - `workspaces/` — throwaway per-arm clones. Safe to delete after analysis; do not
   commit (gitignored along with the manifest and results).
