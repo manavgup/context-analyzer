@@ -262,6 +262,26 @@ retrieve them, clawing back most of that saving.
 
 ## Reproduction
 
+### One command (recommended)
+
+The whole pipeline — scratch corpus build, offline replay, report — ships as
+a subcommand, so you can run the audit on YOUR own transcripts:
+
+```bash
+pip install --no-deps headroom-ai==0.32.1 && pip install tiktoken
+context-tracker audit-headroom
+```
+
+Headline prints to stdout; the full numbers-only report is written to
+`./headroom-ceiling-report.md`. Options: `--profile max` (Kompress ML prose
+model + AST code compression; needs `pip install onnxruntime` and a one-time
+~261MB model download, gated behind `--yes`/a prompt), `--out FILE`,
+`--limit N`, `--keep-db` (persist the scratch corpus DB under
+`~/.context-analyzer/audit-headroom/`). Your live analyzer DB is never
+written; the report contains numbers only.
+
+### Manual path (what the one-command wrapper automates)
+
 ```bash
 # 1. Build the scratch corpus DB (reads transcripts + live DB only; writes scratch only)
 python - <<'PY'
