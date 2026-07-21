@@ -1,0 +1,31 @@
+# Task shape: issue triage — diagnose from a bug report, no fix required.
+# The reported flake is real at the pinned commit (time-dependent test).
+id: issue-triage
+name: Triage the intermittent trends-test failure
+shape: issue-triage
+
+repo: https://github.com/manavgup/context-analyzer
+commit: 5abbf7f5a9f942b04e06c51267ee815aa321cbb1
+
+setup: |
+  git clone --quiet https://github.com/manavgup/context-analyzer .
+  git checkout --quiet 5abbf7f5a9f942b04e06c51267ee815aa321cbb1
+
+prompt: |
+  Triage this bug report against the current repo state. Do NOT fix anything.
+
+  --- BUG REPORT ---
+  Title: CI intermittently fails tests/test_patterns.py::TestAnalyzeTrends::test_returns_trends
+  Body: This test passes locally for some contributors and fails for others,
+  and the same commit can pass one week and fail the next with no code change.
+  --- END REPORT ---
+
+  Investigate the test and the production code it exercises, determine the root
+  cause of the intermittency, and write TRIAGE.md at the repo root containing:
+  the root-cause explanation, the exact file(s) and function(s) responsible,
+  and a suggested fix direction. Do not modify any other file.
+
+success_check: |
+  test -f TRIAGE.md
+  grep -qi "patterns" TRIAGE.md
+  grep -qiE "time|date|week|day|clock|now\(" TRIAGE.md

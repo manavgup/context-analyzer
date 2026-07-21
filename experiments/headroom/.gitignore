@@ -1,0 +1,5 @@
+# Experiment run artifacts — publish manifest/results with the write-up, but
+# they are per-run outputs, not part of the scaffolding.
+workspaces/
+manifest.jsonl
+results.md
