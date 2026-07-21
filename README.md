@@ -1,4 +1,23 @@
+<div align="center">
+
 # Context Analyzer
+
+Context window forensics for AI coding agents.
+
+**See exactly where your tokens go — per call, per turn, per session · dashboard · MCP server · Claude Code + Codex.**
+
+[![CI](https://github.com/manavgup/context-analyzer/actions/workflows/ci.yml/badge.svg)](https://github.com/manavgup/context-analyzer/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+<!-- PyPI badge — enable with the first `context-tracker` publish (#77/#85); it 404s until then:
+[![PyPI](https://img.shields.io/pypi/v/context-tracker.svg)](https://pypi.org/project/context-tracker/)
+-->
+
+[Quick Start](#quick-start) · [Proof](#proof) · [What it does](#what-it-does) · [Architecture](#architecture) · [Issues](https://github.com/manavgup/context-analyzer/issues)
+
+<sub>AI agents / LLMs: read <a href="./llms.txt">/llms.txt</a></sub>
+
+</div>
+
+---
 
 **Your Claude Code calls cost 4.3x more at large context than at small context — $0.23/call at 63K tokens vs $0.98/call at 721K.** Context Analyzer shows you exactly where that money goes, per call, per turn, per session.
 
