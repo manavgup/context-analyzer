@@ -48,6 +48,10 @@ static/blocks.json
 static/churn.json
 static/meta.json
 static/turn_map.json
+src/context_tracker/static/blocks.json
+src/context_tracker/static/churn.json
+src/context_tracker/static/meta.json
+src/context_tracker/static/turn_map.json
 
 # Skill files (tooling, not project code)
 *.skill
