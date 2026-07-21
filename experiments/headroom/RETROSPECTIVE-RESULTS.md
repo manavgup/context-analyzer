@@ -1,15 +1,20 @@
 # Retrospective Compression Audit — Ceiling Report (Stage 0 of #94)
 
-**Verdict up front: the kill criterion is MET for the simulated
-configuration.** Replaying this machine's real Claude Code workload through
-headroom's local compressors (shipped defaults, ML prose model excluded)
-yields a savings ceiling of **3.03% of resident token-call volume ($192.06
-of the $7,360.53 recorded corpus)** — well below the 10%-of-spend threshold
-set in #94. That 3.03% is an upper bound that assumes zero retrieval
-clawback, zero prompt-cache damage, and zero answer degradation. One
-quantified caveat: the unsimulated ML prose path could in principle add up
-to ~10.8 points at an (optimistic) 50% prose ratio — see "Prose
-sensitivity" below before treating the verdict as all-in.
+**Verdict up front: the kill criterion is MET in both configurations.**
+Replaying this machine's real Claude Code workload through headroom's local
+compressors yields:
+
+| Configuration | Ceiling | Dollars (of $7,360.53) |
+|---|---:|---:|
+| Shipped defaults (as `pip install` gives you) | **3.03%** | **$192.06** |
+| Maximum capability (ML prose model + AST code force-enabled) | **4.25%** | **$267.54** |
+
+Both are far below the 10%-of-spend threshold set in #94, and both are
+upper bounds that assume zero retrieval clawback, zero prompt-cache damage,
+and zero answer degradation. The prose question that the first pass left
+open is now closed empirically: with headroom's own Kompress model running,
+real prose tool outputs compressed just **0.9%** — not the hypothetical 50%
+that would have pushed the ceiling over the bar.
 
 ## Setup
 
@@ -17,15 +22,21 @@ sensitivity" below before treating the verdict as all-in.
   headroom-ai` — the `litellm` dependency has no macOS wheels and is only
   needed for headroom's proxy/LLM paths, which this offline audit never
   touches). Public API used: `headroom.compress()` with
-  `CompressConfig(protect_recent=0, kompress_model="disabled")`; everything
-  else at shipped defaults.
-- **Active compressors** (from headroom's own routing markers): SmartCrusher
+  `CompressConfig(protect_recent=0)`; the defaults profile additionally sets
+  `kompress_model="disabled"`, the max profile loads headroom's own model.
+- **Two configurations audited.** *Shipped defaults*: SmartCrusher
   (JSON/structured), lossless log/search/paths/diff/config compaction,
-  tabular, mixed-content. **Not active:** Kompress ML prose compression
-  (requires a HuggingFace model download — prose compression was NOT
-  simulated), AST code compression (disabled by headroom's own default,
-  `enable_code_aware=False`, left at that default), and headroom protects
-  file `Read` outputs and error outputs verbatim by default.
+  tabular, mixed-content — with Kompress ML prose compression and AST code
+  compression left off, exactly as headroom ships them on the library path.
+  *Maximum capability*: the same pipeline plus the Kompress prose model
+  (`chopratejas/kompress-v2-base`, headroom's pinned revision, ONNX CPU
+  backend, loaded in 2.0s from a one-time HuggingFace download) and AST
+  code compression force-enabled via
+  `ContentRouterConfig(enable_code_aware=True)` — a capability headroom
+  itself ships disabled. Kompress's shipped 5s canary / 20s per-call time
+  budgets were relaxed for the batch audit so slow items could not silently
+  pass through uncompressed. In both configurations headroom protects file
+  `Read` outputs and error outputs verbatim by policy.
 - **Tokenizer for ratios:** tiktoken `o200k_base` (neutral). Relative ratios
   are the primary numbers; absolute token units come from the analyzer DB's
   API-usage-derived block sizes, so numerator and denominator share units.
@@ -95,21 +106,22 @@ ceiling_% (session)      = Σ saved_token_calls ÷ (input + cache_read + cache_c
 
 ## Headline
 
-**Ceiling: 3.03% of resident token-call volume = $192.06 of the recorded
-$7,360.53 was theoretically compressible** by the compressors actually
-simulated (headroom's default local pipeline, ML prose model excluded).
+**Shipped defaults: 3.03% ($192.06). Maximum capability: 4.25% ($267.54).**
 
 **Kill criterion (#94: ceiling < 10% of spend → publish the finding and
-stop): MET for the simulated configuration, at 3.03%** — with one honest
-caveat quantified below (prose sensitivity).
+stop): MET in both configurations.** Turning on everything headroom has —
+including features it ships disabled — moves the ceiling by 1.22 points.
 
-For scale: even if the purged $15,569 corpus compressed at the same rate,
-the ceiling there would have been ≈ $470 — still below the 10% bar.
+For scale: even if the purged $15,569 corpus compressed at the
+maximum-capability rate, the ceiling there would have been ≈ $662 — still
+well below the 10% bar.
 
 A premise check that validates the DB's earlier finding: tool_result blocks
 account for **66.0%** of resident token-call volume on this corpus.
 
 ## By content type
+
+Shipped defaults:
 
 | Type | Items | Block tokens | One-shot ratio | Saved token-calls | Resident share | Saved share of corpus volume |
 |---|---:|---:|---:|---:|---:|---:|
@@ -119,6 +131,29 @@ account for **66.0%** of resident token-call volume on this corpus.
 | log | 21 | 59.7K | 21.1% | 5.5M | 0.94% | 0.20% |
 | prose | 1432 | 1.9M | 0.1% | 582.4K | 21.59% | 0.02% |
 
+Maximum capability (prose model + AST code enabled):
+
+| Type | Items | Block tokens | One-shot ratio | Saved token-calls | Resident share | Saved share of corpus volume |
+|---|---:|---:|---:|---:|---:|---:|
+| code | 402 | 1.1M | 14.4% | 67.9M | 15.52% | 2.43% |
+| other | 1486 | 2.4M | 3.5% | 23.2M | 27.19% | 0.83% |
+| json | 23 | 57.3K | 74.1% | 16.8M | 0.77% | 0.60% |
+| prose | 1435 | 1.9M | 0.9% | 6.6M | 21.60% | 0.23% |
+| log | 21 | 59.7K | 14.6% | 4.4M | 0.94% | 0.16% |
+
+Two empirical findings from the maximum-capability run explain why headroom
+ships these features off:
+
+- **AST code compression reverted itself 16 times** — headroom's own
+  `code_compressor` logged "Code compression produced invalid syntax for
+  python … returning original" on real tool outputs up to 936 tokens. The
+  14.4% code ratio is what survives after those self-reverts.
+- **Kompress inflated some prose** — headroom's inflation guard reverted 2
+  items where the "compressed" output had *more* tokens than the input, and
+  across 1,435 real prose items the model's net ratio was 0.9%. Real agent
+  prose (test output, explanations, PR text) is information-dense in ways
+  benchmark prose apparently is not.
+
 The shape of the story: headroom's headline compressor (SmartCrusher) is
 excellent at big JSON (74% one-shot) — but this workload contains almost no
 big JSON (23 items, 0.77% of resident volume). The bulk of resident volume
@@ -126,19 +161,17 @@ is mixed shell output, prose, and code, which headroom's simulated pipeline
 either protects by policy (Read/Edit/Write outputs, error outputs), cannot
 compress without the ML model, or compresses only marginally.
 
-### Prose sensitivity (the honest caveat)
+### Prose sensitivity — caveat closed empirically
 
-Prose tool_results are 21.6% of resident volume and were effectively
-untouched because the ML prose compressor (Kompress) was not simulated. If
-Kompress achieved a prose ratio of R on this content, the ceiling would rise
-by up to 21.6×R points: R=25% → +5.4 points (total ≈ 8.4%, still under the
-bar); R=50% → +10.8 points (total ≈ 13.8%, over the bar). **The Stage 0
-verdict therefore applies to headroom's local structural compressors; a
-definitive all-in verdict on the ML prose path requires simulating Kompress
-(a bounded follow-up: one HuggingFace model download, same harness).** Code
-(15.5% of volume) is protected by headroom's own default
-(`enable_code_aware=False`), so counting it against headroom would be
-counting a feature headroom itself ships turned off.
+The first pass left prose (21.6% of resident volume) as the attack surface:
+hypothetically, a 50% prose ratio would have added +10.8 points and pushed
+the total over the kill bar. The maximum-capability run answers it with
+headroom's own model instead of a hypothetical: **Kompress achieved 0.9% on
+1,435 real prose tool outputs** (+0.21 points of ceiling). The pre-run
+sensitivity bound and the post-run empirical value are both reported here
+deliberately — that is what closing a stated caveat looks like, and the
+distinction matters because Kompress is lossy-by-model (see Limitations):
+even its 0.9% assumes the agent never needed the dropped tokens.
 
 ## By tool
 
@@ -208,11 +241,17 @@ retrieve them, clawing back most of that saving.
 - **Tokenizer approximation.** Ratios measured with tiktoken o200k_base,
   not Anthropic's tokenizer. Relative ratios are robust to this choice;
   absolute figures inherit the DB's proportional-attribution block sizing.
-- **Prose ML compression not simulated** (`kompress_model="disabled"`; the
-  ModernBERT model requires a HuggingFace download). Quantified above:
-  prose is 21.6% of resident volume, so the unsimulated path could add up
-  to 21.6×R points at prose ratio R. AST code compression is off by
-  headroom's own default and was left at that default.
+- **Prose compression is lossy-by-model.** Kompress (ModernBERT,
+  `chopratejas/kompress-v2-base`, ONNX CPU backend) is a summarization-style
+  token-drop compressor: compressed prose is NOT reconstructible from what
+  stays in context, unlike SmartCrusher's reversible CCR path. Every prose
+  point in the maximum-capability ceiling assumes the agent never needed
+  the dropped tokens. AST code compression was force-enabled for that run;
+  headroom ships it off by default, so its contribution (+0.66 points on
+  code) counts a capability headroom itself does not enable — and one that
+  reverted itself 16 times on invalid output syntax.
+- **Wall time:** 2.7s (defaults) / 199.7s (maximum capability, CPU ONNX) for
+  the full corpus.
 - **Native content detector bypassed** (`HEADROOM_DETECT_BACKEND=python`,
   headroom's own escape hatch) because the native Magika/ONNX detector
   deadlocked on this host.
@@ -240,6 +279,13 @@ PY
 python experiments/headroom/retrospective.py \
     --db experiments/headroom/scratch/corpus.db \
     --out experiments/headroom/scratch/report.md
+
+# 3. Maximum-capability configuration (adds onnxruntime + a one-time
+#    ~HuggingFace download of chopratejas/kompress-v2-base on first run)
+python experiments/headroom/retrospective.py \
+    --db experiments/headroom/scratch/corpus.db \
+    --profile max \
+    --out experiments/headroom/scratch/report-max.md
 ```
 
 Run date: 2026-07-21. Full corpus wall time: 2.7s.

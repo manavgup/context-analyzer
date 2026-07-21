@@ -246,20 +246,42 @@ def make_tiktoken_counter() -> Callable[[str], int]:
     return count
 
 
-def make_headroom_compressor(workspace_dir: Path | None = None) -> Callable[..., tuple[str, list[str]]]:
+def make_headroom_compressor(
+    workspace_dir: Path | None = None, profile: str = "defaults"
+) -> Callable[..., tuple[str, list[str]]]:
     """Build the real headroom compressor function.
 
     Returns fn(text, tool_name, tool_input) -> (compressed_text, transforms).
 
+    Profiles:
+      - "defaults": headroom's shipped-default local pipeline (Kompress ML
+        prose model disabled, AST code compression off — both are headroom's
+        own defaults on the library path).
+      - "max": maximum capability. Loads the Kompress ML prose model
+        (chopratejas/kompress-v2-base, one-time HuggingFace download at
+        headroom's own pinned revision) and enables AST code compression via
+        ContentRouterConfig(enable_code_aware=True). The library path exposes
+        no public switch for enable_code_aware (CompressConfig doesn't carry
+        it; HEADROOM_CODE_AWARE_ENABLED is read only by the proxy), so the
+        singleton pipeline's ContentRouter is replaced with an identically
+        built one whose config sets enable_code_aware=True.
+
     Environment hardening (all documented in the report):
-      - HEADROOM_OFFLINE=1: no egress (telemetry, update check, HF downloads).
+      - HEADROOM_OFFLINE=1: no egress (telemetry, update check, HF
+        downloads). In the "max" profile this is set immediately AFTER the
+        one-time model load, so the audit itself still runs with zero egress.
       - HEADROOM_DETECT_BACKEND=python: the native Magika/ONNX content
         detector deadlocks on this macOS host; headroom's own escape hatch
         routes to its pure-Python regex detector.
       - HEADROOM_WORKSPACE_DIR: keep headroom's runtime state (CCR store)
         out of ~/.headroom so the audit leaves no traces on the machine.
+      - Kompress canary/time-budget knobs (max profile only): the shipped 5s
+        startup canary and 20s per-call budget protect a live proxy from a
+        slow model; in an offline batch audit they would silently turn slow
+        items into passthroughs, so they are relaxed.
     """
-    os.environ.setdefault("HEADROOM_OFFLINE", "1")
+    if profile not in ("defaults", "max"):
+        raise ValueError(f"unknown profile: {profile!r}")
     os.environ.setdefault("HEADROOM_UPDATE_CHECK", "off")
     os.environ.setdefault("HEADROOM_DETECT_BACKEND", "python")
     if workspace_dir is not None:
@@ -267,16 +289,48 @@ def make_headroom_compressor(workspace_dir: Path | None = None) -> Callable[...,
         os.environ.setdefault("HEADROOM_WORKSPACE_DIR", str(workspace_dir))
         os.environ.setdefault("HEADROOM_CONFIG_DIR", str(workspace_dir / "config"))
 
+    if profile == "max":
+        os.environ.setdefault("HEADROOM_KOMPRESS_CANARY_SECONDS", "0")
+        os.environ.setdefault("HEADROOM_KOMPRESS_TIME_BUDGET_SECONDS", "600")
+        os.environ.setdefault("HEADROOM_KOMPRESS_ACQUIRE_TIMEOUT_SECONDS", "600")
+
+        from headroom.transforms.kompress_compressor import HF_MODEL_ID, _load_kompress
+
+        t0 = time.time()
+        _model, _tok, backend = _load_kompress(HF_MODEL_ID)
+        logger.info("kompress loaded: model=%s backend=%s (%.1fs)", HF_MODEL_ID, backend, time.time() - t0)
+
+    # From here on: no egress. (In the max profile the model is now cached.)
+    os.environ.setdefault("HEADROOM_OFFLINE", "1")
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
     from headroom import CompressConfig, compress
 
-    # protect_recent=0: we compress each historical item in isolation; by the
-    # time residency matters the item is no longer "recent".
-    # kompress_model="disabled": skips the ML prose compressor (would require
-    # a HuggingFace model download; prose compression is NOT simulated).
-    # Everything else is headroom's shipped default (including its own
-    # defaults of protecting file Reads verbatim and disabling AST code
-    # compression).
-    cfg = CompressConfig(protect_recent=0, kompress_model="disabled")
+    if profile == "max":
+        import sys as _sys
+
+        from headroom.transforms.content_router import ContentRouter, ContentRouterConfig
+
+        _hc_module = _sys.modules["headroom.compress"]
+        pipeline = _hc_module._get_pipeline()
+        pipeline.transforms = [
+            ContentRouter(ContentRouterConfig(enable_code_aware=True)) if type(t).__name__ == "ContentRouter" else t
+            for t in pipeline.transforms
+        ]
+        # protect_recent=0: we compress each historical item in isolation; by
+        # the time residency matters the item is no longer "recent".
+        # kompress_model=None -> headroom's default ML prose model.
+        cfg = CompressConfig(protect_recent=0)
+    else:
+        # protect_recent=0: as above.
+        # kompress_model="disabled": skips the ML prose compressor (would
+        # require a HuggingFace model download; prose compression is NOT
+        # simulated in this profile).
+        # Everything else is headroom's shipped default (including its own
+        # defaults of protecting file Reads verbatim and disabling AST code
+        # compression).
+        cfg = CompressConfig(protect_recent=0, kompress_model="disabled")
 
     def compress_item(text: str, tool_name: str, tool_input: dict) -> tuple[str, list[str]]:
         messages = [
@@ -412,6 +466,7 @@ class SessionResult:
 class CorpusResult:
     headroom_version: str
     tokenizer_name: str
+    profile: str = "defaults"
     sessions: list[SessionResult] = field(default_factory=list)
     by_content: dict[str, GroupStat] = field(default_factory=lambda: defaultdict(GroupStat))
     by_tool: dict[str, GroupStat] = field(default_factory=lambda: defaultdict(GroupStat))
@@ -589,10 +644,13 @@ def run_audit(
     compress_fn: Callable[..., tuple[str, list[str]]] | None = None,
     count_fn: Callable[[str], int] | None = None,
     headroom_version: str = "",
+    profile: str = "defaults",
 ) -> CorpusResult:
     t0 = time.time()
     if compress_fn is None:
-        compress_fn = make_headroom_compressor(workspace_dir=Path(db_path).parent / "headroom-workspace")
+        compress_fn = make_headroom_compressor(
+            workspace_dir=Path(db_path).parent / "headroom-workspace", profile=profile
+        )
         if not headroom_version:
             import headroom
 
@@ -603,6 +661,7 @@ def run_audit(
     corpus = CorpusResult(
         headroom_version=headroom_version or "injected-fake",
         tokenizer_name="tiktoken o200k_base",
+        profile=profile,
     )
 
     conn = open_db_readonly(db_path)
@@ -659,6 +718,17 @@ def build_report(corpus: CorpusResult) -> str:
     a("# Retrospective Compression Audit — Ceiling Report (Stage 0, #94)")
     a("")
     a(f"- headroom-ai version: **{s.headroom_version}**")
+    if s.profile == "max":
+        a(
+            "- Configuration profile: **maximum capability** — Kompress ML prose "
+            "model (chopratejas/kompress-v2-base) active + AST code compression "
+            "enabled (ContentRouterConfig(enable_code_aware=True))"
+        )
+    else:
+        a(
+            "- Configuration profile: **shipped defaults** — Kompress ML prose "
+            "model disabled, AST code compression off (headroom's own defaults)"
+        )
     a(
         f"- Tokenizer for ratios: {s.tokenizer_name} (relative ratios are primary; "
         "absolute token units come from the analyzer DB's API-usage-derived block sizes)"
@@ -687,9 +757,7 @@ def build_report(corpus: CorpusResult) -> str:
     )
     a("")
     denom = s.total_resident_token_calls or 1.0
-    tool_result_share = (
-        sum(g.resident_token_calls for g in s.by_content.values()) / denom * 100
-    )
+    tool_result_share = sum(g.resident_token_calls for g in s.by_content.values()) / denom * 100
     a(f"tool_result blocks account for {tool_result_share:.1f}% of resident token-call volume.")
     a("")
     a("## By content type")
@@ -769,18 +837,32 @@ def build_report(corpus: CorpusResult) -> str:
         "proportional-attribution block sizing."
     )
     prose_share = s.by_content["prose"].resident_token_calls / denom * 100
-    a(
-        "- **Prose ML compression not simulated.** Headroom's Kompress (ModernBERT) model "
-        "requires a HuggingFace download; it was disabled (kompress_model='disabled'). "
-        f"Sensitivity: prose tool_results are {prose_share:.1f}% of resident volume, so a "
-        f"hypothetical prose ratio of R would add up to {prose_share:.1f}×R points to the "
-        "ceiling (e.g. R=50% → +"
-        f"{prose_share * 0.5:.1f} points). "
-        "AST code compression is disabled by headroom's own default configuration "
-        "(enable_code_aware=False) and was left at that default; headroom also protects "
-        "file Read outputs verbatim by default. JSON (SmartCrusher) and log/search "
-        "compression — headroom's headline compressors — ran as shipped."
-    )
+    if s.profile == "max":
+        a(
+            "- **Prose compression is lossy-by-model.** Kompress (ModernBERT) is a "
+            "summarization-style token-drop compressor: the compressed prose is NOT "
+            "reconstructible from what stays in context, unlike SmartCrusher's "
+            "reversible CCR path (original stashed for retrieval). Every prose "
+            "point in this ceiling therefore assumes the agent never needed the "
+            "dropped tokens — fidelity loss is not modeled. "
+            "AST code compression (enable_code_aware=True) was force-enabled for "
+            "this run; headroom ships it OFF by default, so the code contribution "
+            "counts a capability headroom itself does not enable. File Read "
+            "outputs remain protected verbatim by headroom's policy."
+        )
+    else:
+        a(
+            "- **Prose ML compression not simulated.** Headroom's Kompress (ModernBERT) model "
+            "requires a HuggingFace download; it was disabled (kompress_model='disabled'). "
+            f"Sensitivity: prose tool_results are {prose_share:.1f}% of resident volume, so a "
+            f"hypothetical prose ratio of R would add up to {prose_share:.1f}×R points to the "
+            "ceiling (e.g. R=50% → +"
+            f"{prose_share * 0.5:.1f} points). "
+            "AST code compression is disabled by headroom's own default configuration "
+            "(enable_code_aware=False) and was left at that default; headroom also protects "
+            "file Read outputs verbatim by default. JSON (SmartCrusher) and log/search "
+            "compression — headroom's headline compressors — ran as shipped."
+        )
     a(
         "- **Native content detector bypassed.** Headroom's native Magika/ONNX detector "
         "deadlocked on this host; per headroom's own escape hatch, "
@@ -802,6 +884,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--projects-dir", type=Path, default=Path.home() / ".claude" / "projects")
     parser.add_argument("--limit", type=int, default=None, help="smoke: only N sessions (by cost desc)")
     parser.add_argument("--out", type=Path, default=None, help="write markdown report here")
+    parser.add_argument(
+        "--profile",
+        choices=("defaults", "max"),
+        default="defaults",
+        help="'defaults' = shipped headroom config; 'max' = Kompress ML prose model + AST code compression",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
 
@@ -812,7 +900,7 @@ def main(argv: list[str] | None = None) -> int:
     # Always show per-session progress on stderr for long runs.
     logger.setLevel(logging.INFO)
 
-    corpus = run_audit(args.db, args.projects_dir, limit=args.limit)
+    corpus = run_audit(args.db, args.projects_dir, limit=args.limit, profile=args.profile)
     report = build_report(corpus)
 
     if args.out:

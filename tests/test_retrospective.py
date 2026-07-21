@@ -332,6 +332,48 @@ def test_report_structure(fixture_paths):
     assert "MET — ceiling is below 10%" in report
 
 
+def test_report_defaults_profile_rendering(fixture_paths):
+    """Defaults profile: header names shipped defaults; prose-sensitivity bullet present."""
+    db_path, projects_dir = fixture_paths
+    corpus = retro.run_audit(
+        db_path,
+        projects_dir,
+        compress_fn=fake_compress_half,
+        count_fn=fake_count,
+        headroom_version="fake-1.0",
+    )
+    assert corpus.profile == "defaults"
+    report = retro.build_report(corpus)
+    assert "shipped defaults" in report
+    assert "Prose ML compression not simulated" in report
+    assert "lossy-by-model" not in report
+
+
+def test_report_max_profile_fidelity_caveat(fixture_paths):
+    """Max profile: header names max capability; lossy-prose fidelity caveat present."""
+    db_path, projects_dir = fixture_paths
+    corpus = retro.run_audit(
+        db_path,
+        projects_dir,
+        compress_fn=fake_compress_half,
+        count_fn=fake_count,
+        headroom_version="fake-1.0",
+        profile="max",
+    )
+    assert corpus.profile == "max"
+    report = retro.build_report(corpus)
+    assert "maximum capability" in report
+    assert "lossy-by-model" in report
+    assert "enable_code_aware=True" in report
+    assert "Prose ML compression not simulated" not in report
+
+
+def test_make_headroom_compressor_rejects_unknown_profile():
+    """Profile validation fires before any headroom import (stays hermetic)."""
+    with pytest.raises(ValueError, match="unknown profile"):
+        retro.make_headroom_compressor(profile="bogus")
+
+
 def test_fallback_residency_for_unjoined_items(tmp_path):
     """A transcript tool_result with no DB block uses session-average residency."""
     projects = tmp_path / "projects" / "-p"
