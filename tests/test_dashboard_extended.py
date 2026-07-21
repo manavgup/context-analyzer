@@ -730,6 +730,56 @@ def test_static_json_files_when_exist(tmp_path):
     assert client.get("/workflows").status_code == 200
 
 
+def test_data_dir_serves_build_artifacts(tmp_path):
+    """Artifacts in data_dir are served even when static_dir has stale copies.
+
+    ccscope writes blocks.json etc. to a user cache dir (site-packages can be
+    read-only), and the dashboard is pointed at it via data_dir.
+    """
+    static_dir = tmp_path / "static"
+    static_dir.mkdir()
+    data_dir = tmp_path / "cache"
+    data_dir.mkdir()
+    (data_dir / "blocks.json").write_text('[{"id": "b1"}]')
+    (data_dir / "churn.json").write_text("[]")
+    (data_dir / "meta.json").write_text('{"session_id": "s1"}')
+    (data_dir / "turn_map.json").write_text("[]")
+    # static_dir holds a stale legacy copy — data_dir must win.
+    (static_dir / "blocks.json").write_text('[{"id": "stale"}]')
+
+    app = create_app(
+        trace_dir=tmp_path / "traces",
+        transcript_dir=tmp_path / "transcripts",
+        static_dir=static_dir,
+        data_dir=data_dir,
+    )
+    client = TestClient(app)
+
+    assert client.get("/blocks.json").json() == [{"id": "b1"}]
+    assert client.get("/churn.json").status_code == 200
+    assert client.get("/meta.json").json() == {"session_id": "s1"}
+    assert client.get("/turn_map.json").status_code == 200
+
+
+def test_data_dir_falls_back_to_static_dir(tmp_path):
+    """Legacy in-repo builds (artifacts next to the HTML) still work."""
+    static_dir = tmp_path / "static"
+    static_dir.mkdir()
+    (static_dir / "blocks.json").write_text('[{"id": "legacy"}]')
+    data_dir = tmp_path / "cache"  # nonexistent — nothing built there yet
+
+    app = create_app(
+        trace_dir=tmp_path / "traces",
+        transcript_dir=tmp_path / "transcripts",
+        static_dir=static_dir,
+        data_dir=data_dir,
+    )
+    client = TestClient(app)
+
+    assert client.get("/blocks.json").json() == [{"id": "legacy"}]
+    assert client.get("/churn.json").status_code == 404
+
+
 def test_serve_dashboard_v2_fallback(tmp_path):
     """Serve v2 dashboard when v3 doesn't exist."""
     static_dir = tmp_path / "static"
