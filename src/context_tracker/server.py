@@ -568,8 +568,16 @@ def main() -> None:
     dash_parser.add_argument("--host", default="127.0.0.1", dest="dash_host")
     dash_parser.add_argument("--port", type=int, default=9201, dest="dash_port")
 
+    # Stats subcommand (implemented in context_tracker.stats)
+    stats_parser = subparsers.add_parser("stats", help="Print a personal stats card from local data")
+    stats_parser.add_argument("--share", action="store_true", help="Emit a shareable markdown snippet (numbers only)")
+
     args = parser.parse_args()
 
+    if args.command == "stats":
+        from context_tracker.stats import run_stats
+
+        raise SystemExit(run_stats(share=args.share))
     if args.command == "dashboard":
         import uvicorn
 

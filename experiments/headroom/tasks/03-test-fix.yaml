@@ -1,0 +1,28 @@
+# Task shape: test-fix loop — run tests, read failure, locate bug, edit, re-run.
+# Setup injects a deliberate bug into compute_turn_cost (output tokens priced at
+# the input rate), which makes tests/test_health.py fail.
+id: test-fix
+name: Fix the failing health-cost test
+shape: test-fix
+
+repo: https://github.com/manavgup/context-analyzer
+commit: 5abbf7f5a9f942b04e06c51267ee815aa321cbb1
+
+setup: |
+  git clone --quiet https://github.com/manavgup/context-analyzer .
+  git checkout --quiet 5abbf7f5a9f942b04e06c51267ee815aa321cbb1
+  # Inject the bug: price output tokens at the input rate.
+  perl -pi -e 's/api_call\.output_tokens \* rates\["output"\]/api_call.output_tokens * rates["input"]/' \
+    src/context_tracker/analysis/health.py
+  # Give the agent a working venv so it can run pytest.
+  make install-dev >/dev/null 2>&1
+
+prompt: |
+  Running `.venv/bin/pytest tests/test_health.py -q` in this repo fails. Find
+  the root cause and fix it. You must not modify anything under tests/ — fix
+  the production code only. When done, re-run the test file and confirm it
+  passes.
+
+success_check: |
+  git diff --exit-code --quiet tests/
+  .venv/bin/pytest tests/test_health.py -q

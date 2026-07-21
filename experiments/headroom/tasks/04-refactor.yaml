@@ -1,0 +1,28 @@
+# Task shape: refactor — cross-file change with the full test suite as the guard.
+id: refactor
+name: Deduplicate the API-call pricing arithmetic
+shape: refactor
+
+repo: https://github.com/manavgup/context-analyzer
+commit: 5abbf7f5a9f942b04e06c51267ee815aa321cbb1
+
+setup: |
+  git clone --quiet https://github.com/manavgup/context-analyzer .
+  git checkout --quiet 5abbf7f5a9f942b04e06c51267ee815aa321cbb1
+  make install-dev >/dev/null 2>&1
+
+prompt: |
+  The per-API-call pricing arithmetic (input/output/cache_read/cache_creation
+  tokens multiplied by per-million rates) is duplicated between
+  src/context_tracker/analysis/health.py (compute_turn_cost) and
+  src/context_tracker/analysis/prompts.py. Extract it into a single shared
+  helper function and make both call sites use it. Do not change any observable
+  behavior and do not modify tests. Run the test suite to verify, excluding the
+  known-flaky test with:
+  .venv/bin/pytest tests/ -q --deselect tests/test_patterns.py::TestAnalyzeTrends::test_returns_trends
+
+success_check: |
+  git diff --exit-code --quiet tests/
+  # Pricing arithmetic must now exist in exactly one place.
+  test "$(grep -rl 'rates\["output"\]' src/context_tracker | wc -l)" -le 1
+  .venv/bin/pytest tests/ -q --deselect tests/test_patterns.py::TestAnalyzeTrends::test_returns_trends
