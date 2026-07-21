@@ -1,0 +1,61 @@
+# Context Analyzer
+
+> Context window forensics for AI coding agents. Measures exactly where your
+> tokens go in Claude Code and Codex CLI sessions — per API call, per turn,
+> per session — using API-reported token counts, not estimates. Ships a web
+> dashboard, a JSON API, and an MCP server.
+
+Repo: https://github.com/manavgup/context-analyzer
+License: MIT · Python 3.11+ · Package name: context-tracker (PyPI publish pending)
+
+## Key findings it surfaces
+- Cost per API call scales 4.3x from small to large context ($0.23/call at 63K peak vs $0.98/call at 721K)
+- ~30% of context becomes stale dead weight within 5 turns
+- Tool I/O consumes 60%+ of used context
+- Cache hit rate is 96-98% when the system prompt prefix stays stable
+
+## Install and run
+uv tool install context-tracker    # or: pip install context-tracker (after first PyPI publish; until then: git clone + make install-dev)
+context-tracker up                 # install Claude Code hooks (reversible, settings.json backed up), ingest existing transcripts, start dashboard at http://localhost:8080
+context-tracker up --no-hooks      # dashboard from existing transcripts only, no hooks
+context-tracker down               # remove only this tool's hook entries (backup at ~/.claude/settings.json.bak)
+context-tracker install|uninstall  # hooks only, no dashboard
+context-tracker dashboard          # dashboard only (default port 9201)
+context-tracker stats [--share]    # personal stats card from local data
+context-tracker                    # MCP server on stdio (also: --transport sse|http, default port 9200)
+
+## Dashboard pages
+/           single-session dashboard: context growth, budget lines, cache churn, composition, message inspector
+/sessions   cross-session analytics: cost/call vs peak context, insights, trends
+/workflows  workflow analysis
+/optimize   CLAUDE.md optimizer
+
+## JSON API (FastAPI, selected routes)
+GET /api/health
+GET /api/sessions                      session list with stats
+GET /api/sessions/trends               cross-session aggregation
+GET /api/sessions/patterns             efficiency patterns
+GET /api/session/{id}/summary
+GET /api/session/{id}/data             full session data (blocks + churn)
+GET /api/session/{id}/health
+GET /api/session/{id}/dead_weight
+GET /api/session/{id}/freshness
+GET /api/session/{id}/report           post-session optimization report
+GET /api/optimize/claude-md
+
+## MCP tools (server: context-tracker, stdio by default)
+mcp_get_session_summary, mcp_get_tool_breakdown, mcp_get_compaction_history,
+mcp_get_context_hogs, mcp_get_session_history, mcp_get_bloat_events,
+mcp_should_clear, mcp_get_staleness_analysis, mcp_get_session_health,
+mcp_get_new_session_recommendation, mcp_get_block_lifespans, mcp_get_cache_churn
+
+## Data locations
+~/.claude/context-trace/<session_id>.jsonl        hook events (written by installed hooks)
+~/.claude/projects/<project>/<session_id>.jsonl   Claude Code transcripts (read for exact token counts)
+~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl      Codex CLI sessions (ingested)
+~/.context-analyzer/analyzer.db                   SQLite database (auto-ingest on first access)
+
+## Links
+README: https://github.com/manavgup/context-analyzer#readme
+Issues: https://github.com/manavgup/context-analyzer/issues
+CI: https://github.com/manavgup/context-analyzer/actions/workflows/ci.yml
