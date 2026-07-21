@@ -77,6 +77,17 @@ The message inspector shows the full content of every turn — user prompts, too
 
 ![Message inspector](docs/screenshots/dashboard-message-inspector.png)
 
+### Reproduce the headroom ceiling audit on your own sessions
+
+Don't take our number — run the [retrospective compression audit](experiments/headroom/RETROSPECTIVE-RESULTS.md) on your own transcripts. One command, fully offline, zero API spend; it builds a scratch corpus from `~/.claude/projects/` (never touching your live analyzer DB) and reports the maximum headroom's compressors could have saved on your workload:
+
+```bash
+pip install --no-deps headroom-ai==0.32.1 && pip install tiktoken
+context-tracker audit-headroom
+```
+
+The headline (ceiling % and $) prints to your terminal and the full report lands in `./headroom-ceiling-report.md` — numbers only, no prompt content.
+
 ## What it does
 
 - **Hooks** into Claude Code via `~/.claude/settings.json` to capture tool calls, compaction events, session lifecycle, and subagent activity

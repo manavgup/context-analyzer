@@ -572,12 +572,53 @@ def main() -> None:
     stats_parser = subparsers.add_parser("stats", help="Print a personal stats card from local data")
     stats_parser.add_argument("--share", action="store_true", help="Emit a shareable markdown snippet (numbers only)")
 
+    # audit-headroom subcommand (implemented in context_tracker.headroom_audit)
+    audit_parser = subparsers.add_parser(
+        "audit-headroom",
+        help="Reproduce the headroom compression ceiling audit on your own transcripts (offline, zero API spend)",
+    )
+    audit_parser.add_argument(
+        "--profile",
+        choices=("defaults", "max"),
+        default="defaults",
+        help="'defaults' = headroom as shipped; 'max' = + ML prose model and AST code compression",
+    )
+    audit_parser.add_argument(
+        "--out",
+        type=Path,
+        default=Path("headroom-ceiling-report.md"),
+        help="where to write the full markdown report (default: ./headroom-ceiling-report.md)",
+    )
+    audit_parser.add_argument("--limit", type=int, default=None, help="only audit the N most expensive sessions")
+    audit_parser.add_argument(
+        "--keep-db",
+        action="store_true",
+        help="keep the scratch corpus DB under ~/.context-analyzer/audit-headroom/ instead of a temp dir",
+    )
+    audit_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="accept the one-time ~261MB model download without prompting (--profile max only)",
+    )
+
     args = parser.parse_args()
 
     if args.command == "stats":
         from context_tracker.stats import run_stats
 
         raise SystemExit(run_stats(share=args.share))
+    if args.command == "audit-headroom":
+        from context_tracker.headroom_audit import run_audit_headroom
+
+        raise SystemExit(
+            run_audit_headroom(
+                profile=args.profile,
+                out=args.out,
+                limit=args.limit,
+                keep_db=args.keep_db,
+                yes=args.yes,
+            )
+        )
     if args.command == "dashboard":
         import uvicorn
 

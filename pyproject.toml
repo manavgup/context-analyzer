@@ -48,6 +48,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Optional deps for `context-tracker audit-headroom`. NOTE: headroom-ai is
+# deliberately NOT listed here — it must be installed with
+# `pip install --no-deps headroom-ai==0.32.1` (its litellm dependency has no
+# wheels on macOS and is only needed for headroom's proxy paths, which the
+# offline audit never touches). Extras cannot express --no-deps, so the
+# subcommand prints the exact install command when headroom-ai is missing.
+audit = [
+    "tiktoken>=0.8.0",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
@@ -100,6 +109,13 @@ strict = false
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+# Optional audit-only deps (lazily imported by context_tracker.headroom_audit;
+# never installed in CI). onnxruntime is only probed via find_spec, so it
+# needs no override.
+module = ["headroom", "headroom.*", "tiktoken"]
+ignore_missing_imports = true
 
 # ── Pytest ───────────────────────────────────────────────────────
 [tool.pytest.ini_options]
