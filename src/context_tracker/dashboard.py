@@ -40,7 +40,14 @@ from context_tracker.analysis.staleness import (
     detect_task_boundaries,
 )
 from context_tracker.ccscope.tokens import image_dimensions, image_tokens
+from context_tracker.codex import (
+    DEFAULT_CODEX_SESSIONS_DIR,
+    find_codex_rollout,
+    list_codex_sessions,
+    parse_codex_rollout,
+)
 from context_tracker.db import (
+    AGENT_CODEX,
     DEFAULT_DB_PATH,
     BlockRecord,
     HookEventRecord,
@@ -52,7 +59,7 @@ from context_tracker.db import (
     get_engine,
     get_session_factory,
 )
-from context_tracker.ingest import ingest_session
+from context_tracker.ingest import ingest_codex_session, ingest_session
 from context_tracker.nudges import evaluate_nudges
 from context_tracker.storage import DEFAULT_TRACE_DIR, list_sessions, read_events
 from context_tracker.transcript_parser import parse_raw_transcript
@@ -128,8 +135,13 @@ def _ensure_ingested(
     trace_dir: Path,
     db_path: Path,
     projects_dir: Path | None = None,
+    codex_dir: Path | None = None,
 ) -> SessionRecord | None:
-    """Get session from SQLite, auto-ingesting if missing."""
+    """Get session from SQLite, auto-ingesting if missing.
+
+    Tries the Claude Code transcript path first, then falls back to a
+    Codex CLI rollout when ``codex_dir`` is configured.
+    """
     engine = get_engine(db_path)
     factory = get_session_factory(engine)
     with factory() as db:
@@ -137,12 +149,15 @@ def _ensure_ingested(
         if existing:
             return existing
     # Not in DB — try to ingest
-    return ingest_session(
+    rec = ingest_session(
         session_id,
         trace_dir=trace_dir,
         db_path=db_path,
         projects_dir=projects_dir,
     )
+    if rec is None and codex_dir is not None:
+        rec = ingest_codex_session(session_id, codex_dir=codex_dir, db_path=db_path)
+    return rec
 
 
 def _extract_image_metadata(source: dict, media_type: str) -> dict:
@@ -436,9 +451,18 @@ def create_app(
     transcript_dir: Path = DEFAULT_TRANSCRIPT_DIR,
     static_dir: Path = DEFAULT_STATIC_DIR,
     db_path: Path = DEFAULT_DB_PATH,
+    codex_dir: Path | None = None,
     data_dir: Path | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Context Analyzer", version="0.4.0")
+
+    def _all_session_ids() -> list[str]:
+        """Claude Code session IDs plus Codex rollout IDs (deduplicated)."""
+        session_ids = list_sessions(trace_dir=trace_dir, projects_dir=transcript_dir)
+        if codex_dir is not None:
+            seen = set(session_ids)
+            session_ids += [sid for sid in list_codex_sessions(codex_dir) if sid not in seen]
+        return session_ids
 
     # ccscope build artifacts (blocks.json, churn.json, meta.json,
     # turn_map.json) may live in a user-writable cache dir rather than next to
@@ -461,7 +485,7 @@ def create_app(
     @app.get("/api/sessions")
     def get_sessions() -> list:
         """List all sessions with summary stats from SQLite."""
-        session_ids = list_sessions(trace_dir=trace_dir, projects_dir=transcript_dir)
+        session_ids = _all_session_ids()
         results = []
         engine = get_engine(db_path)
         factory = get_session_factory(engine)
@@ -470,7 +494,7 @@ def create_app(
                 rec = db.get(SessionRecord, sid)
                 if not rec:
                     # Auto-ingest on first access
-                    rec = _ensure_ingested(sid, trace_dir, db_path, transcript_dir)
+                    rec = _ensure_ingested(sid, trace_dir, db_path, transcript_dir, codex_dir)
                     if not rec:
                         results.append({"session_id": sid})
                         continue
@@ -488,6 +512,7 @@ def create_app(
                 results.append(
                     {
                         "session_id": rec.session_id,
+                        "agent": rec.agent,
                         "model": rec.model,
                         "total_turns": rec.total_turns,
                         "total_api_calls": rec.total_api_calls,
@@ -502,13 +527,15 @@ def create_app(
                         "first_prompt": first_prompt,
                     }
                 )
+        # Merge order across agents: newest source file first.
+        results.sort(key=lambda r: r.get("source_mtime") or 0, reverse=True)
         return results
 
     @app.get("/api/session/{session_id}/summary")
     def get_session_summary(session_id: str) -> dict:
         """Full session summary from SQLite."""
         _validate_session_id(session_id)
-        rec = _ensure_ingested(session_id, trace_dir, db_path, transcript_dir)
+        rec = _ensure_ingested(session_id, trace_dir, db_path, transcript_dir, codex_dir)
         if not rec:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -531,6 +558,7 @@ def create_app(
 
             return {
                 "session_id": rec.session_id,
+                "agent": rec.agent,
                 "model": rec.model,
                 "total_turns": rec.total_turns,
                 "total_api_calls": rec.total_api_calls,
@@ -550,7 +578,7 @@ def create_app(
     @app.get("/api/sessions/trends")
     def get_session_trends() -> dict:
         """Cross-session aggregation for trend analysis."""
-        session_ids = list_sessions(trace_dir=trace_dir, projects_dir=transcript_dir)
+        session_ids = _all_session_ids()
         engine = get_engine(db_path)
         factory = get_session_factory(engine)
 
@@ -559,7 +587,7 @@ def create_app(
             for sid in session_ids:
                 rec = db.get(SessionRecord, sid)
                 if not rec:
-                    rec_obj = _ensure_ingested(sid, trace_dir, db_path, transcript_dir)
+                    rec_obj = _ensure_ingested(sid, trace_dir, db_path, transcript_dir, codex_dir)
                     if not rec_obj:
                         continue
                     rec = db.get(SessionRecord, sid)
@@ -568,6 +596,7 @@ def create_app(
                 trends.append(
                     {
                         "session_id": rec.session_id,
+                        "agent": rec.agent,
                         "model": rec.model,
                         "total_turns": rec.total_turns,
                         "total_api_calls": rec.total_api_calls,
@@ -644,6 +673,22 @@ def create_app(
                 trace_dir=trace_dir,
             )
         except FileNotFoundError as exc:
+            # No Claude Code transcript — try a Codex CLI rollout instead.
+            if codex_dir is not None:
+                rollout_path = find_codex_rollout(session_id, codex_dir=codex_dir)
+                if rollout_path is not None:
+                    parsed = parse_codex_rollout(rollout_path)
+                    return {
+                        "blocks": parsed["blocks"],
+                        "churn": parsed["churn"],
+                        "meta": {
+                            "session_id": session_id,
+                            "agent": AGENT_CODEX,
+                            "model": parsed.get("model"),
+                            "cwd": parsed.get("cwd"),
+                        },
+                        "turn_map": parsed["turn_map"],
+                    }
             raise HTTPException(status_code=404, detail="Session transcript not found") from exc
 
         # Build turn map
@@ -2452,6 +2497,15 @@ def create_app(
     return app
 
 
+def create_default_app() -> FastAPI:
+    """App factory with production defaults (Codex CLI ingestion enabled).
+
+    Used by uvicorn ``--factory`` and the CLI entry points. Tests build apps
+    via :func:`create_app` with explicit, hermetic directories instead.
+    """
+    return create_app(codex_dir=DEFAULT_CODEX_SESSIONS_DIR)
+
+
 def main() -> None:
     """Entry point: context-tracker dashboard."""
     import argparse
@@ -2472,7 +2526,7 @@ def main() -> None:
             file=sys.stderr,
         )
 
-    app = create_app()
+    app = create_default_app()
     uvicorn.run(app, host=args.host, port=args.port)
 
 

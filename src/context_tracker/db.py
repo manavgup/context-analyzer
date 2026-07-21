@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import Column, Float, ForeignKey, Integer, Text, create_engine
+from sqlalchemy import Column, Float, ForeignKey, Integer, Text, create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker
 
 DEFAULT_DB_DIR = Path.home() / ".context-analyzer"
 DEFAULT_DB_PATH = DEFAULT_DB_DIR / "analyzer.db"
+
+# Known source agents for a session.
+AGENT_CLAUDE_CODE = "claude-code"
+AGENT_CODEX = "codex"
 
 
 class Base(DeclarativeBase):
@@ -20,6 +24,7 @@ class SessionRecord(Base):
     __tablename__ = "sessions"
 
     session_id = Column(Text, primary_key=True)
+    agent = Column(Text, nullable=False, default=AGENT_CLAUDE_CODE, server_default=AGENT_CLAUDE_CODE)
     project_path = Column(Text, nullable=True)
     started_at = Column(Text, nullable=True)  # ISO timestamp
     ended_at = Column(Text, nullable=True)
@@ -185,10 +190,24 @@ class ToolResultOffloadRecord(Base):
     session = relationship("SessionRecord", back_populates="tool_result_offloads")
 
 
+def _migrate_schema(engine: Engine) -> None:
+    """Apply lightweight in-place migrations for pre-existing databases.
+
+    ``Base.metadata.create_all`` only creates missing tables; columns added
+    to existing tables need an explicit ALTER TABLE.
+    """
+    with engine.connect() as conn:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(sessions)"))}
+        if cols and "agent" not in cols:
+            conn.execute(text(f"ALTER TABLE sessions ADD COLUMN agent TEXT NOT NULL DEFAULT '{AGENT_CLAUDE_CODE}'"))
+            conn.commit()
+
+
 def get_engine(db_path: Path = DEFAULT_DB_PATH) -> Engine:
     """Create SQLAlchemy engine. Creates the DB directory and tables if needed."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
     engine = create_engine(f"sqlite:///{db_path}", echo=False)
+    _migrate_schema(engine)
     Base.metadata.create_all(engine)
     return engine
 

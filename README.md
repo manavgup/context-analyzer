@@ -62,6 +62,7 @@ The message inspector shows the full content of every turn — user prompts, too
 
 - **Hooks** into Claude Code via `~/.claude/settings.json` to capture tool calls, compaction events, session lifecycle, and subagent activity
 - **Parses transcripts** for exact API token usage (input, output, cache_read, cache_creation) — API-reported numbers, not estimates
+- **Ingests Codex CLI sessions** from `~/.codex/sessions/` rollout logs — Codex sessions appear in the same dashboard and analytics alongside Claude Code (API-level token forensics; compaction/subagent depth remains Claude Code-only)
 - **SQLite persistence** stores session data for fast queries and cross-session analysis
 - **Dashboard** at `/` for single-session visualization: context growth, cache churn, composition, message inspector
 - **Cross-session analytics** at `/sessions` for comparing patterns across sessions: cost/call vs context size, insights, trends
